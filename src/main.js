@@ -637,10 +637,14 @@ function settleDie(die) {
     if (v.y > bestDot) { bestDot = v.y; bestNormal = normal; }
   }
   if (bestDot > FLAT_ENOUGH) {
+    // Straightening the die moves its corners, so it is set back down on
+    // whatever it was standing on rather than on the felt — it may have come
+    // to rest on top of a checker.
+    const stood = lowestCorner(die);
     v.copy(bestNormal).applyQuaternion(die.quaternion);
     const fix = new THREE.Quaternion().setFromUnitVectors(v, new THREE.Vector3(0, 1, 0));
     die.quaternion.premultiply(fix).normalize();
-    die.position.y = FELT_Y + DIE_HALF;
+    die.position.y += stood - lowestCorner(die);
   }
   s.mode = "rest";
   s.cocked = bestDot <= FLAT_ENOUGH;
@@ -648,6 +652,18 @@ function settleDie(die) {
   s.spin.set(0, 0, 0);
   s.value = readDie(die);
   showDiceValues();
+}
+
+// Height of whichever corner is sitting lowest — the height of the surface
+// the die is standing on.
+function lowestCorner(die) {
+  let lowest = Infinity;
+  const v = new THREE.Vector3();
+  for (const corner of DIE_CORNERS) {
+    v.copy(corner).applyQuaternion(die.quaternion);
+    lowest = Math.min(lowest, die.position.y + v.y);
+  }
+  return lowest;
 }
 
 // A resting die that gets hit hard enough joins the throw again.
@@ -875,6 +891,8 @@ function collectContacts() {
   for (const die of diceMeshes) {
     if (die.userData.die.mode === "held") continue;
     boardContacts(die);
+    barContacts(die);
+    checkerContacts(die);
   }
   for (let i = 0; i < diceMeshes.length; i++) {
     for (let k = i + 1; k < diceMeshes.length; k++) {
@@ -918,11 +936,11 @@ function boardContacts(die) {
   if (pushZ > 0) die.position.z -= sideZ * pushZ;
 }
 
-// Two dice thrown down the same line used to pass straight through one
-// another. They collide now. Both are boxes, so the test is the separating
-// axis one: if any direction exists in which their shadows do not overlap,
-// they are apart. The shallowest overlap of all the candidate directions is
-// the one they have to be pushed back along, and it is the contact normal.
+// Everything a die can hit besides the felt is a convex solid, so they are
+// all tested the same way: the separating axis test. If a direction exists in
+// which the two shadows do not overlap, they are apart; otherwise the
+// shallowest overlap of all the candidate directions is the one they have to
+// be pushed back along, and it is the contact normal.
 //
 // The obvious cheap test — is a corner of one inside the other — is what this
 // started as, and it fails at exactly the case that matters most: two dice
@@ -930,16 +948,33 @@ function boardContacts(die) {
 // the other's face plane rather than inside it. They slid through each other.
 const _axA = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
 const _axB = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+const WORLD_AXES = [
+  new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1),
+];
 const _axes = [];
 for (let i = 0; i < 15; i++) _axes.push(new THREE.Vector3());
+const _points = [];
+for (let i = 0; i < 8; i++) _points.push(new THREE.Vector3());
 const _delta = new THREE.Vector3();
 const _t1 = new THREE.Vector3();
 const _t2 = new THREE.Vector3();
+const _centre = new THREE.Vector3();
 const _sat = { depth: 0, normal: new THREE.Vector3() };
-// A corner counts as pressed against the other die if it is no deeper than
-// the shallowest overlap plus a little; anything further in belongs to the
-// far side of the box and is not what is touching.
+// A corner counts as pressed against the other solid if it is no deeper than
+// the shallowest overlap plus a little; anything further in belongs to the far
+// side of it and is not what is touching.
 const CONTACT_SKIN = DIE_SIZE * .15;
+
+const DIE_HALVES = new THREE.Vector3(DIE_HALF, DIE_HALF, DIE_HALF);
+// The bar down the middle of the board stands proud of the felt, and the
+// checkers stand proud of that. Both are in the dice's way.
+const BAR_HALVES = new THREE.Vector3(BAR_HALF, .11, (PANEL_D + .18) / 2);
+const BAR_CENTRE = new THREE.Vector3(0, .5, 0);
+const CHECKER_HALVES = new THREE.Vector3(CHECKER_R, CHECKER_H / 2, CHECKER_R);
+// Nothing further away than this can be touching, whatever the angles.
+const CHECKER_RANGE = (CHECKER_R + DIE_HALF * Math.sqrt(3)) ** 2;
+const BAR_BOUNCE = .42, BAR_FRICTION = .32;
+const CHECKER_BOUNCE = .45, CHECKER_FRICTION = .3;
 
 function boxAxes(die, out) {
   out[0].set(1, 0, 0).applyQuaternion(die.quaternion);
@@ -947,85 +982,150 @@ function boxAxes(die, out) {
   out[2].set(0, 0, 1).applyQuaternion(die.quaternion);
 }
 
-// Half-width of a die's shadow along an arbitrary direction.
-function extentAlong(axes, dir) {
-  return DIE_HALF * (Math.abs(axes[0].dot(dir)) +
-                     Math.abs(axes[1].dot(dir)) +
-                     Math.abs(axes[2].dot(dir)));
+// Half-width of a solid's shadow along an arbitrary direction. A box casts the
+// sum of its three half extents; a checker is a disc standing on the felt, so
+// it casts its radius across and its half thickness up.
+function boxSupport(axes, half, dir) {
+  return half.x * Math.abs(axes[0].dot(dir))
+       + half.y * Math.abs(axes[1].dot(dir))
+       + half.z * Math.abs(axes[2].dot(dir));
 }
 
-// Face normals of both dice, plus the cross products of their edges, which is
-// what catches two of them meeting corner to corner.
-function diceOverlap(dieA, dieB) {
-  boxAxes(dieA, _axA);
-  boxAxes(dieB, _axB);
-  _delta.copy(dieA.position).sub(dieB.position);
+function discSupport(axes, half, dir) {
+  return half.x * Math.hypot(dir.x, dir.z) + half.y * Math.abs(dir.y);
+}
 
-  let count = 0;
-  for (let i = 0; i < 3; i++) _axes[count++].copy(_axA[i]);
-  for (let i = 0; i < 3; i++) _axes[count++].copy(_axB[i]);
-  for (let i = 0; i < 3; i++) {
-    for (let k = 0; k < 3; k++) {
-      const axis = _axes[count].crossVectors(_axA[i], _axB[k]);
-      if (axis.lengthSq() > 1e-8) { axis.normalize(); count++; }   // skip parallel edges
-    }
-  }
-
+// Walk a set of candidate axes, keeping the shallowest overlap. Bails out the
+// moment one of them shows a gap, because that alone proves they are apart.
+function shallowestOverlap(count, posA, supportA, axesA, halfA, posB, supportB, axesB, halfB) {
+  _delta.copy(posA).sub(posB);
   let shallowest = Infinity, found = null;
   for (let i = 0; i < count; i++) {
     const axis = _axes[i];
-    const overlap = extentAlong(_axA, axis) + extentAlong(_axB, axis)
+    const overlap = supportA(axesA, halfA, axis) + supportB(axesB, halfB, axis)
       - Math.abs(_delta.dot(axis));
-    if (overlap <= 0) return false;                                // a gap: they are apart
+    if (overlap <= 0) return false;
     if (overlap < shallowest) { shallowest = overlap; found = axis; }
   }
-
   _sat.depth = shallowest;
   _sat.normal.copy(found);
-  if (_sat.normal.dot(_delta) < 0) _sat.normal.negate();           // out of B, towards A
+  if (_sat.normal.dot(_delta) < 0) _sat.normal.negate();     // out of B, towards A
   return true;
 }
 
+// Box against box: the face normals of both, plus the cross products of their
+// edges, which is what catches two of them meeting corner to corner.
+function boxesOverlap(posA, axesA, halfA, posB, axesB, halfB) {
+  let count = 0;
+  for (let i = 0; i < 3; i++) _axes[count++].copy(axesA[i]);
+  for (let i = 0; i < 3; i++) _axes[count++].copy(axesB[i]);
+  for (let i = 0; i < 3; i++) {
+    for (let k = 0; k < 3; k++) {
+      const axis = _axes[count].crossVectors(axesA[i], axesB[k]);
+      if (axis.lengthSq() > 1e-8) { axis.normalize(); count++; }   // skip parallel edges
+    }
+  }
+  return shallowestOverlap(count, posA, boxSupport, axesA, halfA,
+                                  posB, boxSupport, axesB, halfB);
+}
+
+// Box against checker. A disc has no edges to cross, so the candidates are its
+// axis, the direction out from it towards the die, and the die's own faces.
+function discOverlap(posA, axesA, halfA, posB, halfB) {
+  _axes[0].set(0, 1, 0);
+  _axes[1].set(posA.x - posB.x, 0, posA.z - posB.z);
+  if (_axes[1].lengthSq() < 1e-9) _axes[1].set(1, 0, 0); else _axes[1].normalize();
+  for (let i = 0; i < 3; i++) _axes[2 + i].copy(axesA[i]);
+  return shallowestOverlap(5, posA, boxSupport, axesA, halfA,
+                              posB, discSupport, WORLD_AXES, halfB);
+}
+
+// The corners of a die pressed against whatever it has hit, in the direction
+// of the contact normal. `towards` is +1 when the die is the one the normal
+// points at, -1 when it is the one the normal points away from. Points land in
+// the shared pool and the count comes back.
+function pressedCorners(die, centre, support, axes, half, towards) {
+  const n = _sat.normal;
+  _t1.set(n.z, n.x, n.y).cross(n);
+  if (_t1.lengthSq() < 1e-9) _t1.set(1, 0, 0).cross(n);
+  _t1.normalize();
+  _t2.crossVectors(n, _t1);
+
+  const reach = support(axes, half, n);
+  const spread1 = support(axes, half, _t1);
+  const spread2 = support(axes, half, _t2);
+
+  let found = 0;
+  for (const corner of DIE_CORNERS) {
+    _corner.copy(corner).applyQuaternion(die.quaternion).add(die.position);
+    _local.copy(_corner).sub(centre);
+    const depth = reach - towards * _local.dot(n);
+    if (depth <= 0 || depth > _sat.depth + CONTACT_SKIN) continue;
+    if (Math.abs(_local.dot(_t1)) > spread1) continue;
+    if (Math.abs(_local.dot(_t2)) > spread2) continue;
+    _points[found++].copy(_corner);
+  }
+  return found;
+}
+
+// --- what a die can run into ----------------------------------------
+// The bar down the centre seam, which a die crossing the board has to clear.
+function barContacts(die) {
+  const s = die.userData.die;
+  if (s.mode !== "throw") return;
+  boxAxes(die, _axA);
+  if (!boxesOverlap(die.position, _axA, DIE_HALVES, BAR_CENTRE, WORLD_AXES, BAR_HALVES)) return;
+  const hits = pressedCorners(die, BAR_CENTRE, boxSupport, WORLD_AXES, BAR_HALVES, 1);
+  for (let i = 0; i < hits; i++) {
+    _offset.copy(_points[i]).sub(die.position);
+    addContact(s, null, _offset, null, _sat.normal, BAR_BOUNCE, BAR_FRICTION);
+  }
+  die.position.addScaledVector(_sat.normal, _sat.depth);
+}
+
+// The checkers. They are the board as far as a die is concerned: a die that
+// lands on one sits on it, and one that runs into a stack is stopped by it,
+// but the checkers themselves are game state and do not get knocked about.
+function checkerContacts(die) {
+  const s = die.userData.die;
+  if (s.mode !== "throw") return;
+  boxAxes(die, _axA);
+  const reach = DIE_HALF * Math.sqrt(3);
+  for (const checker of pieceMeshes) {
+    const dx = die.position.x - checker.position.x;
+    const dz = die.position.z - checker.position.z;
+    if (dx * dx + dz * dz > CHECKER_RANGE) continue;
+    _centre.set(checker.position.x, checker.position.y + CHECKER_H / 2, checker.position.z);
+    if (die.position.y - reach > _centre.y + CHECKER_H / 2) continue;
+    if (!discOverlap(die.position, _axA, DIE_HALVES, _centre, CHECKER_HALVES)) continue;
+
+    const hits = pressedCorners(die, _centre, discSupport, WORLD_AXES, CHECKER_HALVES, 1);
+    for (let i = 0; i < hits; i++) {
+      _offset.copy(_points[i]).sub(die.position);
+      addContact(s, null, _offset, null, _sat.normal, CHECKER_BOUNCE, CHECKER_FRICTION);
+    }
+    die.position.addScaledVector(_sat.normal, _sat.depth);
+  }
+}
+
+// The other die.
 function diePairContacts(dieA, dieB) {
   const sa = dieA.userData.die, sb = dieB.userData.die;
   if (sa.mode === "held" || sb.mode === "held") return;
-  if (!diceOverlap(dieA, dieB)) return;
+  boxAxes(dieA, _axA);
+  boxAxes(dieB, _axB);
+  if (!boxesOverlap(dieA.position, _axA, DIE_HALVES, dieB.position, _axB, DIE_HALVES)) return;
 
-  // A friction basis across the normal, reused as the slab test that keeps a
-  // corner off to one side from counting as a contact.
-  _t1.set(_sat.normal.z, _sat.normal.x, _sat.normal.y).cross(_sat.normal);
-  if (_t1.lengthSq() < 1e-9) _t1.set(1, 0, 0).cross(_sat.normal);
-  _t1.normalize();
-  _t2.crossVectors(_sat.normal, _t1);
-
-  pressedCorners(dieA, dieB, _axB, 1, dieA, dieB);
-  pressedCorners(dieB, dieA, _axA, -1, dieA, dieB);
+  let hits = pressedCorners(dieA, dieB.position, boxSupport, _axB, DIE_HALVES, 1);
+  for (let i = 0; i < hits; i++) addDieContact(dieA, dieB, _points[i]);
+  hits = pressedCorners(dieB, dieA.position, boxSupport, _axA, DIE_HALVES, -1);
+  for (let i = 0; i < hits; i++) addDieContact(dieA, dieB, _points[i]);
 
   // Then share the overlap out, once, along that same normal. Doing it per
   // contact instead pushes the pair apart once for every corner that happens
   // to be touching, and two dice that land together end up flung apart.
   dieA.position.addScaledVector(_sat.normal, _sat.depth * .5);
   dieB.position.addScaledVector(_sat.normal, _sat.depth * -.5);
-}
-
-// Corners of one die pressed into the other, in the direction of the contact
-// normal. towards is +1 when the corners belong to the die the normal points
-// at, -1 when they belong to the one it points away from.
-function pressedCorners(dieFrom, dieInto, axesInto, towards, dieA, dieB) {
-  const n = _sat.normal;
-  const reach = extentAlong(axesInto, n);
-  const spread1 = extentAlong(axesInto, _t1);
-  const spread2 = extentAlong(axesInto, _t2);
-
-  for (const corner of DIE_CORNERS) {
-    _corner.copy(corner).applyQuaternion(dieFrom.quaternion).add(dieFrom.position);
-    _local.copy(_corner).sub(dieInto.position);
-    const depth = reach - towards * _local.dot(n);
-    if (depth <= 0 || depth > _sat.depth + CONTACT_SKIN) continue;
-    if (Math.abs(_local.dot(_t1)) > spread1) continue;
-    if (Math.abs(_local.dot(_t2)) > spread2) continue;
-    addDieContact(dieA, dieB, _corner);
-  }
 }
 
 // One contact between the pair, at a point both of them share.
@@ -1148,6 +1248,17 @@ function renderPieces() {
       pieceMeshes.push(body);
     }
   }
+  dropUnsupportedDice();
+}
+
+// A die can come to rest on top of a checker, and then that checker gets
+// played. Anything left standing above the felt is put back into the throw so
+// it falls; a die that is still supported simply settles again where it is.
+function dropUnsupportedDice() {
+  for (const die of diceMeshes) {
+    const s = die.userData.die;
+    if (s.mode === "rest" && lowestCorner(die) > FELT_Y + 1e-3) wakeDie(die);
+  }
 }
 
 function tryMove(fromKey, toKey, color) {
@@ -1186,7 +1297,9 @@ function setPointerFromEvent(e) {
 // Dice are lifted onto a plane above the board while held. Both dice always
 // come up together and are thrown as a pair — you shake the cup, not one die
 // at a time.
-const LIFT_Y = 1.5;
+// Height the dice ride at while they are being shaken, and so the height they
+// are let go from: a hand's width above the felt rather than skimming it.
+const LIFT_Y = 2.6;
 const liftPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -LIFT_Y);
 // A shake lasts at least this long. Letting go early does not cut it short;
 // the dice keep spinning in the hand until the time is up, then fly.
@@ -1270,23 +1383,24 @@ function launchDice() {
   const hand = heldDice.vel.clone();
   hand.y = 0;
   // Away from the player's side of the table, with whatever aim the hand had.
-  // Roughly 1.3 m/s, which is what an unhurried throw across a board is.
+  // Around 2 m/s, which is a firm throw rather than a nudge — hard enough to
+  // reach the far rail, come back off it and keep tumbling.
   const aim = new THREE.Vector3(hand.x * .3, 0, -1)
     .normalize()
-    .multiplyScalar(34 + Math.random() * 10);
+    .multiplyScalar(52 + Math.random() * 16);
 
   heldDice.entries.forEach(({ die }) => {
     const s = die.userData.die;
     s.mode = "throw";
     // Enough scatter that they do not fly in formation and land in a stack.
     s.vel.copy(aim).add(new THREE.Vector3(
-      (Math.random() - .5) * 9,
+      (Math.random() - .5) * 12,
       0,
-      (Math.random() - .5) * 9
+      (Math.random() - .5) * 12
     ));
-    // Tossed slightly upward out of the hand.
-    s.vel.y = 3 + Math.random() * 3;
-    s.spin.copy(randomShakeSpin()).clampLength(16, 34);
+    // Thrown up and out of the hand, not rolled off the fingertips.
+    s.vel.y = 7 + Math.random() * 7;
+    s.spin.copy(randomShakeSpin()).clampLength(30, 54);
     s.still = 0;
   });
 
