@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tavla — 3B Masa</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="scene"></canvas>
+      <section id="intro" aria-label="Oyun başlangıcı">
+        <p class="eyebrow">3B TAVLA</p>
+        <h1>Masaya yaklaş.</h1>
+        <p>Siyah ve kemik taşıyla hazırlanmış birinci şahıs tavla masası.</p>
+        <button id="enter">Masaya otur</button>
+        <p class="hint">Görünümü çevirmek için fareyi kullan. Çıkmak için ESC.</p>
+      </section>
+      <aside id="hud" aria-live="polite">
+        <div><span>SIRA</span><strong>KEMİK</strong></div>
+        <div><span>ZARLAR</span><strong>4 · 2</strong></div>
+      </aside>
+      <div id="crosshair" aria-hidden="true"></div>
+    </main>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
