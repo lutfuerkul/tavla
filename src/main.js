@@ -34,7 +34,7 @@ const pmremGenerator = new THREE.PMREMGenerator(renderer);
 scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
 // The room probe is only here to give the lacquer something to reflect. At
 // full strength it lights the whole board and flattens every material.
-scene.environmentIntensity = .42;
+scene.environmentIntensity = .22;
 
 enter.addEventListener("click", () => {
   intro.classList.add("hidden");
@@ -297,12 +297,14 @@ const pearl = new THREE.MeshStandardMaterial({ color: 0xe8e2d6, roughness: .4, m
 // Warm ivory plastic with a soft sheen, and a near-black graphite that reads
 // far glossier — in the photos the dark piece throws a hard highlight off its
 // dome while the cream one stays satin.
+// Bone-coloured pieces are matte moulded plastic, not lacquer. The gloss was
+// blowing the whole face to one flat highlight and burying the relief.
 const ivory = new THREE.MeshPhysicalMaterial({
-  color: 0xeee2c0,
-  roughness: .33,
+  color: 0xe9dcbb,
+  roughness: .62,
   metalness: 0,
-  clearcoat: .45,
-  clearcoatRoughness: .18
+  clearcoat: .1,
+  clearcoatRoughness: .45
 });
 const black = new THREE.MeshPhysicalMaterial({
   color: 0x141518,
@@ -444,15 +446,18 @@ const checkerGeometry = new THREE.LatheGeometry([
   new THREE.Vector2(CHECKER_R, .16),
   new THREE.Vector2(.484, .208),
   new THREE.Vector2(.455, CHECKER_H),   // flat outer rim
-  new THREE.Vector2(.375, CHECKER_H),
-  new THREE.Vector2(.352, .206),        // step down into the channel
-  new THREE.Vector2(.332, .196),
-  new THREE.Vector2(.31, .193),         // channel floor
-  new THREE.Vector2(.285, .196),
-  new THREE.Vector2(.25, .206),         // dome springs from here
-  new THREE.Vector2(.19, .218),
-  new THREE.Vector2(.12, .2255),
-  new THREE.Vector2(0, .2275),          // dome crown, just proud of the rim
+  new THREE.Vector2(.378, CHECKER_H),
+  // The step is cut deeper and steeper than before — at barely a millimetre
+  // it caught no shadow at all and the face read as flat.
+  new THREE.Vector2(.362, .213),
+  new THREE.Vector2(.352, .190),        // near-vertical wall of the channel
+  new THREE.Vector2(.340, .178),
+  new THREE.Vector2(.30, .174),         // channel floor, 1.7mm below the rim
+  new THREE.Vector2(.268, .178),
+  new THREE.Vector2(.245, .191),        // dome springs from here
+  new THREE.Vector2(.20, .208),
+  new THREE.Vector2(.13, .219),
+  new THREE.Vector2(0, .2225),          // dome crown, level with the rim
 ], 96);
 
 // --- Dice ------------------------------------------------------------
@@ -543,9 +548,9 @@ function roundedDieGeometry(size, radius, segments = 10) {
   return geometry;
 }
 
-// A standard tavla die is 14mm on the edge, against the 36mm checker. Real
-// dice break the corner only slightly — about a twelfth of the edge.
-const DIE_SIZE = 14 * MM;
+// 10mm dice against the 36mm checker. Real dice break the corner only
+// slightly — about a twelfth of the edge.
+const DIE_SIZE = 10 * MM;
 const dieGeometry = roundedDieGeometry(DIE_SIZE, DIE_SIZE * .085, 14);
 // BoxGeometry material order is +x, -x, +y, -y, +z, -z. Opposite faces sum
 // to seven, exactly like a real die.
@@ -979,6 +984,18 @@ function stepHeldDice(dt) {
   if (heldDice.released && elapsed >= MIN_SHAKE_MS) launchDice();
 }
 
+// The frame loop is the natural place to fire the throw, but on a machine
+// that is only managing a frame every second or two the dice would sit in the
+// hand well past the shake. A timer armed at release keeps the throw on time
+// regardless; whichever gets there first wins.
+function armThrow() {
+  const remaining = MIN_SHAKE_MS - (performance.now() - heldDice.startedAt);
+  const token = heldDice;
+  setTimeout(() => {
+    if (heldDice === token && heldDice.released) launchDice();
+  }, Math.max(0, remaining));
+}
+
 // Fling the pair away across the board, fast.
 function launchDice() {
   const hand = heldDice.vel.clone();
@@ -1093,9 +1110,10 @@ addEventListener("pointermove", (e) => {
 
 addEventListener("pointerup", (e) => {
   if (heldDice) {
-    // Releasing only arms the throw. stepHeldDice fires it once the dice have
-    // had their full shake.
+    // Releasing only arms the throw; it fires once the dice have had their
+    // full shake.
     heldDice.released = true;
+    armThrow();
     return;
   }
 
@@ -1124,7 +1142,10 @@ addEventListener("pointerup", (e) => {
 // If the gesture is interrupted — pointer leaves the window, touch cancelled —
 // put the carried checker back rather than leaving a hole on the point.
 addEventListener("pointercancel", () => {
-  if (heldDice) heldDice.released = true;
+  if (heldDice && !heldDice.released) {
+    heldDice.released = true;
+    armThrow();
+  }
   if (!dragging) return;
   delete state[dragging.fromKey].lifted;
   scene.remove(dragging.mesh);
@@ -1140,12 +1161,14 @@ function addRoom() {
   floor.receiveShadow = true;
   scene.add(floor);
 
-  // Even, product-shot lighting: one soft overhead key for the shadows and a
-  // ring of low fills so every corner of the board reads the same. The old
-  // rig hung a single warm lamp off to one side, which left the far rail and
-  // the outer points markedly darker than the middle.
-  const key = new THREE.DirectionalLight(0xfff4e2, 1.55);
-  key.position.set(-2.5, 16, 4);
+  // Even coverage across the board, but still directional on each surface.
+  // Flooding it equally from four sides did make every corner the same
+  // brightness — and flattened every piece, because a 1mm dish only shows up
+  // as a shadow, and a shadow needs a dominant light direction. So the key
+  // carries most of the level and comes in low enough to rake across the
+  // relief; the fills only open the shadows.
+  const key = new THREE.DirectionalLight(0xfff4e2, 2.5);
+  key.position.set(-6, 10, 6);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
   key.shadow.bias = -0.0004;
@@ -1159,17 +1182,17 @@ function addRoom() {
   key.shadow.camera.far = 40;
   scene.add(key);
 
-  // Four quadrant fills at equal strength, so nothing is lit only from one
-  // side and no corner falls away.
+  // Quadrant fills keep the corners of the board level with the middle, but
+  // stay well under the key so they do not cancel its shading.
   [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([x, z]) => {
-    const fill = new THREE.DirectionalLight(0xf2f0ea, .42);
-    fill.position.set(x * 11, 9, z * 11);
+    const fill = new THREE.DirectionalLight(0xeef1f4, .16);
+    fill.position.set(x * 11, 7, z * 11);
     scene.add(fill);
   });
 
-  // Overall lift so the darks are open rather than crushed.
-  scene.add(new THREE.HemisphereLight(0xdfe6ec, 0x3a2a1c, .9));
-  scene.add(new THREE.AmbientLight(0xffffff, .22));
+  // Just enough lift to keep the darks open rather than crushed.
+  scene.add(new THREE.HemisphereLight(0xd6e0e8, 0x2e2116, .42));
+  scene.add(new THREE.AmbientLight(0xffffff, .1));
 }
 
 addRoom();
