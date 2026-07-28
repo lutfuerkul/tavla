@@ -22,7 +22,7 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.2;
+renderer.toneMappingExposure = 1.25;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 // Soft studio-style reflections for the lacquer and clearcoat surfaces
@@ -70,54 +70,62 @@ function woodPanelTexture(w, h, base, grain, eyes) {
   const baseRGB = hexToRgb(base);
   const grainRGB = hexToRgb(grain);
 
-  // Generate wood texture using FBM
+  // Generate wood texture using advanced FBM with directional bias
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      // Multi-scale noise for realistic wood
-      const scale1 = fbm(x / 200, y / 150, 4, 0);
-      const scale2 = fbm(x / 80, y / 60, 5, 100);
-      const scale3 = fbm(x / 30, y / 25, 3, 200);
+      // Directional bias towards vertical grain (like real wood)
+      const xBias = x / 180;
+      const yBias = y / 120;
 
-      // Combine scales with weights for natural look
-      const grain1 = scale1 * 0.6;
-      const grain2 = scale2 * 0.25 * Math.sin(y / 20) * Math.cos(x / 40);
+      // Multi-scale noise - aggressive for dramatic grain
+      const scale1 = fbm(xBias, yBias, 5, 0);
+      const scale2 = fbm(xBias * 2.5, yBias * 1.8, 6, 100);
+      const scale3 = fbm(xBias * 4, yBias * 3.2, 4, 200);
+
+      // Waviness pattern - simulates wood fiber variation
+      const wave = Math.sin(y / 35) * 0.3 + Math.cos(x / 45) * 0.2;
+
+      // Combine scales with aggressive weights
+      const grain1 = scale1 * 0.55;
+      const grain2 = scale2 * 0.3;
       const grain3 = scale3 * 0.15;
 
-      const grainAmount = grain1 + grain2 + grain3;
-      const normalized = Math.max(0, Math.min(1, (grainAmount + 1) * 0.5));
+      const grainAmount = grain1 + grain2 + grain3 + wave;
+      const normalized = Math.max(0, Math.min(1, (grainAmount + 1) * 0.55));
 
-      // Interpolate between base and grain color
-      const r = Math.round(baseRGB.r + (grainRGB.r - baseRGB.r) * normalized * 0.8);
-      const g = Math.round(baseRGB.g + (grainRGB.g - baseRGB.g) * normalized * 0.8);
-      const b = Math.round(baseRGB.b + (grainRGB.b - baseRGB.b) * normalized * 0.8);
+      // Interpolate with increased grain intensity for dramatic effect
+      const intensity = normalized * 1.1;
+      const r = Math.round(baseRGB.r + (grainRGB.r - baseRGB.r) * intensity);
+      const g = Math.round(baseRGB.g + (grainRGB.g - baseRGB.g) * intensity);
+      const b = Math.round(baseRGB.b + (grainRGB.b - baseRGB.b) * intensity);
 
       const idx = (y * w + x) * 4;
-      data[idx] = r;
-      data[idx + 1] = g;
-      data[idx + 2] = b;
+      data[idx] = Math.max(0, Math.min(255, r));
+      data[idx + 1] = Math.max(0, Math.min(255, g));
+      data[idx + 2] = Math.max(0, Math.min(255, b));
       data[idx + 3] = 255;
     }
   }
 
   ctx.putImageData(imageData, 0, 0);
 
-  // Add dramatic wood grain streaks for visual impact
-  for (let i = 0; i < 75; i++) {
+  // Add extremely prominent wood grain streaks - dramatic visual impact
+  for (let i = 0; i < 95; i++) {
     const y = Math.random() * h;
-    const intensity = 0.1 + Math.random() * 0.2;
-    const gradient = ctx.createLinearGradient(0, y - 5, 0, y + 5);
+    const intensity = 0.15 + Math.random() * 0.28;
+    const gradient = ctx.createLinearGradient(0, y - 6, 0, y + 6);
     gradient.addColorStop(0, `rgba(${grainRGB.r}, ${grainRGB.g}, ${grainRGB.b}, 0)`);
     gradient.addColorStop(0.5, `rgba(${grainRGB.r}, ${grainRGB.g}, ${grainRGB.b}, ${intensity})`);
     gradient.addColorStop(1, `rgba(${grainRGB.r}, ${grainRGB.g}, ${grainRGB.b}, 0)`);
 
     ctx.strokeStyle = gradient;
-    ctx.lineWidth = 1.5 + Math.random() * 3.5;
+    ctx.lineWidth = 2 + Math.random() * 4.5;
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.bezierCurveTo(
-      w * 0.2, y + (Math.random() - 0.5) * 35,
-      w * 0.8, y + (Math.random() - 0.5) * 35,
-      w, y + (Math.random() - 0.5) * 20
+      w * 0.18, y + (Math.random() - 0.5) * 40,
+      w * 0.82, y + (Math.random() - 0.5) * 40,
+      w, y + (Math.random() - 0.5) * 22
     );
     ctx.stroke();
   }
@@ -162,25 +170,25 @@ triangleTextureFlipped.rotation = Math.PI;
 triangleTextureFlipped.needsUpdate = true;
 
 const frame = new THREE.MeshPhysicalMaterial({
-  color: 0x16110b,
-  roughness: .26,
-  metalness: .14,
-  clearcoat: .58,
-  clearcoatRoughness: .12
+  color: 0x0f0a06,
+  roughness: .24,
+  metalness: .16,
+  clearcoat: .62,
+  clearcoatRoughness: .1
 });
 const bevel = new THREE.MeshPhysicalMaterial({
-  map: woodPanelTexture(512, 512, "#251a0f", "#070301"),
-  roughness: .2,
-  metalness: .12,
-  clearcoat: .65,
-  clearcoatRoughness: .1,
+  map: woodPanelTexture(512, 512, "#1a1208", "#040100"),
+  roughness: .18,
+  metalness: .14,
+  clearcoat: .68,
+  clearcoatRoughness: .08,
 });
 const panel = new THREE.MeshPhysicalMaterial({
-  map: woodPanelTexture(1024, 640, "#352510", "#050200", [[256, 320, 95], [768, 320, 95]]),
-  roughness: .18,
-  metalness: .1,
-  clearcoat: .7,
-  clearcoatRoughness: .08,
+  map: woodPanelTexture(1024, 640, "#2a1d0c", "#030100", [[256, 320, 95], [768, 320, 95]]),
+  roughness: .16,
+  metalness: .12,
+  clearcoat: .72,
+  clearcoatRoughness: .06,
 });
 const brass = new THREE.MeshStandardMaterial({ color: 0xe0c9a0, roughness: .22, metalness: .88 });
 const pearl = new THREE.MeshStandardMaterial({ color: 0xfefcfa, roughness: .22, metalness: 0 });
@@ -198,8 +206,16 @@ const black = new THREE.MeshPhysicalMaterial({
   clearcoat: .92,
   clearcoatRoughness: .01
 });
-const marquetryA = new THREE.MeshStandardMaterial({ map: triangleTexture, roughness: .3 });
-const marquetryB = new THREE.MeshStandardMaterial({ map: triangleTextureFlipped, roughness: .3 });
+const marquetryA = new THREE.MeshStandardMaterial({
+  map: triangleTexture,
+  roughness: .28,
+  metalness: .02
+});
+const marquetryB = new THREE.MeshStandardMaterial({
+  map: triangleTextureFlipped,
+  roughness: .28,
+  metalness: .02
+});
 
 function box(width, height, depth, material, x = 0, y = 0, z = 0, bevelGeo = false) {
   const geometry = bevelGeo
