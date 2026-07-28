@@ -831,10 +831,14 @@ const STILL_SPIN = .8;        // rad/s
 const STILL_TIME = .12;
 // Within six degrees of flat is drift; beyond that the die is cocked.
 const FLAT_ENOUGH = Math.cos(6 * Math.PI / 180);
-// The rails run around the edge of the playing field, and it is a corner of
-// the die that has to stop at them, not its centre.
-const WALL_X = FIELD_HALF_X;
-const WALL_Z = FIELD_HALF;
+// The dice stop at the edge of the felt, and it is a corner of the die that
+// has to stop there, not its centre. Nothing on this board stands above the
+// felt to stop them — the surround is a tenth of a unit below it — so this is
+// a wall with nothing at it either way, but it belongs at the edge of the
+// playing surface rather than a quarter unit inside it, which is where the
+// points happen to end.
+const WALL_X = PANEL_W / 2;
+const WALL_Z = PANEL_D / 2;
 
 // Physics runs on a fixed timestep and catches up across however many frames
 // the machine manages, so a throw takes the same real time to settle whether
