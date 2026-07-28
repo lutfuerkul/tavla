@@ -13,6 +13,7 @@ scene.fog = new THREE.FogExp2(0x100d0a, 0.038);
 
 const camera = new THREE.PerspectiveCamera(56, innerWidth / innerHeight, 0.1, 100);
 camera.position.set(0, 7.6, 12.2);
+camera.lookAt(0, 0.9, 0);
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
