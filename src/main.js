@@ -604,6 +604,8 @@ function dice(x, z, face) {
     vel: new THREE.Vector3(),
     spin: new THREE.Vector3(),
     still: 0,
+    touching: false,
+    cocked: false,
   };
   scene.add(die);
   diceMeshes.push(die);
@@ -621,44 +623,56 @@ function readDie(die) {
   return best;
 }
 
-// Rotate the die the shortest way so its upmost face sits exactly level,
-// leaving the yaw wherever the throw left it.
+// A die that has stopped is left where the solve put it. The contacts bring
+// it down flat on their own, so the only thing left to do is take out the
+// last fraction of a degree of integration drift — and that is refused if the
+// die came to rest leaning on its neighbour, because a cocked die is a real
+// outcome and not something to straighten out from underneath the player.
 function settleDie(die) {
+  const s = die.userData.die;
   let bestNormal = null, bestDot = -Infinity;
   const v = new THREE.Vector3();
   for (const [normal] of DIE_NORMALS) {
     v.copy(normal).applyQuaternion(die.quaternion);
     if (v.y > bestDot) { bestDot = v.y; bestNormal = normal; }
   }
-  v.copy(bestNormal).applyQuaternion(die.quaternion);
-  const fix = new THREE.Quaternion().setFromUnitVectors(v, new THREE.Vector3(0, 1, 0));
-  die.quaternion.premultiply(fix).normalize();
-  die.position.y = FELT_Y + DIE_SIZE / 2;
-  const s = die.userData.die;
+  if (bestDot > FLAT_ENOUGH) {
+    // Straightening the die moves its corners, so it is set back down on
+    // whatever it was standing on rather than on the felt — it may have come
+    // to rest on top of a checker.
+    const stood = lowestCorner(die);
+    v.copy(bestNormal).applyQuaternion(die.quaternion);
+    const fix = new THREE.Quaternion().setFromUnitVectors(v, new THREE.Vector3(0, 1, 0));
+    die.quaternion.premultiply(fix).normalize();
+    die.position.y += stood - lowestCorner(die);
+  }
   s.mode = "rest";
+  s.cocked = bestDot <= FLAT_ENOUGH;
   s.vel.set(0, 0, 0);
   s.spin.set(0, 0, 0);
   s.value = readDie(die);
-  separateSettledDice(die);
   showDiceValues();
 }
 
-// The dice do not collide with each other in flight, so a pair thrown along
-// the same line can come to rest inside one another. Once one lands, shove it
-// clear of anything already sitting there.
-function separateSettledDice(die) {
-  const gap = DIE_SIZE * 1.08;
-  const away = new THREE.Vector3();
-  for (const other of diceMeshes) {
-    if (other === die || other.userData.die.mode !== "rest") continue;
-    away.set(die.position.x - other.position.x, 0, die.position.z - other.position.z);
-    if (away.lengthSq() < 1e-6) away.set(1, 0, 0);   // exactly stacked
-    const overlap = gap - away.length();
-    if (overlap <= 0) continue;
-    away.normalize().multiplyScalar(overlap);
-    die.position.x = THREE.MathUtils.clamp(die.position.x + away.x, -THROW_WALL_X, THROW_WALL_X);
-    die.position.z = THREE.MathUtils.clamp(die.position.z + away.z, -THROW_WALL_Z, THROW_WALL_Z);
+// Height of whichever corner is sitting lowest — the height of the surface
+// the die is standing on.
+function lowestCorner(die) {
+  let lowest = Infinity;
+  const v = new THREE.Vector3();
+  for (const corner of DIE_CORNERS) {
+    v.copy(corner).applyQuaternion(die.quaternion);
+    lowest = Math.min(lowest, die.position.y + v.y);
   }
+  return lowest;
+}
+
+// A resting die that gets hit hard enough joins the throw again.
+function wakeDie(die) {
+  const s = die.userData.die;
+  s.mode = "throw";
+  s.still = 0;
+  s.cocked = false;
+  showDiceValues();
 }
 
 function showDiceValues() {
@@ -670,37 +684,52 @@ function showDiceValues() {
     : diceMeshes.map(d => d.userData.die.value).join(" · ");
 }
 
-// Corner offsets used to find where the die actually touches the felt, so it
-// tumbles onto an edge instead of hovering like a ball.
+// Each die is a rigid body: mass, inertia, a linear velocity and an angular
+// one. Every contact is resolved as an impulse at the point that actually
+// touches, so bounce, skid, tumble and roll are not four effects dialled in
+// separately — they all fall out of the same solve.
+
+// Corner offsets from the centre. Contacts are found here, which is what lets
+// a die catch an edge and tumble instead of hovering like a ball.
 const DIE_CORNERS = [];
+const DIE_HALF = DIE_SIZE / 2;
 for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
-  DIE_CORNERS.push(new THREE.Vector3(sx, sy, sz).multiplyScalar(DIE_SIZE / 2));
+  DIE_CORNERS.push(new THREE.Vector3(sx, sy, sz).multiplyScalar(DIE_HALF));
 }
 
 // Real gravity, expressed in board units: a unit is 36mm, so 9.81 m/s² is
 // 9.81 / 0.036 units per second squared. Everything else in the solver is
 // tuned against that rather than against an invented scale.
 const GRAVITY = -9.81 / (36 / 1000);
+const FELT_UP = new THREE.Vector3(0, 1, 0);
+// Mass only ever appears in ratios here, so the die is the unit of mass. A
+// solid cube of side a has I = m a² / 6 about every axis through its centre,
+// so its inertia is a single scalar that stays correct however the die is
+// turned — there is no tensor to rotate.
+const DIE_MASS = 1;
+const INV_MASS = 1 / DIE_MASS;
+const INV_INERTIA = 6 / (DIE_MASS * DIE_SIZE * DIE_SIZE);
+
+// Restitution and Coulomb friction for the three things a die can hit.
 // Polished resin dropped on a felted board keeps roughly a third of its
-// approach speed, and slides very little once it is down.
-const BOUNCE = .34;
-// Coulomb friction coefficient for resin on a felted board.
-const FLOOR_FRICTION = .45;
-const RAIL_BOUNCE = .42;
-// A die is heavy for its size, so contact converts a lot of its slide into
-// tumble; this is the coupling that makes it roll to a stop rather than skid.
-const CONTACT_TUMBLE = .55;
-// Downward speed that counts as a real impact rather than resting contact.
-const IMPACT_SPEED = 1.5;
-// Per-second decay once the die is down and sliding, not per substep.
-const REST_SLIDE_DECAY = .06;
-const REST_SPIN_DECAY = .02;
-// Below a couple of centimetres a second, with barely any spin left, it has
-// stopped.
-const STILL_SPEED = 1.0;   // ≈ 3.6 cm/s
-const STILL_SPIN = 2.4;    // rad/s
-const THROW_WALL_X = FIELD_HALF_X - DIE_SIZE;
-const THROW_WALL_Z = FIELD_HALF - DIE_SIZE;
+// approach speed; lacquered wood gives more back, and two dice more again.
+const FELT_BOUNCE = .34, FELT_FRICTION = .45;
+const RAIL_BOUNCE = .42, RAIL_FRICTION = .32;
+const DIE_BOUNCE = .5, DIE_FRICTION = .25;
+// Under this approach speed a contact is resting, not bouncing. Without it a
+// die trades ever smaller bounces with the felt and never quite lands.
+const REST_THRESHOLD = 3;     // ≈ 11 cm/s
+// Friction now takes the die down to a genuine stop rather than a decay
+// curve, so the thresholds that call it stopped can sit low.
+const STILL_SPEED = .5;       // ≈ 1.8 cm/s
+const STILL_SPIN = .8;        // rad/s
+const STILL_TIME = .12;
+// Within six degrees of flat is drift; beyond that the die is cocked.
+const FLAT_ENOUGH = Math.cos(6 * Math.PI / 180);
+// The rails run around the edge of the playing field, and it is a corner of
+// the die that has to stop at them, not its centre.
+const WALL_X = FIELD_HALF_X;
+const WALL_Z = FIELD_HALF;
 
 // Physics runs on a fixed timestep and catches up across however many frames
 // the machine manages, so a throw takes the same real time to settle whether
@@ -711,95 +740,431 @@ const THROW_WALL_Z = FIELD_HALF - DIE_SIZE;
 const PHYSICS_STEP = 1 / 480;
 let physicsDebt = 0;
 
+// One substep: move everything, find every contact, then solve the whole set
+// together. A die resting flat stands on four corners at once, and those four
+// contacts have to agree on how to share its weight — solving them one pass at
+// a time leaves the die trembling on the felt forever, which is exactly what
+// happens if you take the loop below out.
+const SOLVER_ITERATIONS = 8;
+
 function stepDicePhysics(frameDt) {
   physicsDebt = Math.min(physicsDebt + frameDt, .5);
   while (physicsDebt >= PHYSICS_STEP) {
-    for (const die of diceMeshes) stepDie(die, PHYSICS_STEP);
+    for (const die of diceMeshes) integrateDie(die, PHYSICS_STEP);
+    collectContacts();
+    for (let i = 0; i < SOLVER_ITERATIONS; i++) {
+      for (const c of contacts) solveContact(c);
+    }
+    for (const die of diceMeshes) checkStopped(die, PHYSICS_STEP);
     physicsDebt -= PHYSICS_STEP;
   }
 }
 
-function stepDie(die, dt) {
+// Scratch vectors: the solver runs 480 times a second against every corner of
+// every die, and allocating in there would hand the collector a steady drip.
+const _arm = new THREE.Vector3();
+const _armB = new THREE.Vector3();
+const _rel = new THREE.Vector3();
+const _relB = new THREE.Vector3();
+const _imp = new THREE.Vector3();
+const _torque = new THREE.Vector3();
+const _offset = new THREE.Vector3();
+const _offsetB = new THREE.Vector3();
+const _corner = new THREE.Vector3();
+const _local = new THREE.Vector3();
+const _normal = new THREE.Vector3();
+const _invQ = new THREE.Quaternion();
+
+function integrateDie(die, dt) {
   const s = die.userData.die;
   if (s.mode !== "throw") return;
-
   s.vel.y += GRAVITY * dt;
   die.position.addScaledVector(s.vel, dt);
-
   applySpin(die, s.spin, dt);
+  s.touching = false;
+}
 
-  // Rails around the playing field. A die coming off a wooden rail keeps
-  // more of its speed than one landing on felt, and the impact spins it.
-  ["x", "z"].forEach(axis => {
-    const limit = axis === "x" ? THROW_WALL_X : THROW_WALL_Z;
-    if (Math.abs(die.position[axis]) > limit) {
-      const into = s.vel[axis];
-      die.position[axis] = Math.sign(die.position[axis]) * limit;
-      // Only rebound if it is actually travelling into the rail; otherwise it
-      // is just resting against it and would jitter.
-      if (Math.sign(into) !== Math.sign(die.position[axis]) || into === 0) return;
-      s.vel[axis] = -into * RAIL_BOUNCE;
-      s.spin.multiplyScalar(.8);
-      // Glancing off a rail kicks it end over end about the other horizontal
-      // axis, which is what stops a bounce looking like a billiard shot.
-      const kick = Math.abs(into) * .35;
-      if (axis === "x") s.spin.z += Math.sign(into) * kick;
-      else s.spin.x -= Math.sign(into) * kick;
+// Velocity of the material point sitting at offset r from the centre — the
+// centre's own velocity plus what the spin is doing out at that radius. This
+// is what a contact actually sees, and leaving the ω × r term out is what
+// stops a die from ever truly rolling.
+function pointVelocity(s, r, out) {
+  return out.crossVectors(s.spin, r).add(s.vel);
+}
+
+function applyImpulse(s, r, impulse) {
+  s.vel.addScaledVector(impulse, INV_MASS);
+  s.spin.addScaledVector(_torque.crossVectors(r, impulse), INV_INERTIA);
+}
+
+// --- contacts -------------------------------------------------------
+// Each one is rebuilt from scratch every substep but the objects are pooled,
+// so a throw allocates nothing.
+const contactPool = [];
+const contacts = [];
+let contactCount = 0;
+
+function newContact() {
+  if (contactPool.length === contactCount) {
+    contactPool.push({
+      a: null, b: null,
+      r: new THREE.Vector3(), rb: new THREE.Vector3(),
+      n: new THREE.Vector3(), t1: new THREE.Vector3(), t2: new THREE.Vector3(),
+      kn: 0, k1: 0, k2: 0, bias: 0, friction: 0, jn: 0, j1: 0, j2: 0,
+    });
+  }
+  return contactPool[contactCount++];
+}
+
+// Relative velocity of the two touching points, or of the one touching point
+// and the immovable board.
+function contactVelocity(c, out) {
+  pointVelocity(c.a, c.r, out);
+  if (c.b) out.sub(pointVelocity(c.b, c.rb, _relB));
+  return out;
+}
+
+function contactMass(c, dir, arm) {
+  let k = INV_MASS + INV_INERTIA * arm.crossVectors(c.r, dir).lengthSq();
+  if (c.b) k += INV_MASS + INV_INERTIA * _armB.crossVectors(c.rb, dir).lengthSq();
+  return k;
+}
+
+function addContact(a, b, r, rb, n, restitution, friction) {
+  const c = newContact();
+  c.a = a; c.b = b;
+  c.r.copy(r);
+  if (b) c.rb.copy(rb);
+  c.n.copy(n);
+  // Any two directions across the normal will do for the friction basis.
+  c.t1.set(n.z, n.x, n.y).cross(n);
+  if (c.t1.lengthSq() < 1e-9) c.t1.set(1, 0, 0).cross(n);
+  c.t1.normalize();
+  c.t2.crossVectors(n, c.t1);
+  c.kn = contactMass(c, c.n, _arm);
+  c.k1 = contactMass(c, c.t1, _arm);
+  c.k2 = contactMass(c, c.t2, _arm);
+  // Restitution is fixed against the speed the contact came in at, not
+  // recomputed each iteration — otherwise the iterations feed it energy.
+  const approach = contactVelocity(c, _rel).dot(n);
+  c.bias = -approach > REST_THRESHOLD ? -restitution * approach : 0;
+  c.friction = friction;
+  c.jn = c.j1 = c.j2 = 0;
+  a.touching = true;
+  if (b) b.touching = true;
+  contacts.push(c);
+  return c;
+}
+
+// One pass over one contact. The normal impulse is accumulated and never
+// allowed to go negative — a contact can push, it cannot pull — and the
+// friction impulse is a two-axis vector kept inside the Coulomb cone. Under
+// the cap the contact sticks and the die rolls; on it, the die slides and the
+// surplus is the speed it scrubs off. The torque all this leaves behind about
+// the centre of mass is the tumble.
+function solveContact(c) {
+  const vn = contactVelocity(c, _rel).dot(c.n);
+  const prev = c.jn;
+  c.jn = Math.max(0, prev - (vn - c.bias) / c.kn);
+  applyContactImpulse(c, _imp.copy(c.n).multiplyScalar(c.jn - prev));
+
+  contactVelocity(c, _rel);
+  const limit = c.friction * c.jn;
+  let j1 = c.j1 - _rel.dot(c.t1) / c.k1;
+  let j2 = c.j2 - _rel.dot(c.t2) / c.k2;
+  const mag = Math.hypot(j1, j2);
+  if (mag > limit) { j1 *= limit / mag; j2 *= limit / mag; }
+  _imp.copy(c.t1).multiplyScalar(j1 - c.j1).addScaledVector(c.t2, j2 - c.j2);
+  applyContactImpulse(c, _imp);
+  c.j1 = j1; c.j2 = j2;
+}
+
+function applyContactImpulse(c, impulse) {
+  applyImpulse(c.a, c.r, impulse);
+  if (c.b) applyImpulse(c.b, c.rb, impulse.multiplyScalar(-1));
+}
+
+// --- finding the contacts -------------------------------------------
+function collectContacts() {
+  contacts.length = 0;
+  contactCount = 0;
+  for (const die of diceMeshes) {
+    if (die.userData.die.mode === "held") continue;
+    boardContacts(die);
+    barContacts(die);
+    checkerContacts(die);
+  }
+  for (let i = 0; i < diceMeshes.length; i++) {
+    for (let k = i + 1; k < diceMeshes.length; k++) {
+      diePairContacts(diceMeshes[i], diceMeshes[k]);
     }
-  });
+  }
+}
 
-  // Lowest corner decides the contact, which is what makes it tumble.
-  let lowest = Infinity;
-  const c = new THREE.Vector3();
+// The felt, and the rails around the field. Every corner that has gone
+// through gets its own contact, so a die coming down flat is caught by four
+// of them and one landing on a single corner is spun about it. It is a corner
+// of the die that has to stop at a rail, not its centre.
+function boardContacts(die) {
+  const s = die.userData.die;
+  let lift = 0, pushX = 0, sideX = 0, pushZ = 0, sideZ = 0;
+
   for (const corner of DIE_CORNERS) {
-    c.copy(corner).applyQuaternion(die.quaternion);
-    lowest = Math.min(lowest, die.position.y + c.y);
+    _offset.copy(corner).applyQuaternion(die.quaternion);
+    _corner.copy(_offset).add(die.position);
+
+    if (_corner.y < FELT_Y) {
+      lift = Math.max(lift, FELT_Y - _corner.y);
+      addContact(s, null, _offset, null, FELT_UP, FELT_BOUNCE, FELT_FRICTION);
+    }
+    const overX = Math.abs(_corner.x) - WALL_X;
+    if (overX > 0) {
+      _normal.set(-Math.sign(_corner.x), 0, 0);
+      addContact(s, null, _offset, null, _normal, RAIL_BOUNCE, RAIL_FRICTION);
+      if (overX > pushX) { pushX = overX; sideX = Math.sign(_corner.x); }
+    }
+    const overZ = Math.abs(_corner.z) - WALL_Z;
+    if (overZ > 0) {
+      _normal.set(0, 0, -Math.sign(_corner.z));
+      addContact(s, null, _offset, null, _normal, RAIL_BOUNCE, RAIL_FRICTION);
+      if (overZ > pushZ) { pushZ = overZ; sideZ = Math.sign(_corner.z); }
+    }
   }
 
-  if (lowest < FELT_Y) {
-    die.position.y += FELT_Y - lowest;
+  if (lift > 0) die.position.y += lift;
+  if (pushX > 0) die.position.x -= sideX * pushX;
+  if (pushZ > 0) die.position.z -= sideZ * pushZ;
+}
 
-    if (s.vel.y < -IMPACT_SPEED) {
-      // Coulomb friction at the contact: the sideways impulse is capped by
-      // the normal impulse, so a die skimming in fast and flat keeps most of
-      // its speed and carries on across the board, while one dropped steeply
-      // stops almost where it lands. Scrubbing a fixed fraction of the
-      // sideways speed instead — which is what this did before — bled every
-      // throw dry within a couple of bounces and no die ever reached a rail.
-      const approach = -s.vel.y;
-      const normalImpulse = (1 + BOUNCE) * approach;
-      const tangential = Math.hypot(s.vel.x, s.vel.z);
-      const scrub = Math.min(FLOOR_FRICTION * normalImpulse, tangential);
+// Everything a die can hit besides the felt is a convex solid, so they are
+// all tested the same way: the separating axis test. If a direction exists in
+// which the two shadows do not overlap, they are apart; otherwise the
+// shallowest overlap of all the candidate directions is the one they have to
+// be pushed back along, and it is the contact normal.
+//
+// The obvious cheap test — is a corner of one inside the other — is what this
+// started as, and it fails at exactly the case that matters most: two dice
+// lying flat on the felt at the same height, where every corner sits dead on
+// the other's face plane rather than inside it. They slid through each other.
+const _axA = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+const _axB = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+const WORLD_AXES = [
+  new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1),
+];
+const _axes = [];
+for (let i = 0; i < 15; i++) _axes.push(new THREE.Vector3());
+const _points = [];
+for (let i = 0; i < 8; i++) _points.push(new THREE.Vector3());
+const _delta = new THREE.Vector3();
+const _t1 = new THREE.Vector3();
+const _t2 = new THREE.Vector3();
+const _centre = new THREE.Vector3();
+const _sat = { depth: 0, normal: new THREE.Vector3() };
+// A corner counts as pressed against the other solid if it is no deeper than
+// the shallowest overlap plus a little; anything further in belongs to the far
+// side of it and is not what is touching.
+const CONTACT_SKIN = DIE_SIZE * .15;
 
-      s.vel.y = approach * BOUNCE;
-      if (tangential > 1e-6) {
-        s.vel.x -= (s.vel.x / tangential) * scrub;
-        s.vel.z -= (s.vel.z / tangential) * scrub;
-        // That scrubbed momentum has to go somewhere: it tips the die over
-        // about the horizontal axis across its direction of travel.
-        s.spin.multiplyScalar(.78);
-        s.spin.x += -(s.vel.z / tangential) * scrub * CONTACT_TUMBLE;
-        s.spin.z += (s.vel.x / tangential) * scrub * CONTACT_TUMBLE;
-      } else {
-        s.spin.multiplyScalar(.78);
-      }
-    } else {
-      // Resting or sliding on the felt. Damping here has to be per second,
-      // not per substep — applied per substep it scales with the timestep and
-      // kills the throw almost the instant the die first touches down.
-      s.vel.y = Math.max(s.vel.y, 0);
-      const slide = Math.pow(REST_SLIDE_DECAY, dt);
-      s.vel.x *= slide;
-      s.vel.z *= slide;
-      s.spin.multiplyScalar(Math.pow(REST_SPIN_DECAY, dt));
+const DIE_HALVES = new THREE.Vector3(DIE_HALF, DIE_HALF, DIE_HALF);
+// The bar down the middle of the board stands proud of the felt, and the
+// checkers stand proud of that. Both are in the dice's way.
+const BAR_HALVES = new THREE.Vector3(BAR_HALF, .11, (PANEL_D + .18) / 2);
+const BAR_CENTRE = new THREE.Vector3(0, .5, 0);
+const CHECKER_HALVES = new THREE.Vector3(CHECKER_R, CHECKER_H / 2, CHECKER_R);
+// Nothing further away than this can be touching, whatever the angles.
+const CHECKER_RANGE = (CHECKER_R + DIE_HALF * Math.sqrt(3)) ** 2;
+const BAR_BOUNCE = .42, BAR_FRICTION = .32;
+const CHECKER_BOUNCE = .45, CHECKER_FRICTION = .3;
+
+function boxAxes(die, out) {
+  out[0].set(1, 0, 0).applyQuaternion(die.quaternion);
+  out[1].set(0, 1, 0).applyQuaternion(die.quaternion);
+  out[2].set(0, 0, 1).applyQuaternion(die.quaternion);
+}
+
+// Half-width of a solid's shadow along an arbitrary direction. A box casts the
+// sum of its three half extents; a checker is a disc standing on the felt, so
+// it casts its radius across and its half thickness up.
+function boxSupport(axes, half, dir) {
+  return half.x * Math.abs(axes[0].dot(dir))
+       + half.y * Math.abs(axes[1].dot(dir))
+       + half.z * Math.abs(axes[2].dot(dir));
+}
+
+function discSupport(axes, half, dir) {
+  return half.x * Math.hypot(dir.x, dir.z) + half.y * Math.abs(dir.y);
+}
+
+// Walk a set of candidate axes, keeping the shallowest overlap. Bails out the
+// moment one of them shows a gap, because that alone proves they are apart.
+function shallowestOverlap(count, posA, supportA, axesA, halfA, posB, supportB, axesB, halfB) {
+  _delta.copy(posA).sub(posB);
+  let shallowest = Infinity, found = null;
+  for (let i = 0; i < count; i++) {
+    const axis = _axes[i];
+    const overlap = supportA(axesA, halfA, axis) + supportB(axesB, halfB, axis)
+      - Math.abs(_delta.dot(axis));
+    if (overlap <= 0) return false;
+    if (overlap < shallowest) { shallowest = overlap; found = axis; }
+  }
+  _sat.depth = shallowest;
+  _sat.normal.copy(found);
+  if (_sat.normal.dot(_delta) < 0) _sat.normal.negate();     // out of B, towards A
+  return true;
+}
+
+// Box against box: the face normals of both, plus the cross products of their
+// edges, which is what catches two of them meeting corner to corner.
+function boxesOverlap(posA, axesA, halfA, posB, axesB, halfB) {
+  let count = 0;
+  for (let i = 0; i < 3; i++) _axes[count++].copy(axesA[i]);
+  for (let i = 0; i < 3; i++) _axes[count++].copy(axesB[i]);
+  for (let i = 0; i < 3; i++) {
+    for (let k = 0; k < 3; k++) {
+      const axis = _axes[count].crossVectors(axesA[i], axesB[k]);
+      if (axis.lengthSq() > 1e-8) { axis.normalize(); count++; }   // skip parallel edges
     }
+  }
+  return shallowestOverlap(count, posA, boxSupport, axesA, halfA,
+                                  posB, boxSupport, axesB, halfB);
+}
 
-    if (s.vel.length() < STILL_SPEED && s.spin.length() < STILL_SPIN) {
-      s.still += dt;
-      if (s.still > .1) settleDie(die);
-    } else {
-      s.still = 0;
+// Box against checker. A disc has no edges to cross, so the candidates are its
+// axis, the direction out from it towards the die, and the die's own faces.
+function discOverlap(posA, axesA, halfA, posB, halfB) {
+  _axes[0].set(0, 1, 0);
+  _axes[1].set(posA.x - posB.x, 0, posA.z - posB.z);
+  if (_axes[1].lengthSq() < 1e-9) _axes[1].set(1, 0, 0); else _axes[1].normalize();
+  for (let i = 0; i < 3; i++) _axes[2 + i].copy(axesA[i]);
+  return shallowestOverlap(5, posA, boxSupport, axesA, halfA,
+                              posB, discSupport, WORLD_AXES, halfB);
+}
+
+// The corners of a die pressed against whatever it has hit, in the direction
+// of the contact normal. `towards` is +1 when the die is the one the normal
+// points at, -1 when it is the one the normal points away from. Points land in
+// the shared pool and the count comes back.
+function pressedCorners(die, centre, support, axes, half, towards) {
+  const n = _sat.normal;
+  _t1.set(n.z, n.x, n.y).cross(n);
+  if (_t1.lengthSq() < 1e-9) _t1.set(1, 0, 0).cross(n);
+  _t1.normalize();
+  _t2.crossVectors(n, _t1);
+
+  const reach = support(axes, half, n);
+  const spread1 = support(axes, half, _t1);
+  const spread2 = support(axes, half, _t2);
+
+  let found = 0;
+  for (const corner of DIE_CORNERS) {
+    _corner.copy(corner).applyQuaternion(die.quaternion).add(die.position);
+    _local.copy(_corner).sub(centre);
+    const depth = reach - towards * _local.dot(n);
+    if (depth <= 0 || depth > _sat.depth + CONTACT_SKIN) continue;
+    if (Math.abs(_local.dot(_t1)) > spread1) continue;
+    if (Math.abs(_local.dot(_t2)) > spread2) continue;
+    _points[found++].copy(_corner);
+  }
+  return found;
+}
+
+// --- what a die can run into ----------------------------------------
+// The bar down the centre seam, which a die crossing the board has to clear.
+function barContacts(die) {
+  const s = die.userData.die;
+  if (s.mode !== "throw") return;
+  boxAxes(die, _axA);
+  if (!boxesOverlap(die.position, _axA, DIE_HALVES, BAR_CENTRE, WORLD_AXES, BAR_HALVES)) return;
+  const hits = pressedCorners(die, BAR_CENTRE, boxSupport, WORLD_AXES, BAR_HALVES, 1);
+  for (let i = 0; i < hits; i++) {
+    _offset.copy(_points[i]).sub(die.position);
+    addContact(s, null, _offset, null, _sat.normal, BAR_BOUNCE, BAR_FRICTION);
+  }
+  die.position.addScaledVector(_sat.normal, _sat.depth);
+}
+
+// The checkers. They are the board as far as a die is concerned: a die that
+// lands on one sits on it, and one that runs into a stack is stopped by it,
+// but the checkers themselves are game state and do not get knocked about.
+function checkerContacts(die) {
+  const s = die.userData.die;
+  if (s.mode !== "throw") return;
+  boxAxes(die, _axA);
+  const reach = DIE_HALF * Math.sqrt(3);
+  for (const checker of pieceMeshes) {
+    const dx = die.position.x - checker.position.x;
+    const dz = die.position.z - checker.position.z;
+    if (dx * dx + dz * dz > CHECKER_RANGE) continue;
+    _centre.set(checker.position.x, checker.position.y + CHECKER_H / 2, checker.position.z);
+    if (die.position.y - reach > _centre.y + CHECKER_H / 2) continue;
+    if (!discOverlap(die.position, _axA, DIE_HALVES, _centre, CHECKER_HALVES)) continue;
+
+    const hits = pressedCorners(die, _centre, discSupport, WORLD_AXES, CHECKER_HALVES, 1);
+    for (let i = 0; i < hits; i++) {
+      _offset.copy(_points[i]).sub(die.position);
+      addContact(s, null, _offset, null, _sat.normal, CHECKER_BOUNCE, CHECKER_FRICTION);
     }
+    die.position.addScaledVector(_sat.normal, _sat.depth);
+  }
+}
+
+// The other die.
+function diePairContacts(dieA, dieB) {
+  const sa = dieA.userData.die, sb = dieB.userData.die;
+  if (sa.mode === "held" || sb.mode === "held") return;
+  boxAxes(dieA, _axA);
+  boxAxes(dieB, _axB);
+  if (!boxesOverlap(dieA.position, _axA, DIE_HALVES, dieB.position, _axB, DIE_HALVES)) return;
+
+  let hits = pressedCorners(dieA, dieB.position, boxSupport, _axB, DIE_HALVES, 1);
+  for (let i = 0; i < hits; i++) addDieContact(dieA, dieB, _points[i]);
+  hits = pressedCorners(dieB, dieA.position, boxSupport, _axA, DIE_HALVES, -1);
+  for (let i = 0; i < hits; i++) addDieContact(dieA, dieB, _points[i]);
+
+  // Then share the overlap out, once, along that same normal. Doing it per
+  // contact instead pushes the pair apart once for every corner that happens
+  // to be touching, and two dice that land together end up flung apart.
+  dieA.position.addScaledVector(_sat.normal, _sat.depth * .5);
+  dieB.position.addScaledVector(_sat.normal, _sat.depth * -.5);
+}
+
+// One contact between the pair, at a point both of them share.
+function addDieContact(dieA, dieB, point) {
+  const sa = dieA.userData.die, sb = dieB.userData.die;
+  _offset.copy(point).sub(dieA.position);
+  _offsetB.copy(point).sub(dieB.position);
+
+  // A die already at rest is knocked back into play by a real knock — hard
+  // enough to bounce off felt — but not by the hair of overlap two settled
+  // dice can share, and not by the sliver of speed gravity adds each substep
+  // to a die that is already lying still.
+  pointVelocity(sb, _offsetB, _relB);
+  if (pointVelocity(sa, _offset, _rel).sub(_relB).dot(_sat.normal) < -REST_THRESHOLD) {
+    if (sa.mode === "rest") wakeDie(dieA);
+    if (sb.mode === "rest") wakeDie(dieB);
+  }
+
+  // A die still at rest after that is part of the board as far as this
+  // contact goes: it is not being integrated, so handing it an impulse would
+  // put velocity on a body that never spends it.
+  if (sa.mode === "throw" && sb.mode === "throw") {
+    addContact(sa, sb, _offset, _offsetB, _sat.normal, DIE_BOUNCE, DIE_FRICTION);
+  } else if (sa.mode === "throw") {
+    addContact(sa, null, _offset, null, _sat.normal, DIE_BOUNCE, DIE_FRICTION);
+  } else if (sb.mode === "throw") {
+    _normal.copy(_sat.normal).negate();
+    addContact(sb, null, _offsetB, null, _normal, DIE_BOUNCE, DIE_FRICTION);
+  }
+}
+
+// Friction takes the die to a real stop, so this is a check for having
+// stopped rather than a decay that forces it.
+function checkStopped(die, dt) {
+  const s = die.userData.die;
+  if (s.mode !== "throw") return;
+  if (s.touching && s.vel.length() < STILL_SPEED && s.spin.length() < STILL_SPIN) {
+    s.still += dt;
+    if (s.still > STILL_TIME) settleDie(die);
   } else {
     s.still = 0;
   }
@@ -883,6 +1248,17 @@ function renderPieces() {
       pieceMeshes.push(body);
     }
   }
+  dropUnsupportedDice();
+}
+
+// A die can come to rest on top of a checker, and then that checker gets
+// played. Anything left standing above the felt is put back into the throw so
+// it falls; a die that is still supported simply settles again where it is.
+function dropUnsupportedDice() {
+  for (const die of diceMeshes) {
+    const s = die.userData.die;
+    if (s.mode === "rest" && lowestCorner(die) > FELT_Y + 1e-3) wakeDie(die);
+  }
 }
 
 function tryMove(fromKey, toKey, color) {
@@ -921,7 +1297,9 @@ function setPointerFromEvent(e) {
 // Dice are lifted onto a plane above the board while held. Both dice always
 // come up together and are thrown as a pair — you shake the cup, not one die
 // at a time.
-const LIFT_Y = 1.5;
+// Height the dice ride at while they are being shaken, and so the height they
+// are let go from: a hand's width above the felt rather than skimming it.
+const LIFT_Y = 2.6;
 const liftPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -LIFT_Y);
 // A shake lasts at least this long. Letting go early does not cut it short;
 // the dice keep spinning in the hand until the time is up, then fly.
@@ -1005,23 +1383,24 @@ function launchDice() {
   const hand = heldDice.vel.clone();
   hand.y = 0;
   // Away from the player's side of the table, with whatever aim the hand had.
-  // Roughly 1.3 m/s, which is what an unhurried throw across a board is.
+  // Around 2 m/s, which is a firm throw rather than a nudge — hard enough to
+  // reach the far rail, come back off it and keep tumbling.
   const aim = new THREE.Vector3(hand.x * .3, 0, -1)
     .normalize()
-    .multiplyScalar(34 + Math.random() * 10);
+    .multiplyScalar(52 + Math.random() * 16);
 
   heldDice.entries.forEach(({ die }) => {
     const s = die.userData.die;
     s.mode = "throw";
     // Enough scatter that they do not fly in formation and land in a stack.
     s.vel.copy(aim).add(new THREE.Vector3(
-      (Math.random() - .5) * 9,
+      (Math.random() - .5) * 12,
       0,
-      (Math.random() - .5) * 9
+      (Math.random() - .5) * 12
     ));
-    // Tossed slightly upward out of the hand.
-    s.vel.y = 3 + Math.random() * 3;
-    s.spin.copy(randomShakeSpin()).clampLength(16, 34);
+    // Thrown up and out of the hand, not rolled off the fingertips.
+    s.vel.y = 7 + Math.random() * 7;
+    s.spin.copy(randomShakeSpin()).clampLength(30, 54);
     s.still = 0;
   });
 
