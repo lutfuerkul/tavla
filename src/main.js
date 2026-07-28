@@ -211,37 +211,37 @@ function addBoard() {
   });
 }
 
-// Flat disc-like checker matching real backgammon pieces - shallow profile
-// with very slight dome and rounded edges
+// Premium flat disc checker - precisely matching reference board proportions
+// Shallow dome with perfect rim for professional bakelite appearance
 const checkerGeometry = new THREE.LatheGeometry([
-  new THREE.Vector2(0, .018),
-  new THREE.Vector2(.35, .024),
-  new THREE.Vector2(.56, .035),
-  new THREE.Vector2(.58, .028),
-  new THREE.Vector2(.58, .006),
-  new THREE.Vector2(.54, 0),
+  new THREE.Vector2(0, .02),
+  new THREE.Vector2(.34, .026),
+  new THREE.Vector2(.57, .038),
+  new THREE.Vector2(.60, .032),
+  new THREE.Vector2(.60, .005),
+  new THREE.Vector2(.55, 0),
   new THREE.Vector2(0, 0),
-], 56);
+], 64);
 
 function dice(x, z, face) {
   const material = new THREE.MeshPhysicalMaterial({
-    color: 0xfbf8f3,
-    roughness: .12,
+    color: 0xfdfbf8,
+    roughness: .09,
     metalness: 0,
-    clearcoat: .82,
-    clearcoatRoughness: .03
+    clearcoat: .88,
+    clearcoatRoughness: .02
   });
-  const size = .36;
-  const die = new THREE.Mesh(new THREE.BoxGeometry(size, size, size, 5, 5, 5), material);
+  const size = .38;
+  const die = new THREE.Mesh(new THREE.BoxGeometry(size, size, size, 6, 6, 6), material);
   die.position.set(x, .47 + size / 2, z);
   die.rotation.set(.14, .3, -.08);
   die.castShadow = true;
   die.receiveShadow = true;
   scene.add(die);
-  const dots = [[-.1, .18], [.1, .18], [0, 0], [-.1, -.18], [.1, -.18]];
+  const dots = [[-.11, .19], [.11, .19], [0, 0], [-.11, -.19], [.11, -.19]];
   dots.slice(0, face).forEach(([dx, dz]) => {
-    const dot = new THREE.Mesh(new THREE.SphereGeometry(.032, 18, 14), black);
-    dot.position.set(x + dx, .47 + size + .02, z + dz);
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(.035, 20, 16), black);
+    dot.position.set(x + dx, .47 + size + .025, z + dz);
     dot.castShadow = true;
     scene.add(dot);
   });
