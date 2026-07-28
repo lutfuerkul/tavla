@@ -600,7 +600,26 @@ function settleDie(die) {
   s.vel.set(0, 0, 0);
   s.spin.set(0, 0, 0);
   s.value = readDie(die);
+  separateSettledDice(die);
   showDiceValues();
+}
+
+// The dice do not collide with each other in flight, so a pair thrown along
+// the same line can come to rest inside one another. Once one lands, shove it
+// clear of anything already sitting there.
+function separateSettledDice(die) {
+  const gap = DIE_SIZE * 1.08;
+  const away = new THREE.Vector3();
+  for (const other of diceMeshes) {
+    if (other === die || other.userData.die.mode !== "rest") continue;
+    away.set(die.position.x - other.position.x, 0, die.position.z - other.position.z);
+    if (away.lengthSq() < 1e-6) away.set(1, 0, 0);   // exactly stacked
+    const overlap = gap - away.length();
+    if (overlap <= 0) continue;
+    away.normalize().multiplyScalar(overlap);
+    die.position.x = THREE.MathUtils.clamp(die.position.x + away.x, -THROW_WALL_X, THROW_WALL_X);
+    die.position.z = THREE.MathUtils.clamp(die.position.z + away.z, -THROW_WALL_Z, THROW_WALL_Z);
+  }
 }
 
 function showDiceValues() {
