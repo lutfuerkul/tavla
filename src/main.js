@@ -521,6 +521,22 @@ function addPanelBoard() {
   box(PANEL_W, .1, PANEL_D, panel, 0, .42, 0);
   box(BAR_HALF * 2, .22, PANEL_D + .18, frame, 0, .5, 0);
 
+  // The edges stand up, the same thickness and height as the walls on the
+  // cases. They stand at the edge of the field, which is exactly where the
+  // dice have always stopped — so the wall that lived in the physics and
+  // nowhere else is now something you can see, and nothing new gets in the
+  // dice's way. The wide flat frame stays the frame it always was, out
+  // beyond them.
+  const railBase = .225;                        // top of the frame they grow out of
+  const railH = CASE_TOP - railBase;
+  const railY = railBase + railH / 2;
+  [-1, 1].forEach(side => {
+    box(WALL_T, railH, (FIELD_HALF + WALL_T) * 2, frame,
+      side * (FIELD_HALF_X + WALL_T / 2), railY, 0);
+    box(FIELD_HALF_X * 2, railH, WALL_T, frame,
+      0, railY, side * (FIELD_HALF + WALL_T / 2));
+  });
+
   // Brass hinge pins across the centre seam, as it had.
   [-PANEL_D * .28, PANEL_D * .28].forEach(z => {
     const pin = new THREE.Mesh(new THREE.CylinderGeometry(.09, .09, .55, 16), brass);
@@ -534,7 +550,7 @@ function addPanelBoard() {
   [-1, 1].forEach(side => {
     [-4, -1.4, 1.4, 4].forEach(z => {
       const dot = new THREE.Mesh(new THREE.SphereGeometry(.055, 12, 10), pearl);
-      dot.position.set(side * (PANEL_W / 2 + .55), .62, z);
+      dot.position.set(side * (FIELD_HALF_X + WALL_T / 2), CASE_TOP - .012, z);
       scene.add(dot);
     });
   });
@@ -1750,12 +1766,12 @@ function applySpin(die, spin, dt) {
 
 function randomShakeSpin() {
   // Tumbling on every axis at once, not just spinning about one. A shaken
-  // die turns at something like two to four revolutions a second.
+  // die turns at something like three to six revolutions a second.
   return new THREE.Vector3(
     (Math.random() - .5) * 2,
     (Math.random() - .5) * 2,
     (Math.random() - .5) * 2
-  ).normalize().multiplyScalar(14 + Math.random() * 12);
+  ).normalize().multiplyScalar(20 + Math.random() * 16);
 }
 
 // Runs every frame while the dice are in the hand, so they keep tumbling even
