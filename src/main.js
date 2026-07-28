@@ -1,20 +1,21 @@
 import * as THREE from "../vendor/three/three.module.min.js";
-import { PointerLockControls } from "../vendor/three/examples/jsm/controls/PointerLockControls.js";
 import { RoomEnvironment } from "../vendor/three/examples/jsm/environments/RoomEnvironment.js";
 
 const canvas = document.querySelector("#scene");
 const intro = document.querySelector("#intro");
 const enter = document.querySelector("#enter");
 const hud = document.querySelector("#hud");
-const crosshair = document.querySelector("#crosshair");
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0c0a08);
 scene.fog = new THREE.FogExp2(0x0c0a08, 0.045);
 
+// Fixed, near-top-down seat at the table — the camera never moves once
+// seated, so the mouse is free to drag checkers instead of looking around.
 const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.1, 100);
 camera.position.set(0, 12.4, 3.6);
 camera.lookAt(0, 0.4, 0);
+
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
@@ -29,51 +30,9 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
 scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
 
-const controls = new PointerLockControls(camera, document.body);
-
-function showTable() {
+enter.addEventListener("click", () => {
   intro.classList.add("hidden");
   hud.classList.add("visible");
-  crosshair.classList.add("visible");
-}
-function showIntro() {
-  intro.classList.remove("hidden");
-  hud.classList.remove("visible");
-  crosshair.classList.remove("visible");
-}
-
-controls.addEventListener("unlock", showIntro);
-
-enter.addEventListener("click", () => {
-  showTable();
-  try {
-    controls.lock();
-  } catch {
-    // Pointer Lock unsupported/blocked (touch devices, some embedded
-    // browsers) — the drag-to-look fallback below still lets the
-    // player look around, so the table stays visible either way.
-  }
-});
-
-let dragging = false;
-let lastX = 0;
-let lastY = 0;
-let yaw = 0;
-let pitch = 0;
-canvas.addEventListener("pointerdown", (event) => {
-  if (controls.isLocked) return;
-  dragging = true;
-  lastX = event.clientX;
-  lastY = event.clientY;
-});
-addEventListener("pointerup", () => { dragging = false; });
-addEventListener("pointermove", (event) => {
-  if (!dragging || controls.isLocked) return;
-  yaw -= (event.clientX - lastX) * 0.0035;
-  pitch = Math.max(-1.2, Math.min(1.2, pitch - (event.clientY - lastY) * 0.0035));
-  lastX = event.clientX;
-  lastY = event.clientY;
-  camera.rotation.set(pitch, yaw, 0, "YXZ");
 });
 
 // Rosewood grain with a bezier-streak pattern plus a couple of oval
@@ -114,30 +73,15 @@ function woodPanelTexture(w, h, base, grain, eyes) {
   return texture;
 }
 
-// Pale maple inlay with a soft feathered chevron grain, used for every
-// triangle point — a natural-wood marquetry look rather than flat paint.
-function marquetryTexture(shade) {
-  const size = 256;
-  const c = document.createElement("canvas");
-  c.width = c.height = size;
-  const ctx = c.getContext("2d");
-  ctx.fillStyle = shade;
-  ctx.fillRect(0, 0, size, size);
-  ctx.strokeStyle = "#3a2210";
-  for (let i = 0; i < 34; i++) {
-    ctx.globalAlpha = 0.05 + Math.random() * 0.06;
-    ctx.lineWidth = 1 + Math.random();
-    const y = (i / 34) * size;
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(size, y + (Math.random() - 0.5) * 18);
-    ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
-  const texture = new THREE.CanvasTexture(c);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
+// The 24 triangle points use a real photo of a maple marquetry point,
+// cropped from the reference board, instead of a flat painted color.
+const triangleLoader = new THREE.TextureLoader();
+const triangleTexture = triangleLoader.load(new URL("./assets/triangle.png", import.meta.url).href);
+triangleTexture.colorSpace = THREE.SRGBColorSpace;
+const triangleTextureFlipped = triangleTexture.clone();
+triangleTextureFlipped.center.set(0.5, 0.5);
+triangleTextureFlipped.rotation = Math.PI;
+triangleTextureFlipped.needsUpdate = true;
 
 const frame = new THREE.MeshPhysicalMaterial({ color: 0x14100d, roughness: .38, metalness: .06, clearcoat: .35, clearcoatRoughness: .3 });
 const bevel = new THREE.MeshPhysicalMaterial({
@@ -150,10 +94,10 @@ const panel = new THREE.MeshPhysicalMaterial({
 });
 const brass = new THREE.MeshStandardMaterial({ color: 0xcda15a, roughness: .28, metalness: .82 });
 const pearl = new THREE.MeshStandardMaterial({ color: 0xf1ece0, roughness: .35, metalness: 0 });
-const ivory = new THREE.MeshPhysicalMaterial({ color: 0xefe6d5, roughness: .22, metalness: 0, clearcoat: .65, clearcoatRoughness: .1 });
-const black = new THREE.MeshPhysicalMaterial({ color: 0x161513, roughness: .2, metalness: .05, clearcoat: .7, clearcoatRoughness: .08 });
-const marquetryA = new THREE.MeshStandardMaterial({ map: marquetryTexture("#e2c68f"), roughness: .42 });
-const marquetryB = new THREE.MeshStandardMaterial({ map: marquetryTexture("#d9bb80"), roughness: .42 });
+const ivory = new THREE.MeshPhysicalMaterial({ color: 0xe9e2d2, roughness: .22, metalness: 0, clearcoat: .65, clearcoatRoughness: .1 });
+const black = new THREE.MeshPhysicalMaterial({ color: 0x18191a, roughness: .2, metalness: .05, clearcoat: .7, clearcoatRoughness: .08 });
+const marquetryA = new THREE.MeshStandardMaterial({ map: triangleTexture, roughness: .4 });
+const marquetryB = new THREE.MeshStandardMaterial({ map: triangleTextureFlipped, roughness: .4 });
 
 function box(width, height, depth, material, x = 0, y = 0, z = 0, bevelGeo = false) {
   const geometry = bevelGeo
@@ -184,6 +128,8 @@ function point(x0, x1, zOuter, zTip, material) {
 // x-position of each of the 12 points along one edge of the board.
 // Mirrored front/back, this lays out the full 24-point board.
 const starts = [-6.55, -5.47, -4.39, -3.31, -2.23, -1.15, 1.15, 2.23, 3.31, 4.39, 5.47, 6.55];
+const NEAR_Z = -3.55;
+const FAR_Z = 3.55;
 
 function addBoard() {
   box(15.6, .45, 10.9, frame, 0, 0, 0, true);
@@ -228,55 +174,135 @@ const checkerGeometry = new THREE.LatheGeometry([
   new THREE.Vector2(0, 0),
 ], 40);
 
-function checker(x, z, material, stack = 1) {
-  const group = new THREE.Group();
-  for (let i = 0; i < stack; i++) {
-    const body = new THREE.Mesh(checkerGeometry, material);
-    body.position.y = .47 + i * .09;
-    body.castShadow = true;
-    body.receiveShadow = true;
-    group.add(body);
-  }
-  group.position.set(x, 0, z);
-  scene.add(group);
-}
-
 function dice(x, z, face) {
   const material = new THREE.MeshPhysicalMaterial({ color: 0xf3ede0, roughness: .2, metalness: 0, clearcoat: .55, clearcoatRoughness: .1 });
-  const size = .42;
+  const size = .33;
   const die = new THREE.Mesh(new THREE.BoxGeometry(size, size, size, 3, 3, 3), material);
   die.position.set(x, .47 + size / 2, z);
   die.rotation.set(.14, .3, -.08);
   die.castShadow = true;
   scene.add(die);
-  const dots = [[-.1, .22], [.1, .22], [0, 0], [-.1, -.22], [.1, -.22]];
+  const dots = [[-.08, .17], [.08, .17], [0, 0], [-.08, -.17], [.08, -.17]];
   dots.slice(0, face).forEach(([dx, dz]) => {
-    const dot = new THREE.Mesh(new THREE.SphereGeometry(.032, 14, 10), black);
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(.026, 14, 10), black);
     dot.position.set(x + dx, .47 + size + .01, z + dz);
     scene.add(dot);
   });
 }
 
-// Standard backgammon starting position, 15 checkers per side:
-// 2 on each player's 24-point, 5 on the 13-point, 3 on the 8-point,
-// 5 on the 6-point. Point 24/13 sit on the far row, 8/6 on the near
-// row, mirrored front-to-back between the two colors.
-function addPieces() {
-  const farRow = 3.55;
-  const nearRow = -3.55;
-  [
-    [starts[11], farRow, ivory, 2],   // white: 24-point
-    [starts[0], farRow, ivory, 5],    // white: 13-point
-    [starts[4], nearRow, ivory, 3],   // white: 8-point
-    [starts[6], nearRow, ivory, 5],   // white: 6-point
-    [starts[11], nearRow, black, 2],  // black: 1-point
-    [starts[0], nearRow, black, 5],   // black: 12-point
-    [starts[4], farRow, black, 3],    // black: 17-point
-    [starts[6], farRow, black, 5],    // black: 19-point
-  ].forEach(args => checker(...args));
-  dice(-.28, -.15, 5);
-  dice(.32, .2, 4);
+// --- Checker positions & drag-to-move -------------------------------
+// Point numbering follows the standard 1-24 convention. Points 1-12 sit
+// on the near row, 13-24 on the far row, mirrored across the bar.
+const POINTS = {};
+starts.forEach((x, i) => {
+  POINTS[12 - i] = { x, z: NEAR_Z };
+  POINTS[13 + i] = { x, z: FAR_Z };
+});
+POINTS.barW = { x: .18, z: 0 };
+POINTS.barB = { x: -.18, z: 0 };
+
+let state = {};
+function resetState() {
+  state = {};
+  for (let n = 1; n <= 24; n++) state[n] = { color: null, count: 0 };
+  state.barW = { color: "ivory", count: 0 };
+  state.barB = { color: "black", count: 0 };
+  // Standard backgammon starting position, 15 checkers per side.
+  state[24] = { color: "ivory", count: 2 };
+  state[13] = { color: "ivory", count: 5 };
+  state[8] = { color: "ivory", count: 3 };
+  state[6] = { color: "ivory", count: 5 };
+  state[1] = { color: "black", count: 2 };
+  state[12] = { color: "black", count: 5 };
+  state[17] = { color: "black", count: 3 };
+  state[19] = { color: "black", count: 5 };
 }
+
+const piecesGroup = new THREE.Group();
+scene.add(piecesGroup);
+let pieceMeshes = [];
+
+function renderPieces() {
+  piecesGroup.clear();
+  pieceMeshes = [];
+  for (const key in state) {
+    const s = state[key];
+    if (!s.count) continue;
+    const { x, z } = POINTS[key];
+    const material = s.color === "ivory" ? ivory : black;
+    for (let i = 0; i < s.count; i++) {
+      const body = new THREE.Mesh(checkerGeometry, material);
+      body.position.set(x, .47 + i * .09, z);
+      body.castShadow = true;
+      body.receiveShadow = true;
+      body.userData.pointKey = key;
+      piecesGroup.add(body);
+      pieceMeshes.push(body);
+    }
+  }
+}
+
+function tryMove(fromKey, toKey, color) {
+  if (fromKey === toKey) return;
+  const dest = state[toKey];
+  if (dest.count > 0 && dest.color !== color) {
+    if (dest.count === 1) {
+      // A single opposing checker gets hit and sent to the bar.
+      const oppBar = dest.color === "ivory" ? "barW" : "barB";
+      state[oppBar].count++;
+      state[oppBar].color = dest.color;
+      dest.count = 0;
+      dest.color = null;
+    } else {
+      return; // Point is made by the opponent — can't land here.
+    }
+  }
+  state[fromKey].count--;
+  if (state[fromKey].count === 0) state[fromKey].color = null;
+  dest.color = color;
+  dest.count = (dest.count || 0) + 1;
+  renderPieces();
+}
+
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.5);
+let dragging = null;
+
+function setPointerFromEvent(e) {
+  const rect = canvas.getBoundingClientRect();
+  pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+}
+
+canvas.addEventListener("pointerdown", (e) => {
+  setPointerFromEvent(e);
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(pieceMeshes, false);
+  if (!hits.length) return;
+  const key = hits[0].object.userData.pointKey;
+  if (!state[key] || !state[key].count) return;
+  dragging = { fromKey: key, color: state[key].color };
+  canvas.style.cursor = "grabbing";
+});
+
+addEventListener("pointerup", (e) => {
+  if (!dragging) return;
+  setPointerFromEvent(e);
+  raycaster.setFromCamera(pointer, camera);
+  const hit = new THREE.Vector3();
+  if (raycaster.ray.intersectPlane(dragPlane, hit)) {
+    let bestKey = null, bestDist = Infinity;
+    for (const key in POINTS) {
+      const p = POINTS[key];
+      const d = (p.x - hit.x) ** 2 + (p.z - hit.z) ** 2;
+      if (d < bestDist) { bestDist = d; bestKey = key; }
+    }
+    if (bestKey) tryMove(dragging.fromKey, bestKey, dragging.color);
+  }
+  dragging = null;
+  canvas.style.cursor = "grab";
+});
 
 function addRoom() {
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: 0x14100d, roughness: .9 }));
@@ -299,7 +325,10 @@ function addRoom() {
 
 addRoom();
 addBoard();
-addPieces();
+resetState();
+renderPieces();
+dice(-.28, -.15, 5);
+dice(.32, .2, 4);
 
 const clock = new THREE.Clock();
 function animate() {
