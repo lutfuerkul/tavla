@@ -664,15 +664,7 @@ function stepDie(die, dt) {
   s.vel.y += GRAVITY * dt;
   die.position.addScaledVector(s.vel, dt);
 
-  // Integrate the spin: dq/dt = ½ ω q.
-  const q = die.quaternion;
-  const dq = new THREE.Quaternion(s.spin.x, s.spin.y, s.spin.z, 0).multiply(q);
-  q.set(
-    q.x + .5 * dq.x * dt,
-    q.y + .5 * dq.y * dt,
-    q.z + .5 * dq.z * dt,
-    q.w + .5 * dq.w * dt
-  ).normalize();
+  applySpin(die, s.spin, dt);
 
   // Rails around the playing field.
   ["x", "z"].forEach(axis => {
@@ -771,7 +763,10 @@ function renderPieces() {
     const s = state[key];
     if (!s.count) continue;
     const material = s.color === "ivory" ? ivory : black;
-    for (let i = 0; i < s.count; i++) {
+    // The checker currently in the player's hand is drawn separately, so its
+    // seat on the point is left empty while the drag is in progress.
+    const onBoard = s.count - (s.lifted || 0);
+    for (let i = 0; i < onBoard; i++) {
       const seat = checkerSeat(key, i);
       const body = new THREE.Mesh(checkerGeometry, material);
       body.position.set(seat.x, seat.y, seat.z);
@@ -819,41 +814,136 @@ function setPointerFromEvent(e) {
   pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 }
 
-// Dice are lifted onto a plane above the board while held, so the throw can
-// be aimed by flicking the pointer. Both dice always come up together and are
-// thrown as a pair — you shake the cup, not one die at a time.
+// Dice are lifted onto a plane above the board while held. Both dice always
+// come up together and are thrown as a pair — you shake the cup, not one die
+// at a time.
 const LIFT_Y = 1.5;
 const liftPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -LIFT_Y);
+// A shake lasts at least this long. Letting go early does not cut it short;
+// the dice keep spinning in the hand until the time is up, then fly.
+const MIN_SHAKE_MS = 2000;
 let heldDice = null;
+
+// Height a dragged checker rides at, high enough to read as lifted off the
+// board without leaving the felt behind.
+const CARRY_Y = .95;
+const carryPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -CARRY_Y);
 
 function pointerOnPlane(plane, out) {
   raycaster.setFromCamera(pointer, camera);
   return raycaster.ray.intersectPlane(plane, out) ? out : null;
 }
 
+function applySpin(die, spin, dt) {
+  const q = die.quaternion;
+  const dq = new THREE.Quaternion(spin.x, spin.y, spin.z, 0).multiply(q);
+  q.set(
+    q.x + .5 * dq.x * dt,
+    q.y + .5 * dq.y * dt,
+    q.z + .5 * dq.z * dt,
+    q.w + .5 * dq.w * dt
+  ).normalize();
+}
+
+function randomShakeSpin() {
+  // Tumbling on every axis at once, not just spinning about one.
+  return new THREE.Vector3(
+    (Math.random() - .5) * 2,
+    (Math.random() - .5) * 2,
+    (Math.random() - .5) * 2
+  ).normalize().multiplyScalar(11 + Math.random() * 9);
+}
+
+// Runs every frame while the dice are in the hand, so they keep tumbling even
+// when the pointer is perfectly still.
+function stepHeldDice(dt) {
+  if (!heldDice) return;
+  const now = performance.now();
+  const elapsed = now - heldDice.startedAt;
+
+  heldDice.swirl += dt * (3.4 + heldDice.vel.length() * .5);
+  heldDice.entries.forEach((entry, i) => {
+    const { die, radius, phase } = entry;
+    const a = heldDice.swirl + phase;
+    die.position.set(
+      heldDice.anchor.x + Math.cos(a) * radius,
+      heldDice.anchor.y + i * .06,
+      heldDice.anchor.z + Math.sin(a) * radius
+    );
+    // Re-roll the tumble axis now and then so it never settles into a
+    // readable, repeating spin.
+    entry.reroll -= dt;
+    if (entry.reroll <= 0) {
+      entry.shakeSpin.copy(randomShakeSpin());
+      entry.reroll = .18 + Math.random() * .22;
+    }
+    applySpin(die, entry.shakeSpin, dt);
+  });
+
+  if (heldDice.released && elapsed >= MIN_SHAKE_MS) launchDice();
+}
+
+// Fling the pair away across the board, fast.
+function launchDice() {
+  const hand = heldDice.vel.clone();
+  hand.y = 0;
+  // Away from the player's side of the table, with whatever aim the hand had.
+  const aim = new THREE.Vector3(hand.x * .35, 0, -1)
+    .normalize()
+    .multiplyScalar(11 + Math.random() * 3);
+
+  heldDice.entries.forEach(({ die }) => {
+    const s = die.userData.die;
+    s.mode = "throw";
+    // Enough scatter that they do not fly in formation and land in a stack.
+    s.vel.copy(aim).add(new THREE.Vector3(
+      (Math.random() - .5) * 3.5,
+      0,
+      (Math.random() - .5) * 3.5
+    ));
+    s.vel.y = 1.2 + Math.random() * .8;
+    s.spin.copy(randomShakeSpin()).clampLength(12, 26);
+    s.still = 0;
+  });
+
+  heldDice = null;
+  canvas.style.cursor = "grab";
+  showDiceValues();
+}
+
 canvas.addEventListener("pointerdown", (e) => {
+  // Left button only — the other buttons should not move anything.
+  if (e.button !== 0) return;
   setPointerFromEvent(e);
   raycaster.setFromCamera(pointer, camera);
 
   // Dice sit on top of everything, so they get first claim on the pointer.
   // Grabbing either one scoops up the whole pair.
   const dieHit = raycaster.intersectObjects(diceMeshes, false);
-  if (dieHit.length) {
+  if (dieHit.length && !heldDice) {
     const anchor = pointerOnPlane(liftPlane, new THREE.Vector3())
-      || dieHit[0].object.position.clone();
+      || dieHit[0].object.position.clone().setY(LIFT_Y);
     heldDice = {
+      anchor: anchor.clone(),
       last: anchor.clone(),
       lastT: performance.now(),
+      startedAt: performance.now(),
+      released: false,
       vel: new THREE.Vector3(),
-      shake: 0,
+      swirl: 0,
       entries: diceMeshes.map((die, i) => {
         const s = die.userData.die;
         s.mode = "held";
         s.vel.set(0, 0, 0);
+        s.spin.set(0, 0, 0);
         s.still = 0;
-        // Sit them either side of the hand so they read as a pair.
-        const angle = i * Math.PI + Math.random() * .6;
-        return { die, radius: .26 + i * .04, phase: angle };
+        return {
+          die,
+          radius: .26 + i * .04,
+          phase: i * Math.PI + Math.random() * .6,
+          shakeSpin: randomShakeSpin(),
+          reroll: .18 + Math.random() * .22,
+        };
       }),
     };
     canvas.setPointerCapture?.(e.pointerId);
@@ -865,64 +955,49 @@ canvas.addEventListener("pointerdown", (e) => {
   const hits = raycaster.intersectObjects(pieceMeshes, false);
   if (!hits.length) return;
   const key = hits[0].object.userData.pointKey;
-  if (!state[key] || !state[key].count) return;
-  dragging = { fromKey: key, color: state[key].color };
+  const point = state[key];
+  if (!point || !point.count) return;
+
+  // Lift the top checker off the point and carry it under the cursor, so the
+  // move is visible while it is happening.
+  point.lifted = 1;
+  const carried = new THREE.Mesh(checkerGeometry, point.color === "ivory" ? ivory : black);
+  carried.castShadow = true;
+  carried.position.copy(hits[0].object.position).setY(CARRY_Y);
+  scene.add(carried);
+
+  dragging = { fromKey: key, color: point.color, mesh: carried };
+  canvas.setPointerCapture?.(e.pointerId);
   canvas.style.cursor = "grabbing";
+  renderPieces();
 });
 
 addEventListener("pointermove", (e) => {
-  if (!heldDice) return;
+  if (!heldDice && !dragging) return;
   setPointerFromEvent(e);
+
+  if (dragging) {
+    const target = pointerOnPlane(carryPlane, new THREE.Vector3());
+    if (target) dragging.mesh.position.copy(target);
+    return;
+  }
+
   const target = pointerOnPlane(liftPlane, new THREE.Vector3());
   if (!target) return;
   const now = performance.now();
   const dt = Math.max((now - heldDice.lastT) / 1000, 1 / 240);
-
-  // Velocity of the hand, kept for the moment of release.
+  // Velocity of the hand, kept to aim the throw.
   heldDice.vel.copy(target).sub(heldDice.last).divideScalar(dt).clampLength(0, 26);
-  // Shaking harder swirls them faster around each other.
-  heldDice.shake += dt * (3 + heldDice.vel.length() * .6);
-
-  heldDice.entries.forEach(({ die, radius, phase }, i) => {
-    const a = heldDice.shake + phase;
-    die.position.set(
-      target.x + Math.cos(a) * radius,
-      target.y + i * .05,
-      target.z + Math.sin(a) * radius
-    );
-    die.rotateX(dt * (3.2 + i));
-    die.rotateY(dt * (2.4 + i * .8));
-  });
-
+  heldDice.anchor.copy(target);
   heldDice.last.copy(target);
   heldDice.lastT = now;
 });
 
 addEventListener("pointerup", (e) => {
   if (heldDice) {
-    heldDice.entries.forEach(({ die }) => {
-      const s = die.userData.die;
-      s.mode = "throw";
-      // Both leave the hand together, but with enough scatter that they do
-      // not fly in formation and land in a neat stack.
-      s.vel.copy(heldDice.vel).add(new THREE.Vector3(
-        (Math.random() - .5) * 3,
-        0,
-        (Math.random() - .5) * 3
-      ));
-      s.vel.y = Math.min(s.vel.y, 1.5);
-      // Always enough spin to actually tumble, even on a lazy drop.
-      const speed = s.vel.length();
-      s.spin.set(
-        (Math.random() - .5) * 2 + -s.vel.z * 1.6,
-        (Math.random() - .5) * 6,
-        (Math.random() - .5) * 2 + s.vel.x * 1.6
-      ).clampLength(6 + speed, 26);
-      s.still = 0;
-    });
-    heldDice = null;
-    canvas.style.cursor = "grab";
-    showDiceValues();
+    // Releasing only arms the throw. stepHeldDice fires it once the dice have
+    // had their full shake.
+    heldDice.released = true;
     return;
   }
 
@@ -937,10 +1012,27 @@ addEventListener("pointerup", (e) => {
       const d = (p.x - hit.x) ** 2 + (p.z - hit.z) ** 2;
       if (d < bestDist) { bestDist = d; bestKey = key; }
     }
+    delete state[dragging.fromKey].lifted;
     if (bestKey) tryMove(dragging.fromKey, bestKey, dragging.color);
+  } else {
+    delete state[dragging.fromKey].lifted;
   }
+  scene.remove(dragging.mesh);
   dragging = null;
   canvas.style.cursor = "grab";
+  renderPieces();
+});
+
+// If the gesture is interrupted — pointer leaves the window, touch cancelled —
+// put the carried checker back rather than leaving a hole on the point.
+addEventListener("pointercancel", () => {
+  if (heldDice) heldDice.released = true;
+  if (!dragging) return;
+  delete state[dragging.fromKey].lifted;
+  scene.remove(dragging.mesh);
+  dragging = null;
+  canvas.style.cursor = "grab";
+  renderPieces();
 });
 
 function addRoom() {
@@ -997,6 +1089,7 @@ function animate() {
   const lamp = scene.children.find(o => o.isPointLight);
   if (lamp) lamp.intensity = 42 + Math.sin(elapsed * 1.4) * 1.2;
   // Sub-step so a fast throw cannot tunnel through the felt.
+  stepHeldDice(dt);
   stepDicePhysics(dt);
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
