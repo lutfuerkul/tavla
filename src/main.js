@@ -8,7 +8,10 @@ const hud = document.querySelector("#hud");
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x060402);
-scene.fog = new THREE.FogExp2(0x060402, 0.04);
+// Light fog only, for depth in the room. At the old density the camera sat
+// far enough back that the board itself lost about 40% of its brightness,
+// which read as uneven lighting no matter how the lamps were arranged.
+scene.fog = new THREE.FogExp2(0x060402, 0.015);
 
 // Fixed, near-top-down seat at the table — the camera never moves once
 // seated, so the mouse is free to drag checkers instead of looking around.
@@ -22,7 +25,7 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = .95;
+renderer.toneMappingExposure = 1.05;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 // Soft studio-style reflections for the lacquer and clearcoat surfaces
@@ -31,7 +34,7 @@ const pmremGenerator = new THREE.PMREMGenerator(renderer);
 scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
 // The room probe is only here to give the lacquer something to reflect. At
 // full strength it lights the whole board and flattens every material.
-scene.environmentIntensity = .3;
+scene.environmentIntensity = .42;
 
 enter.addEventListener("click", () => {
   intro.classList.add("hidden");
@@ -420,8 +423,12 @@ function addBoard() {
 
 // Dished checker profile, taken straight from the reference pieces: a raised
 // outer rim around a recessed circular dimple, with a rounded outer edge.
+// One world unit is one checker diameter, which on the reference pieces is
+// 36mm — so a millimetre is 1/36 of a unit and every other size below can be
+// written in real millimetres.
+const MM = 1 / 36;
 const CHECKER_R = CHECKER_D / 2;
-const CHECKER_H = .15;
+const CHECKER_H = 8 * MM;   // 8mm thick, per the checker's stated dimensions
 // Profile runs bottom-centre outwards and up to the dished top. Listing it
 // in this order is what makes the revolved normals face outwards — reversed,
 // the discs render inside-out and read as hollow rings.
@@ -432,21 +439,20 @@ const CHECKER_H = .15;
 const checkerGeometry = new THREE.LatheGeometry([
   new THREE.Vector2(0, 0),
   new THREE.Vector2(.40, 0),
-  new THREE.Vector2(.465, .012),
-  new THREE.Vector2(CHECKER_R, .05),
-  new THREE.Vector2(CHECKER_R, .10),
-  new THREE.Vector2(.478, .138),
+  new THREE.Vector2(.468, .018),
+  new THREE.Vector2(CHECKER_R, .06),
+  new THREE.Vector2(CHECKER_R, .16),
+  new THREE.Vector2(.484, .208),
   new THREE.Vector2(.455, CHECKER_H),   // flat outer rim
-  new THREE.Vector2(.365, CHECKER_H),
-  new THREE.Vector2(.345, .128),        // step down into the channel
-  new THREE.Vector2(.325, .119),
-  new THREE.Vector2(.30, .117),         // channel floor
-  new THREE.Vector2(.275, .120),
-  new THREE.Vector2(.245, .131),        // dome springs from here
-  new THREE.Vector2(.20, .142),
-  new THREE.Vector2(.14, .149),
-  new THREE.Vector2(.07, .1525),
-  new THREE.Vector2(0, .153),           // dome crown, just proud of the rim
+  new THREE.Vector2(.375, CHECKER_H),
+  new THREE.Vector2(.352, .206),        // step down into the channel
+  new THREE.Vector2(.332, .196),
+  new THREE.Vector2(.31, .193),         // channel floor
+  new THREE.Vector2(.285, .196),
+  new THREE.Vector2(.25, .206),         // dome springs from here
+  new THREE.Vector2(.19, .218),
+  new THREE.Vector2(.12, .2255),
+  new THREE.Vector2(0, .2275),          // dome crown, just proud of the rim
 ], 96);
 
 // --- Dice ------------------------------------------------------------
@@ -463,28 +469,55 @@ const PIP_LAYOUT = {
 };
 
 function dieFaceTexture(value) {
+  const SIZE = 512;
   const c = document.createElement("canvas");
-  c.width = c.height = 256;
+  c.width = c.height = SIZE;
   const ctx = c.getContext("2d");
+  const k = SIZE / 256;
 
-  // Bright white body, barely shaded — these are cheap moulded dice, not ivory.
-  const wash = ctx.createRadialGradient(110, 96, 30, 128, 128, 200);
+  // Cast-resin white with the faintest warmth, near enough to flat.
+  const wash = ctx.createRadialGradient(220 * k, 192 * k, 60 * k, 128 * k, 128 * k, 210 * k);
   wash.addColorStop(0, "#ffffff");
-  wash.addColorStop(1, "#f4f2ee");
+  wash.addColorStop(1, "#f3f1ec");
   ctx.fillStyle = wash;
-  ctx.fillRect(0, 0, 256, 256);
+  ctx.fillRect(0, 0, SIZE, SIZE);
 
-  // Flat inked pips, as printed on the reference dice — no drilled well.
+  // Pips are drilled and filled: a hard, saturated colour with a thin shaded
+  // lip where the drill breaks the surface. The one is red, the rest are the
+  // dark brown-black of the reference dice.
+  // The one is drilled wider than the rest, as it is on real dice.
+  const R = (value === 1 ? 36 : 28) * k;
   PIP_LAYOUT[value].forEach(([gx, gy]) => {
-    ctx.fillStyle = "#0a0a0b";
+    const x = PIP_GRID[gx] * k;
+    const y = PIP_GRID[gy] * k;
+    const red = value === 1;
+
+    ctx.fillStyle = red ? "#c8161b" : "#2b211c";
     ctx.beginPath();
-    ctx.arc(PIP_GRID[gx], PIP_GRID[gy], 21, 0, Math.PI * 2);
+    ctx.arc(x, y, R, 0, Math.PI * 2);
     ctx.fill();
+
+    // Deeper toward the bottom of the well.
+    const shade = ctx.createRadialGradient(x - R * .28, y - R * .32, R * .08, x, y, R * 1.02);
+    shade.addColorStop(0, red ? "rgba(255,120,110,.55)" : "rgba(120,96,84,.5)");
+    shade.addColorStop(.55, "rgba(0,0,0,0)");
+    shade.addColorStop(1, "rgba(0,0,0,.45)");
+    ctx.fillStyle = shade;
+    ctx.beginPath();
+    ctx.arc(x, y, R, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Bright rim on the lit side of the drilled edge.
+    ctx.strokeStyle = "rgba(255,255,255,.5)";
+    ctx.lineWidth = 2 * k;
+    ctx.beginPath();
+    ctx.arc(x, y, R + k, Math.PI * .95, Math.PI * 1.85);
+    ctx.stroke();
   });
 
   const texture = new THREE.CanvasTexture(c);
   texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 8;
+  texture.anisotropy = 16;
   return texture;
 }
 
@@ -510,9 +543,10 @@ function roundedDieGeometry(size, radius, segments = 10) {
   return geometry;
 }
 
-// Measured off the photos: a die is a bit over a quarter of a checker across.
-const DIE_SIZE = CHECKER_D * .27;
-const dieGeometry = roundedDieGeometry(DIE_SIZE, DIE_SIZE * .13, 12);
+// A standard tavla die is 14mm on the edge, against the 36mm checker. Real
+// dice break the corner only slightly — about a twelfth of the edge.
+const DIE_SIZE = 14 * MM;
+const dieGeometry = roundedDieGeometry(DIE_SIZE, DIE_SIZE * .085, 14);
 // BoxGeometry material order is +x, -x, +y, -y, +z, -z. Opposite faces sum
 // to seven, exactly like a real die.
 const DIE_FACES = [1, 6, 2, 5, 3, 4];
@@ -638,15 +672,38 @@ for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
   DIE_CORNERS.push(new THREE.Vector3(sx, sy, sz).multiplyScalar(DIE_SIZE / 2));
 }
 
-const GRAVITY = -26;
-const BOUNCE = .36;
+// Real gravity, expressed in board units: a unit is 36mm, so 9.81 m/s² is
+// 9.81 / 0.036 units per second squared. Everything else in the solver is
+// tuned against that rather than against an invented scale.
+const GRAVITY = -9.81 / (36 / 1000);
+// Polished resin dropped on a felted board keeps roughly a third of its
+// approach speed, and slides very little once it is down.
+const BOUNCE = .34;
+// Coulomb friction coefficient for resin on a felted board.
+const FLOOR_FRICTION = .45;
+const RAIL_BOUNCE = .42;
+// A die is heavy for its size, so contact converts a lot of its slide into
+// tumble; this is the coupling that makes it roll to a stop rather than skid.
+const CONTACT_TUMBLE = .55;
+// Downward speed that counts as a real impact rather than resting contact.
+const IMPACT_SPEED = 1.5;
+// Per-second decay once the die is down and sliding, not per substep.
+const REST_SLIDE_DECAY = .06;
+const REST_SPIN_DECAY = .02;
+// Below a couple of centimetres a second, with barely any spin left, it has
+// stopped.
+const STILL_SPEED = 1.0;   // ≈ 3.6 cm/s
+const STILL_SPIN = 2.4;    // rad/s
 const THROW_WALL_X = FIELD_HALF_X - DIE_SIZE;
 const THROW_WALL_Z = FIELD_HALF - DIE_SIZE;
 
 // Physics runs on a fixed timestep and catches up across however many frames
 // the machine manages, so a throw takes the same real time to settle whether
 // the page is running at 120fps or struggling along at 5.
-const PHYSICS_STEP = 1 / 120;
+// At real gravity a thrown die covers a good fraction of its own width per
+// millisecond, so the step has to be short enough that a corner cannot pass
+// through the felt between two samples.
+const PHYSICS_STEP = 1 / 480;
 let physicsDebt = 0;
 
 function stepDicePhysics(frameDt) {
@@ -666,13 +723,23 @@ function stepDie(die, dt) {
 
   applySpin(die, s.spin, dt);
 
-  // Rails around the playing field.
+  // Rails around the playing field. A die coming off a wooden rail keeps
+  // more of its speed than one landing on felt, and the impact spins it.
   ["x", "z"].forEach(axis => {
     const limit = axis === "x" ? THROW_WALL_X : THROW_WALL_Z;
     if (Math.abs(die.position[axis]) > limit) {
+      const into = s.vel[axis];
       die.position[axis] = Math.sign(die.position[axis]) * limit;
-      s.vel[axis] *= -BOUNCE;
-      s.spin.multiplyScalar(.85);
+      // Only rebound if it is actually travelling into the rail; otherwise it
+      // is just resting against it and would jitter.
+      if (Math.sign(into) !== Math.sign(die.position[axis]) || into === 0) return;
+      s.vel[axis] = -into * RAIL_BOUNCE;
+      s.spin.multiplyScalar(.8);
+      // Glancing off a rail kicks it end over end about the other horizontal
+      // axis, which is what stops a bounce looking like a billiard shot.
+      const kick = Math.abs(into) * .35;
+      if (axis === "x") s.spin.z += Math.sign(into) * kick;
+      else s.spin.x -= Math.sign(into) * kick;
     }
   });
 
@@ -686,17 +753,45 @@ function stepDie(die, dt) {
 
   if (lowest < FELT_Y) {
     die.position.y += FELT_Y - lowest;
-    if (s.vel.y < 0) s.vel.y = -s.vel.y * BOUNCE;
-    s.vel.x *= .78;
-    s.vel.z *= .78;
-    // Sliding contact kicks the die over rather than just damping it.
-    s.spin.multiplyScalar(.62);
-    s.spin.x += -s.vel.z * .9;
-    s.spin.z += s.vel.x * .9;
 
-    if (s.vel.length() < .55 && s.spin.length() < 2.2) {
+    if (s.vel.y < -IMPACT_SPEED) {
+      // Coulomb friction at the contact: the sideways impulse is capped by
+      // the normal impulse, so a die skimming in fast and flat keeps most of
+      // its speed and carries on across the board, while one dropped steeply
+      // stops almost where it lands. Scrubbing a fixed fraction of the
+      // sideways speed instead — which is what this did before — bled every
+      // throw dry within a couple of bounces and no die ever reached a rail.
+      const approach = -s.vel.y;
+      const normalImpulse = (1 + BOUNCE) * approach;
+      const tangential = Math.hypot(s.vel.x, s.vel.z);
+      const scrub = Math.min(FLOOR_FRICTION * normalImpulse, tangential);
+
+      s.vel.y = approach * BOUNCE;
+      if (tangential > 1e-6) {
+        s.vel.x -= (s.vel.x / tangential) * scrub;
+        s.vel.z -= (s.vel.z / tangential) * scrub;
+        // That scrubbed momentum has to go somewhere: it tips the die over
+        // about the horizontal axis across its direction of travel.
+        s.spin.multiplyScalar(.78);
+        s.spin.x += -(s.vel.z / tangential) * scrub * CONTACT_TUMBLE;
+        s.spin.z += (s.vel.x / tangential) * scrub * CONTACT_TUMBLE;
+      } else {
+        s.spin.multiplyScalar(.78);
+      }
+    } else {
+      // Resting or sliding on the felt. Damping here has to be per second,
+      // not per substep — applied per substep it scales with the timestep and
+      // kills the throw almost the instant the die first touches down.
+      s.vel.y = Math.max(s.vel.y, 0);
+      const slide = Math.pow(REST_SLIDE_DECAY, dt);
+      s.vel.x *= slide;
+      s.vel.z *= slide;
+      s.spin.multiplyScalar(Math.pow(REST_SPIN_DECAY, dt));
+    }
+
+    if (s.vel.length() < STILL_SPEED && s.spin.length() < STILL_SPIN) {
       s.still += dt;
-      if (s.still > .12) settleDie(die);
+      if (s.still > .1) settleDie(die);
     } else {
       s.still = 0;
     }
@@ -846,12 +941,13 @@ function applySpin(die, spin, dt) {
 }
 
 function randomShakeSpin() {
-  // Tumbling on every axis at once, not just spinning about one.
+  // Tumbling on every axis at once, not just spinning about one. A shaken
+  // die turns at something like two to four revolutions a second.
   return new THREE.Vector3(
     (Math.random() - .5) * 2,
     (Math.random() - .5) * 2,
     (Math.random() - .5) * 2
-  ).normalize().multiplyScalar(11 + Math.random() * 9);
+  ).normalize().multiplyScalar(14 + Math.random() * 12);
 }
 
 // Runs every frame while the dice are in the hand, so they keep tumbling even
@@ -888,21 +984,23 @@ function launchDice() {
   const hand = heldDice.vel.clone();
   hand.y = 0;
   // Away from the player's side of the table, with whatever aim the hand had.
-  const aim = new THREE.Vector3(hand.x * .35, 0, -1)
+  // Roughly 1.3 m/s, which is what an unhurried throw across a board is.
+  const aim = new THREE.Vector3(hand.x * .3, 0, -1)
     .normalize()
-    .multiplyScalar(11 + Math.random() * 3);
+    .multiplyScalar(34 + Math.random() * 10);
 
   heldDice.entries.forEach(({ die }) => {
     const s = die.userData.die;
     s.mode = "throw";
     // Enough scatter that they do not fly in formation and land in a stack.
     s.vel.copy(aim).add(new THREE.Vector3(
-      (Math.random() - .5) * 3.5,
+      (Math.random() - .5) * 9,
       0,
-      (Math.random() - .5) * 3.5
+      (Math.random() - .5) * 9
     ));
-    s.vel.y = 1.2 + Math.random() * .8;
-    s.spin.copy(randomShakeSpin()).clampLength(12, 26);
+    // Tossed slightly upward out of the hand.
+    s.vel.y = 3 + Math.random() * 3;
+    s.spin.copy(randomShakeSpin()).clampLength(16, 34);
     s.still = 0;
   });
 
@@ -1042,35 +1140,36 @@ function addRoom() {
   floor.receiveShadow = true;
   scene.add(floor);
 
-  // Key light: a warm lamp hanging over the board. It carries the shadows,
-  // everything else only lifts the darks.
-  const key = new THREE.DirectionalLight(0xffe9c4, 2.1);
-  key.position.set(-5, 12, 5);
+  // Even, product-shot lighting: one soft overhead key for the shadows and a
+  // ring of low fills so every corner of the board reads the same. The old
+  // rig hung a single warm lamp off to one side, which left the far rail and
+  // the outer points markedly darker than the middle.
+  const key = new THREE.DirectionalLight(0xfff4e2, 1.55);
+  key.position.set(-2.5, 16, 4);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
   key.shadow.bias = -0.0004;
+  key.shadow.normalBias = .02;
+  key.shadow.radius = 3;
   key.shadow.camera.left = -13;
   key.shadow.camera.right = 13;
   key.shadow.camera.top = 13;
   key.shadow.camera.bottom = -13;
   key.shadow.camera.near = 1;
-  key.shadow.camera.far = 34;
+  key.shadow.camera.far = 40;
   scene.add(key);
 
-  // Warm falloff over the centre of the board so the middle glows slightly
-  // brighter than the rails, the way a table lamp actually behaves.
-  const lamp = new THREE.PointLight(0xffd9a0, 42, 34, 2);
-  lamp.position.set(0.5, 10.5, 1);
-  scene.add(lamp);
+  // Four quadrant fills at equal strength, so nothing is lit only from one
+  // side and no corner falls away.
+  [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([x, z]) => {
+    const fill = new THREE.DirectionalLight(0xf2f0ea, .42);
+    fill.position.set(x * 11, 9, z * 11);
+    scene.add(fill);
+  });
 
-  // Cool sky bounce, kept low — this is what was washing the board out.
-  const fill = new THREE.HemisphereLight(0x9fb4c4, 0x120a05, .55);
-  scene.add(fill);
-
-  // Gentle opposite-side fill so the far row is not left in the dark.
-  const side = new THREE.DirectionalLight(0xbcd0dc, .55);
-  side.position.set(7, 9, -6);
-  scene.add(side);
+  // Overall lift so the darks are open rather than crushed.
+  scene.add(new THREE.HemisphereLight(0xdfe6ec, 0x3a2a1c, .9));
+  scene.add(new THREE.AmbientLight(0xffffff, .22));
 }
 
 addRoom();
@@ -1085,10 +1184,6 @@ showDiceValues();
 const clock = new THREE.Clock();
 function animate() {
   const dt = Math.min(clock.getDelta(), .25);
-  const elapsed = clock.getElapsedTime();
-  const lamp = scene.children.find(o => o.isPointLight);
-  if (lamp) lamp.intensity = 42 + Math.sin(elapsed * 1.4) * 1.2;
-  // Sub-step so a fast throw cannot tunnel through the felt.
   stepHeldDice(dt);
   stepDicePhysics(dt);
   renderer.render(scene, camera);
