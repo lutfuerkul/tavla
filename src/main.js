@@ -34,7 +34,7 @@ const pmremGenerator = new THREE.PMREMGenerator(renderer);
 scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
 // The room probe is only here to give the lacquer something to reflect. At
 // full strength it lights the whole board and flattens every material.
-scene.environmentIntensity = .22;
+scene.environmentIntensity = .5;
 
 enter.addEventListener("click", () => {
   intro.classList.add("hidden");
@@ -138,13 +138,13 @@ function woodPanelTexture(w, h, base, grain, eyes) {
 
   // Add wood grain eyes (burls)
   (eyes || []).forEach(([ex, ey, r]) => {
-    for (let ring = 12; ring > 0; ring--) {
-      const alpha = (0.04 + (12 - ring) * 0.003) * (1 - ring / 12);
+    for (let ring = 14; ring > 0; ring--) {
+      const alpha = (0.12 + (12 - ring) * 0.012) * (1 - ring / 14);
       ctx.strokeStyle = grain;
       ctx.globalAlpha = alpha;
-      ctx.lineWidth = 0.8 + Math.random() * 0.4;
+      ctx.lineWidth = 1.6 + Math.random() * 1.1;
       ctx.beginPath();
-      ctx.ellipse(ex, ey, (r * ring) / 12, (r * ring) / 12 * 0.63, Math.random() * 0.3, 0, Math.PI * 2);
+      ctx.ellipse(ex, ey, (r * ring) / 14, (r * ring) / 14 * 0.55, Math.random() * 0.22, 0, Math.PI * 2);
       ctx.stroke();
     }
   });
@@ -170,19 +170,15 @@ function hexToRgb(hex) {
 // photo crop this replaces was off-centre, so every point carried a wedge of
 // somebody else's background wood.
 function marquetryPointTexture(body, bodyShade, withInlay = true) {
-  const W = 256, H = 768;
+  const W = 384, H = 1152;
   const c = document.createElement("canvas");
   c.width = W; c.height = H;
   const ctx = c.getContext("2d");
 
   // UV v=0 is the base (textures are flipped in Y), so the tip points up.
-  const apex = [W / 2, 12];
-  const bl = [7, H - 5];
-  const br = [W - 7, H - 5];
-  const cx = (apex[0] + bl[0] + br[0]) / 3;
-  const cy = (apex[1] + bl[1] + br[1]) / 3;
-  const inset = (p, k) => [cx + (p[0] - cx) * k, cy + (p[1] - cy) * k];
-
+  const apex = [W / 2, 16];
+  const bl = [8, H - 6];
+  const br = [W - 8, H - 6];
   const tri = (a, b, d) => {
     const p = new Path2D();
     p.moveTo(a[0], a[1]); p.lineTo(b[0], b[1]); p.lineTo(d[0], d[1]); p.closePath();
@@ -190,9 +186,6 @@ function marquetryPointTexture(body, bodyShade, withInlay = true) {
   };
 
   const outer = tri(apex, bl, br);
-  const K = .88;
-  const [aIn, blIn, brIn] = [inset(apex, K), inset(bl, K), inset(br, K)];
-  const inner = tri(aIn, blIn, brIn);
 
   // Body: grained wood along the length of the point.
   ctx.save();
@@ -217,80 +210,97 @@ function marquetryPointTexture(body, bodyShade, withInlay = true) {
   ctx.restore();
 
   // Only the pale maple points carry the braid. On the reference board the
-  // dark points are the plain walnut field between them.
+  // dark points are the plain walnut field between them, and the braid along
+  // a shared edge serves both.
+  //
+  // The band has to be a constant width measured off the edge, not a triangle
+  // scaled about its centroid. Scaled, the band collapses towards the tip:
+  // the strands' two ends converge on each other, every stroke lands on the
+  // last one, and the top two thirds of the point come out as solid cream
+  // with the braid only legible down by the base.
   if (withInlay) {
-    const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-    const ring = new Path2D();
-    ring.addPath(outer);
-    ring.addPath(inner);
+    const BAND = 26;                       // width of the braid, in texture px
+    const STEP = 30;                       // spacing of the strands along it
     ctx.save();
-    ctx.clip(ring, "evenodd");
-    ctx.fillStyle = "#2b1808";
-    ctx.fill(outer);
-    ctx.strokeStyle = "#efe2b4";
-    ctx.lineWidth = 3.4;
-    ctx.lineCap = "round";
-    [[bl, apex, blIn, aIn], [br, apex, brIn, aIn]].forEach(([o0, o1, i0, i1]) => {
-      for (let t = 0; t < 1; t += .016) {
-        const a = lerp(o0, o1, t);
-        const b = lerp(i0, i1, t + .011);
+    ctx.clip(outer);
+    [[bl, 1], [br, -1]].forEach(([corner, sign]) => {
+      const dx = apex[0] - corner[0], dy = apex[1] - corner[1];
+      const len = Math.hypot(dx, dy);
+      const ux = dx / len, uy = dy / len;
+      const nx = -uy * sign, ny = ux * sign;         // across the edge, inwards
+
+      ctx.fillStyle = "#2b1a0b";                     // the bed the strands lie in
+      ctx.beginPath();
+      ctx.moveTo(corner[0], corner[1]);
+      ctx.lineTo(apex[0], apex[1]);
+      ctx.lineTo(apex[0] + nx * BAND, apex[1] + ny * BAND);
+      ctx.lineTo(corner[0] + nx * BAND, corner[1] + ny * BAND);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = "#e6d6a4";                   // the twist itself
+      ctx.lineWidth = BAND * .40;
+      ctx.lineCap = "butt";
+      for (let along = -STEP; along < len; along += STEP) {
         ctx.beginPath();
-        ctx.moveTo(a[0], a[1]);
-        ctx.lineTo(b[0], b[1]);
+        ctx.moveTo(corner[0] + ux * along, corner[1] + uy * along);
+        ctx.lineTo(corner[0] + ux * (along + STEP * .62) + nx * BAND,
+                   corner[1] + uy * (along + STEP * .62) + ny * BAND);
         ctx.stroke();
       }
+
+      ctx.strokeStyle = "#efe4bd";                   // hairlines either side
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      ctx.moveTo(corner[0], corner[1]);
+      ctx.lineTo(apex[0], apex[1]);
+      ctx.stroke();
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(corner[0] + nx * BAND, corner[1] + ny * BAND);
+      ctx.lineTo(apex[0] + nx * BAND, apex[1] + ny * BAND);
+      ctx.stroke();
     });
     ctx.restore();
-
-    // Hairlines frame the braid along the two slanted edges only — the base
-    // of a point runs straight into the rail, with no inlay across it.
-    ctx.lineCap = "butt";
-    [[bl, apex, blIn, aIn], [br, apex, brIn, aIn]].forEach(([o0, o1, i0, i1]) => {
-      ctx.strokeStyle = "#f6ecc8";
-      ctx.lineWidth = 2.2;
-      ctx.beginPath();
-      ctx.moveTo(o0[0], o0[1]);
-      ctx.lineTo(o1[0], o1[1]);
-      ctx.stroke();
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      ctx.moveTo(i0[0], i0[1]);
-      ctx.lineTo(i1[0], i1[1]);
-      ctx.stroke();
-    });
   }
 
   const texture = new THREE.CanvasTexture(c);
   texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 8;
+  texture.anisotropy = 16;
   return texture;
 }
 
 // Lacquered wood reads as a soft sheen, not a mirror: moderate clearcoat over
 // a fairly rough diffuse base. Cranking gloss any higher blows the board out
 // to white under the overhead light.
-const frame = new THREE.MeshPhysicalMaterial({
-  color: 0x120d09,
-  roughness: .45,
-  metalness: .04,
-  clearcoat: .3,
-  clearcoatRoughness: .22
-});
-const bevel = new THREE.MeshPhysicalMaterial({
-  map: woodPanelTexture(512, 512, "#33210f", "#120802"),
-  roughness: .42,
-  metalness: .04,
-  clearcoat: .3,
-  clearcoatRoughness: .2,
-});
-const panel = new THREE.MeshPhysicalMaterial({
-  map: woodPanelTexture(1024, 640, "#54381c", "#1d0e03", [[256, 320, 95], [768, 320, 95]]),
-  roughness: .4,
+// The case is black lacquered wood, inside and out, polished hard enough to
+// hold a reflection of the room — on the reference board the walls carry a
+// long highlight down their whole length.
+const shell = new THREE.MeshPhysicalMaterial({
+  color: 0x1f1916,
+  roughness: .28,
   metalness: .03,
-  clearcoat: .34,
-  clearcoatRoughness: .18,
+  clearcoat: .9,
+  clearcoatRoughness: .05,
 });
-const brass = new THREE.MeshStandardMaterial({ color: 0xb99a63, roughness: .35, metalness: .8 });
+// One leaf of veneer, split and opened out, so the two halves mirror each
+// other and the figure lands at the centre of both.
+const veneerTexture = woodPanelTexture(768, 900, "#7b5730", "#251306", [[384, 450, 165]]);
+const veneerL = new THREE.MeshPhysicalMaterial({
+  map: veneerTexture,
+  roughness: .3,
+  metalness: .03,
+  clearcoat: .95,
+  clearcoatRoughness: .04,
+});
+const veneerR = veneerL.clone();
+veneerR.map = veneerTexture.clone();
+veneerR.map.wrapS = THREE.RepeatWrapping;
+veneerR.map.repeat.x = -1;
+veneerR.map.needsUpdate = true;
+// Aged brass: the hinges on the reference board have gone dull and warm.
+const brass = new THREE.MeshStandardMaterial({ color: 0x9b7f4b, roughness: .5, metalness: .85 });
+const screwSlot = new THREE.MeshStandardMaterial({ color: 0x2a2216, roughness: .6, metalness: .5 });
 const pearl = new THREE.MeshStandardMaterial({ color: 0xe8e2d6, roughness: .4, metalness: 0 });
 // The reference checkers are warm cream and dark graphite plastic — satin,
 // with one soft highlight each, nowhere near mirror-bright.
@@ -320,16 +330,13 @@ const marquetryA = new THREE.MeshStandardMaterial({
   metalness: 0
 });
 const marquetryB = new THREE.MeshStandardMaterial({
-  map: marquetryPointTexture("#432a13", "#2c1a09", false),
+  map: marquetryPointTexture("#6d4c2a", "#2a1608", false),
   roughness: .52,
   metalness: 0
 });
 
-function box(width, height, depth, material, x = 0, y = 0, z = 0, bevelGeo = false) {
-  const geometry = bevelGeo
-    ? new THREE.BoxGeometry(width, height, depth, 3, 2, 3)
-    : new THREE.BoxGeometry(width, height, depth);
-  const mesh = new THREE.Mesh(geometry, material);
+function box(width, height, depth, material, x = 0, y = 0, z = 0) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
   mesh.position.set(x, y, z);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -375,9 +382,9 @@ function point(x0, x1, zOuter, zTip, material) {
 // 1.71:1, only ten checkers deep, and its outer points hung off the felt.
 const CHECKER_D = 1.0;
 const PITCH = CHECKER_D * 1.06;      // centre-to-centre of neighbouring points
-const POINT_HALF = .5;               // half the width of a point's base
+const POINT_HALF = PITCH / 2;        // bases meet, so one braid serves two points
 const BAR_HALF = .42;
-const POINT_LEN = CHECKER_D * 5;     // a point holds exactly five checkers
+const POINT_LEN = CHECKER_D * 5.35;  // long, so the facing tips nearly meet
 const FIELD_HALF = CHECKER_D * 6;    // twelve checkers of depth, halved
 const TIP_Z = FIELD_HALF - POINT_LEN;
 
@@ -389,37 +396,113 @@ const NEAR_Z = -(FIELD_HALF - POINT_LEN / 2);
 const FAR_Z = FIELD_HALF - POINT_LEN / 2;
 
 const FIELD_HALF_X = starts[starts.length - 1] + POINT_HALF;
-const PANEL_W = FIELD_HALF_X * 2 + .5;
-const PANEL_D = FIELD_HALF * 2 + .5;
+
+// The reference board is a folding case, not a flat panel: two trays hinged
+// down the middle, each a floor with the playing surface laid into it and four
+// walls standing round it. What used to be a strip painted down the centre is
+// really the two inner walls meeting, and what used to be an invisible line at
+// the edge of the field is really the inside face of the outer wall.
+const FELT_Y = .47;                       // top of the playing surface
+const SEAM = .12;                         // 4mm, the gap the hinge knuckle sits in
+const WALL_T = BAR_HALF - SEAM / 2;       // 13mm walls, so the seam comes out right
+const WALL_H = .7;                        // 25mm of wall standing above the surface
+const FLOOR_T = .26;                      // 9mm of case floor under it
+const CASE_TOP = FELT_Y + WALL_H;
+const CASE_BOTTOM = FELT_Y - FLOOR_T;
+const CASE_HALF_X = FIELD_HALF_X + WALL_T;
+const CASE_HALF_Z = FIELD_HALF + WALL_T;
 
 function addBoard() {
-  box(PANEL_W + 2.2, .45, PANEL_D + 2.2, frame, 0, 0, 0, true);
-  box(PANEL_W + 1.2, .18, PANEL_D + 1.2, bevel, 0, .28, 0, true);
-  box(PANEL_W, .1, PANEL_D, panel, 0, .42, 0);
-  box(BAR_HALF * 2, .22, PANEL_D + .18, frame, 0, .5, 0);
+  // Two trays, hinged down the middle. Each is drawn as a floor with four
+  // walls standing on it: the outer long wall, the two end walls, and the
+  // inner wall at the seam. The walls run the full height of the case and the
+  // floor fills between them, so the tray is solid wherever it should be.
+  [-1, 1].forEach(side => {
+    const innerX = side * (BAR_HALF - WALL_T);          // outside of the seam wall
+    const outerX = side * CASE_HALF_X;
+    const spanX = Math.abs(outerX - innerX);
+    const midX = (innerX + outerX) / 2;
+    const wallY = (CASE_BOTTOM + CASE_TOP) / 2;
+    const wallH = CASE_TOP - CASE_BOTTOM;
+
+    box(spanX, FLOOR_T, CASE_HALF_Z * 2, shell, midX, CASE_BOTTOM + FLOOR_T / 2, 0);
+    box(WALL_T, wallH, CASE_HALF_Z * 2, shell, side * (BAR_HALF - WALL_T / 2), wallY, 0);
+    box(WALL_T, wallH, CASE_HALF_Z * 2, shell, side * (FIELD_HALF_X + WALL_T / 2), wallY, 0);
+    [-1, 1].forEach(end => {
+      box(spanX, wallH, WALL_T, shell, midX, wallY, end * (FIELD_HALF + WALL_T / 2));
+    });
+
+    // The playing surface, laid into the tray between the walls. Each half is
+    // a mirror of the other, the way a board is veneered from one leaf split
+    // and opened out — which is what puts the figure at the centre of both.
+    const face = new THREE.Mesh(
+      new THREE.BoxGeometry(FIELD_HALF_X - BAR_HALF, .04, FIELD_HALF * 2),
+      side < 0 ? veneerL : veneerR
+    );
+    face.position.set(side * (BAR_HALF + FIELD_HALF_X) / 2, FELT_Y - .02, 0);
+    face.receiveShadow = true;
+    scene.add(face);
+  });
 
   starts.forEach((x, i) => {
     point(x - POINT_HALF, x + POINT_HALF, -FIELD_HALF, -TIP_Z, i % 2 ? marquetryB : marquetryA);
     point(x - POINT_HALF, x + POINT_HALF, FIELD_HALF, TIP_Z, i % 2 ? marquetryA : marquetryB);
   });
 
-  // Brass hinge pins across the centre seam, like a folding board's hinges.
-  [-PANEL_D * .28, PANEL_D * .28].forEach(z => {
-    const hinge = new THREE.Mesh(new THREE.CylinderGeometry(.09, .09, .55, 16), brass);
-    hinge.rotation.z = Math.PI / 2;
-    hinge.position.set(0, .58, z);
-    hinge.castShadow = true;
-    scene.add(hinge);
-  });
+  addHinges();
 
-  // Small pearl position markers set into the long rails.
-  const railX = PANEL_W / 2 + .55;
-  [-railX, railX].forEach(x => {
-    [-4, -1.4, 1.4, 4].forEach(z => {
-      const dot = new THREE.Mesh(new THREE.SphereGeometry(.055, 12, 10), pearl);
-      dot.position.set(x, .62, z);
+  // Small pearl studs set into the top of the outer walls.
+  [-1, 1].forEach(side => {
+    [-3.6, 3.6].forEach(z => {
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(.052, 14, 12), pearl);
+      dot.position.set(side * (FIELD_HALF_X + WALL_T / 2), CASE_TOP - .012, z);
       scene.add(dot);
     });
+  });
+}
+
+// Two butt hinges across the seam, sitting on top of the inner walls where a
+// folding board carries them: a leaf screwed to each wall, the knuckle in the
+// gap between, and two screws through each leaf.
+const HINGE_LEN = 1.15;
+const HINGE_LEAF = .34;
+const HINGE_PLATE = .045;
+
+function addHinges() {
+  [-1, 1].forEach(end => {
+    const z = end * FIELD_HALF * .58;
+
+    [-1, 1].forEach(side => {
+      const leaf = box(HINGE_LEAF, HINGE_PLATE, HINGE_LEN, brass,
+        side * (SEAM / 2 + HINGE_LEAF / 2), CASE_TOP + HINGE_PLATE / 2, z);
+      leaf.castShadow = true;
+
+      // Two countersunk screws per leaf, each with its cross recess.
+      [-.3, .3].forEach(along => {
+        const head = new THREE.Mesh(
+          new THREE.CylinderGeometry(.055, .05, .028, 16), brass);
+        head.position.set(side * (SEAM / 2 + HINGE_LEAF / 2),
+          CASE_TOP + HINGE_PLATE, z + along * HINGE_LEN);
+        scene.add(head);
+        for (let turn = 0; turn < 2; turn++) {
+          const slot = new THREE.Mesh(
+            new THREE.BoxGeometry(turn ? .012 : .075, .006, turn ? .075 : .012),
+            screwSlot);
+          slot.position.copy(head.position).setY(CASE_TOP + HINGE_PLATE + .012);
+          scene.add(slot);
+        }
+      });
+    });
+
+    // The knuckle, lying in the seam along the fold. It has to stand proud of
+    // the leaves or the seam swallows it and the hinge reads as two loose
+    // plates with a gap between them.
+    const knuckle = new THREE.Mesh(
+      new THREE.CylinderGeometry(.075, .075, HINGE_LEN * .94, 20), brass);
+    knuckle.rotation.x = Math.PI / 2;
+    knuckle.position.set(0, CASE_TOP + HINGE_PLATE, z);
+    knuckle.castShadow = true;
+    scene.add(knuckle);
   });
 }
 
@@ -650,7 +733,6 @@ const DIE_NORMALS = [
   [new THREE.Vector3(0, 0, -1), 4],
 ];
 
-const FELT_Y = .47;
 const diceMeshes = [];
 
 function dice(x, z, face) {
@@ -1160,8 +1242,8 @@ const CONTACT_SKIN = DIE_SIZE * .15;
 const DIE_HALVES = new THREE.Vector3(DIE_INNER, DIE_INNER, DIE_INNER);
 // The bar down the middle of the board stands proud of the felt, and the
 // checkers stand proud of that. Both are in the dice's way.
-const BAR_HALVES = new THREE.Vector3(BAR_HALF, .11, (PANEL_D + .18) / 2);
-const BAR_CENTRE = new THREE.Vector3(0, .5, 0);
+const BAR_HALVES = new THREE.Vector3(BAR_HALF, WALL_H / 2, CASE_HALF_Z);
+const BAR_CENTRE = new THREE.Vector3(0, FELT_Y + WALL_H / 2, 0);
 const CHECKER_HALVES = new THREE.Vector3(CHECKER_R, CHECKER_H / 2, CHECKER_R);
 // Nothing further away than this can be touching, whatever the angles.
 const CHECKER_RANGE = (CHECKER_R + DIE_INNER * Math.sqrt(3) + DIE_RADIUS) ** 2;
@@ -1783,14 +1865,14 @@ function addRoom() {
   // Quadrant fills keep the corners of the board level with the middle, but
   // stay well under the key so they do not cancel its shading.
   [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([x, z]) => {
-    const fill = new THREE.DirectionalLight(0xeef1f4, .16);
+    const fill = new THREE.DirectionalLight(0xeef1f4, .3);
     fill.position.set(x * 11, 7, z * 11);
     scene.add(fill);
   });
 
   // Just enough lift to keep the darks open rather than crushed.
-  scene.add(new THREE.HemisphereLight(0xd6e0e8, 0x2e2116, .42));
-  scene.add(new THREE.AmbientLight(0xffffff, .1));
+  scene.add(new THREE.HemisphereLight(0xdfe7ee, 0x40301f, .85));
+  scene.add(new THREE.AmbientLight(0xfff6e8, .22));
 }
 
 addRoom();
