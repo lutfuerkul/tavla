@@ -522,7 +522,13 @@ function addPanelBoard() {
   const PANEL_D = FIELD_HALF * 2 + .5;
   const wallH = CASE_TOP - CASE_BOTTOM;
   const wallY = (CASE_BOTTOM + CASE_TOP) / 2;
-  box(CASE_HALF_X * 2, FLOOR_T, CASE_HALF_Z * 2, frame, 0, CASE_BOTTOM + FLOOR_T / 2, 0);
+  // The floor stops under the veneer rather than level with it. Bringing the
+  // two to the same height puts two surfaces in the same plane, and the depth
+  // buffer cannot choose between them: the wood comes out as dark banding
+  // instead of wood.
+  const floorTop = FELT_Y - .1;
+  box(CASE_HALF_X * 2, floorTop - CASE_BOTTOM, CASE_HALF_Z * 2, frame,
+    0, (CASE_BOTTOM + floorTop) / 2, 0);
   box(PANEL_W, .1, PANEL_D, panel, 0, .42, 0);
   box(BAR_HALF * 2, .22, PANEL_D + .18, frame, 0, .5, 0);
   [-1, 1].forEach(side => {
@@ -562,7 +568,7 @@ function addTrayBoard() {
     const wallY = (CASE_BOTTOM + CASE_TOP) / 2;
     const wallH = CASE_TOP - CASE_BOTTOM;
 
-    box(spanX, FLOOR_T, CASE_HALF_Z * 2, shell, midX, CASE_BOTTOM + FLOOR_T / 2, 0);
+    box(spanX, FLOOR_T - .05, CASE_HALF_Z * 2, shell, midX, CASE_BOTTOM + (FLOOR_T - .05) / 2, 0);
     box(WALL_T, wallH, CASE_HALF_Z * 2, shell, side * (BAR_HALF - WALL_T / 2), wallY, 0);
     box(WALL_T, wallH, CASE_HALF_Z * 2, shell, side * (FIELD_HALF_X + WALL_T / 2), wallY, 0);
     [-1, 1].forEach(end => {
