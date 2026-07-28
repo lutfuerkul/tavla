@@ -1615,8 +1615,15 @@ starts.forEach((x, i) => {
 });
 // Checkers sent to the bar sit on the centre divider, in the gap the two
 // facing rows of points leave open.
-POINTS.barW = { x: 0, z: -TIP_Z * .5, baseZ: -TIP_Z * .45, dir: -1, onBar: true };
-POINTS.barB = { x: 0, z: TIP_Z * .5, baseZ: TIP_Z * .45, dir: 1, onBar: true };
+// The two bar stacks start half a checker either side of the middle and grow
+// apart, so the innermost of one clears the innermost of the other. Seating
+// them off the tip of the points instead made that gap depend on how long the
+// points run — nine tenths of a checker on the boards with short points, and
+// little over half a checker on the one with long ones, so the two colours
+// grew into each other.
+const BAR_BASE = CHECKER_D * .55;
+POINTS.barW = { x: 0, z: -BAR_BASE, baseZ: -BAR_BASE, dir: -1, onBar: true };
+POINTS.barB = { x: 0, z: BAR_BASE, baseZ: BAR_BASE, dir: 1, onBar: true };
 
 // Five checkers lie flat on a point. Past that they go on top — but set
 // across the join between two of the ones below rather than squarely on one,
