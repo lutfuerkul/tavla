@@ -2,6 +2,8 @@ import * as THREE from "../vendor/three/three.module.min.js";
 import { RoomEnvironment } from "../vendor/three/examples/jsm/environments/RoomEnvironment.js";
 
 const canvas = document.querySelector("#scene");
+import * as Rules from "./rules.js";
+
 const intro = document.querySelector("#intro");
 const hud = document.querySelector("#hud");
 
@@ -51,6 +53,18 @@ const BOARDS = {
     room: { env: .5, fill: .3, hemi: .85, ambient: .22 },
   },
 };
+// You are the bone checkers; the computer plays the black ones.
+const HUMAN = "ivory";
+const COMPUTER = "black";
+const NAMES = { ivory: "KEMİK", black: "SİYAH" };
+
+// Two ways to play: against the computer, or two people sharing one screen and
+// taking the table in turns. Both are settled at the door, before anything is
+// built, because the picker that sets them runs there.
+const MODE_KEY = "tavla.mode";
+let mode = localStorage.getItem(MODE_KEY) === "hotseat" ? "hotseat" : "solo";
+const isHuman = colour => mode === "hotseat" || colour === HUMAN;
+
 const BOARD_KEY = "tavla.board";
 const boardName = BOARDS[localStorage.getItem(BOARD_KEY)] ? localStorage.getItem(BOARD_KEY) : "klasik";
 const BOARD = BOARDS[boardName];
@@ -93,6 +107,16 @@ function sitDown() {
 // Picking the board that is already on the table just opens the door. Picking
 // the other one has to reload, because the two differ in the geometry of the
 // points and that is settled before the scene is built.
+document.querySelectorAll("[data-mode]").forEach(button => {
+  button.classList.toggle("chosen", button.dataset.mode === mode);
+  button.addEventListener("click", () => {
+    mode = button.dataset.mode;
+    localStorage.setItem(MODE_KEY, mode);
+    document.querySelectorAll("[data-mode]").forEach(b =>
+      b.classList.toggle("chosen", b.dataset.mode === mode));
+  });
+});
+
 document.querySelectorAll("[data-board]").forEach(button => {
   button.classList.toggle("chosen", button.dataset.board === boardName);
   button.addEventListener("click", () => {
@@ -946,6 +970,7 @@ function settleDie(die) {
   s.spin.set(0, 0, 0);
   s.value = readDie(die);
   showDiceValues();
+  if (diceMeshes.every(d => d.userData.die.mode === "rest")) onDiceSettled();
 }
 
 // Height of whichever corner is sitting lowest — the height of the surface
@@ -1654,25 +1679,39 @@ function checkerSeat(key, index) {
   };
 }
 
-let state = {};
-function resetState() {
-  state = {};
-  for (let n = 1; n <= 24; n++) state[n] = { color: null, count: 0 };
-  state.barW = { color: "ivory", count: 0 };
-  state.barB = { color: "black", count: 0 };
-  // Opening layout, 15 checkers a side. Points 1-12 are the row furthest from
-  // the seat, 13-24 the near one, and a point faces its mirror at 25 minus
-  // its number — same column, other row — so the two colours sit opposite
-  // each other in matching runs.
-  state[12] = { color: "black", count: 2 };   // far row, far left
-  state[1] = { color: "black", count: 5 };    // far row, far right
-  state[18] = { color: "black", count: 5 };   // near row, against the bar on the left
-  state[20] = { color: "black", count: 3 };   // near row, one column right of the bar
+// The rules live in rules.js and know nothing about any of this — everything
+// here is the join between them and the table.
 
-  state[13] = { color: "ivory", count: 2 };   // opposite point 12
-  state[24] = { color: "ivory", count: 5 };   // opposite point 1
-  state[7] = { color: "ivory", count: 5 };    // opposite point 18
-  state[5] = { color: "ivory", count: 3 };    // opposite point 20
+
+let game;
+function resetState() {
+  game = {
+    pos: Rules.startingPosition(),
+    turn: HUMAN,
+    dice: null,          // the pair as thrown, once they have settled
+    remaining: [],       // pips still to play this turn
+    required: 0,         // how many the rules oblige to be played
+    played: 0,
+    lifted: null,        // { key } while a checker is in the hand
+    over: null,
+    thinking: false,
+  };
+}
+
+// What the player may do with the dice still on the table. Empty means the
+// turn is finished — either everything has been played or nothing could be.
+function movesNow() {
+  if (!game.dice || game.over || !isHuman(game.turn) || game.thinking) return [];
+  return Rules.movesAvailable(game.pos, game.turn, game.remaining, game.played, game.required);
+}
+
+const pointKey = point => String(point);
+const barKey = colour => (colour === "ivory" ? "barW" : "barB");
+
+// The seats are keyed the way the board is drawn; the rules speak in point
+// numbers, "bar" and "off".
+function keyFor(colour, place) {
+  return place === "bar" ? barKey(colour) : pointKey(place);
 }
 
 const piecesGroup = new THREE.Group();
@@ -1682,13 +1721,21 @@ let pieceMeshes = [];
 function renderPieces() {
   piecesGroup.clear();
   pieceMeshes = [];
-  for (const key in state) {
-    const s = state[key];
-    if (!s.count) continue;
-    const material = s.color === "ivory" ? ivory : black;
+
+  const stacks = [];
+  for (let point = 1; point <= 24; point++) {
+    const held = game.pos.points[point];
+    if (held) stacks.push([pointKey(point), held.colour, held.count]);
+  }
+  for (const colour of Rules.COLOURS) {
+    if (game.pos.bar[colour]) stacks.push([barKey(colour), colour, game.pos.bar[colour]]);
+  }
+
+  for (const [key, colour, count] of stacks) {
+    const material = colour === "ivory" ? ivory : black;
     // The checker currently in the player's hand is drawn separately, so its
     // seat on the point is left empty while the drag is in progress.
-    const onBoard = s.count - (s.lifted || 0);
+    const onBoard = count - (game.lifted && game.lifted.key === key ? 1 : 0);
     for (let i = 0; i < onBoard; i++) {
       const seat = checkerSeat(key, i);
       const body = new THREE.Mesh(checkerGeometry, material);
@@ -1698,6 +1745,7 @@ function renderPieces() {
       body.castShadow = true;
       body.receiveShadow = true;
       body.userData.pointKey = key;
+      body.userData.colour = colour;
       piecesGroup.add(body);
       pieceMeshes.push(body);
     }
@@ -1715,27 +1763,168 @@ function dropUnsupportedDice() {
   }
 }
 
-function tryMove(fromKey, toKey, color) {
-  if (fromKey === toKey) return;
-  const dest = state[toKey];
-  if (dest.count > 0 && dest.color !== color) {
-    if (dest.count === 1) {
-      // A single opposing checker gets hit and sent to the bar.
-      const oppBar = dest.color === "ivory" ? "barW" : "barB";
-      state[oppBar].count++;
-      state[oppBar].color = dest.color;
-      dest.count = 0;
-      dest.color = null;
-    } else {
-      return; // Point is made by the opponent — can't land here.
-    }
-  }
-  state[fromKey].count--;
-  if (state[fromKey].count === 0) state[fromKey].color = null;
-  dest.color = color;
-  dest.count = (dest.count || 0) + 1;
+// Play a move if the rules allow it. Everything is checked against what is
+// still playable this turn, not just against the board: a move that is legal
+// on its own but would strand a die is not one of the moves offered.
+function tryMove(fromPlace, toPlace) {
+  const move = movesNow().find(m => sameMove(m, fromPlace, toPlace));
+  if (!move) return false;
+  game.pos = Rules.applyMove(game.pos, game.turn, move);
+  game.remaining.splice(game.remaining.indexOf(move.die), 1);
+  game.played++;
+  finishIfWon();
   renderPieces();
+  updateHud();
+  return true;
 }
+
+function sameMove(move, fromPlace, toPlace) {
+  return String(move.from) === String(fromPlace) && String(move.to) === String(toPlace);
+}
+
+function finishIfWon() {
+  const won = Rules.winner(game.pos);
+  if (won) game.over = { winner: won, value: Rules.gameValue(game.pos) };
+}
+
+// A throw settles into the turn's dice. Doubles are four moves of the same
+// number; what the rules oblige is worked out once, here, because "how many
+// dice can be played" is a property of the whole turn.
+function onDiceSettled() {
+  if (!game || game.over || game.dice) return;
+  const values = diceMeshes.map(d => d.userData.die.value);
+  if (values.length < 2 || values.some(v => !v)) return;
+  game.dice = values;
+  game.remaining = Rules.diceFor(values[0], values[1]);
+  game.required = Rules.legalSequences(game.pos, game.turn, game.remaining)[0].length;
+  game.played = 0;
+  if (!isHuman(game.turn)) setTimeout(playComputerTurn, 700);
+  updateHud();
+}
+
+// A checker travelling on its own, so the computer's moves can be watched
+// rather than found already made. It lifts off its point, carries across, and
+// comes down on the new one — the same arc a hand makes.
+let sliding = null;
+
+function slideChecker(colour, from, to, onDone) {
+  const mesh = new THREE.Mesh(checkerGeometry, colour === "ivory" ? ivory : black);
+  mesh.position.set(from.x, from.y, from.z);
+  mesh.castShadow = true;
+  scene.add(mesh);
+  sliding = { mesh, from, to, t: 0, span: .62, onDone };
+}
+
+function stepSlide(dt) {
+  if (!sliding) return;
+  sliding.t += dt;
+  const k = Math.min(1, sliding.t / sliding.span);
+  const ease = k < .5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
+  const { from, to, mesh } = sliding;
+  mesh.position.set(
+    from.x + (to.x - from.x) * ease,
+    from.y + (to.y - from.y) * ease + Math.sin(Math.PI * k) * (CARRY_Y - FELT_Y) * .75,
+    from.z + (to.z - from.z) * ease
+  );
+  if (k < 1) return;
+  scene.remove(mesh);
+  const done = sliding.onDone;
+  sliding = null;
+  done();
+}
+
+// Where a checker sits now, and where it would sit after the move — the seat
+// it leaves is the top of its stack, the seat it takes is the next one up.
+function seatOfMove(colour, move) {
+  const fromKey = move.from === "bar" ? barKey(colour) : pointKey(move.from);
+  const standing = move.from === "bar"
+    ? game.pos.bar[colour]
+    : game.pos.points[move.from].count;
+  const from = checkerSeat(fromKey, standing - 1);
+  if (move.to === "off") {
+    return { fromKey, from, to: { x: (FIELD_HALF_X + 1.4) * 1, y: CASE_TOP, z: from.z } };
+  }
+  const target = game.pos.points[move.to];
+  const seated = target && target.colour === colour ? target.count : 0;
+  return { fromKey, from, to: checkerSeat(pointKey(move.to), seated) };
+}
+
+// The computer plays its whole turn as a sequence, one visible move at a time,
+// then hands the table back.
+function playComputerTurn() {
+  const sequence = Rules.chooseSequence(game.pos, COMPUTER, game.remaining);
+  game.thinking = true;
+  updateHud();
+  let i = 0;
+  const step = () => {
+    if (i >= sequence.length) {
+      game.thinking = false;
+      finishIfWon();
+      if (!game.over) startTurn(HUMAN);
+      updateHud();
+      renderPieces();
+      return;
+    }
+    const move = sequence[i++];
+    const { fromKey, from, to } = seatOfMove(COMPUTER, move);
+    game.lifted = { key: fromKey };
+    renderPieces();
+    slideChecker(COMPUTER, from, to, () => {
+      game.lifted = null;
+      game.pos = Rules.applyMove(game.pos, COMPUTER, move);
+      renderPieces();
+      updateHud();
+      setTimeout(step, 260);
+    });
+  };
+  setTimeout(step, 520);
+}
+
+function startTurn(colour) {
+  game.turn = colour;
+  game.dice = null;
+  game.remaining = [];
+  game.required = 0;
+  game.played = 0;
+  if (!isHuman(colour)) setTimeout(() => throwDice(1), 550);
+}
+
+// The turn is over when there is nothing left that may be played — which is
+// also the case when the dice could not be played at all.
+function turnComplete() {
+  return !!game.dice && !game.thinking && movesNow().length === 0;
+}
+
+function endTurn() {
+  if (!turnComplete() || game.over) return;
+  startTurn(Rules.other(game.turn));
+  updateHud();
+}
+
+const doneButton = document.querySelector("#done");
+doneButton?.addEventListener("click", endTurn);
+
+function updateHud() {
+  const [side, roll] = hud.querySelectorAll("strong");
+  if (side) {
+    const mars = game.over && game.over.value === 2 ? " · MARS" : "";
+    side.textContent = game.over
+      ? (mode === "hotseat"
+          ? NAMES[game.over.winner] + " KAZANDI"
+          : game.over.winner === HUMAN ? "KAZANDIN" : "KAYBETTİN") + mars
+      : game.thinking ? "RAKİP OYNUYOR"
+      : !isHuman(game.turn) ? "RAKİP"
+      : mode === "hotseat"
+        ? NAMES[game.turn] + (game.dice ? "" : " · ZAR AT")
+        : (game.dice ? "SEN" : "SEN · ZAR AT");
+  }
+  if (roll && !game.dice) roll.textContent = "—";
+  if (doneButton) {
+    doneButton.disabled = !turnComplete() || !!game.over;
+    doneButton.textContent = game.dice && game.required === 0 ? "Oynanacak hamle yok — Tamam" : "Tamam";
+  }
+}
+
 
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
@@ -1836,13 +2025,45 @@ function armThrow() {
 }
 
 // Fling the pair away across the board, fast.
+// The computer throws from the other side of the table, so the aim is the
+// one thing that differs between its throw and yours.
+function throwDice(towards) {
+  const anchor = new THREE.Vector3(towards > 0 ? -1.5 : 1.5, LIFT_Y, towards > 0 ? -4 : 4);
+  heldDice = {
+    anchor: anchor.clone(),
+    last: anchor.clone(),
+    lastT: performance.now(),
+    startedAt: performance.now(),
+    released: true,
+    vel: new THREE.Vector3(),
+    swirl: 0,
+    towards,
+    entries: diceMeshes.map((die, i) => {
+      const st = die.userData.die;
+      st.mode = "held";
+      st.vel.set(0, 0, 0);
+      st.spin.set(0, 0, 0);
+      st.still = 0;
+      return {
+        die,
+        radius: .26 + i * .04,
+        phase: i * Math.PI + Math.random() * .6,
+        shakeSpin: randomShakeSpin(),
+        reroll: .18 + Math.random() * .22,
+      };
+    }),
+  };
+  armThrow();
+}
+
 function launchDice() {
   const hand = heldDice.vel.clone();
   hand.y = 0;
+  const towards = heldDice.towards || -1;
   // Away from the player's side of the table, with whatever aim the hand had.
   // Around 2 m/s, which is a firm throw rather than a nudge — hard enough to
   // reach the far rail, come back off it and keep tumbling.
-  const aim = new THREE.Vector3(hand.x * .3, 0, -1)
+  const aim = new THREE.Vector3(hand.x * .3, 0, towards)
     .normalize()
     .multiplyScalar(52 + Math.random() * 16);
 
@@ -1875,7 +2096,7 @@ canvas.addEventListener("pointerdown", (e) => {
   // Dice sit on top of everything, so they get first claim on the pointer.
   // Grabbing either one scoops up the whole pair.
   const dieHit = raycaster.intersectObjects(diceMeshes, false);
-  if (dieHit.length && !heldDice) {
+  if (dieHit.length && !heldDice && isHuman(game.turn) && !game.dice && !game.over) {
     const anchor = pointerOnPlane(liftPlane, new THREE.Vector3())
       || dieHit[0].object.position.clone().setY(LIFT_Y);
     heldDice = {
@@ -1919,18 +2140,22 @@ canvas.addEventListener("pointerdown", (e) => {
   const hits = raycaster.intersectObjects(pieceMeshes, false);
   if (!hits.length) return;
   const key = hits[0].object.userData.pointKey;
-  const point = state[key];
-  if (!point || !point.count) return;
+  if (hits[0].object.userData.colour !== game.turn || !isHuman(game.turn)) return;
+
+  // Only a checker with somewhere legal to go can be picked up. Lifting one
+  // that cannot move and dropping it back is a move you did not make.
+  const from = key === barKey(game.turn) ? "bar" : Number(key);
+  if (!movesNow().some(m => String(m.from) === String(from))) return;
 
   // Lift the top checker off the point and carry it under the cursor, so the
   // move is visible while it is happening.
-  point.lifted = 1;
-  const carried = new THREE.Mesh(checkerGeometry, point.color === "ivory" ? ivory : black);
+  game.lifted = { key };
+  const carried = new THREE.Mesh(checkerGeometry, game.turn === "ivory" ? ivory : black);
   carried.castShadow = true;
   carried.position.copy(hits[0].object.position).setY(CARRY_Y);
   scene.add(carried);
 
-  dragging = { fromKey: key, color: point.color, mesh: carried };
+  dragging = { fromKey: key, from, mesh: carried };
   canvas.setPointerCapture?.(e.pointerId);
   canvas.style.cursor = "grabbing";
   renderPieces();
@@ -1971,6 +2196,18 @@ addEventListener("pointerup", (e) => {
   raycaster.setFromCamera(pointer, camera);
   const hit = new THREE.Vector3();
   if (raycaster.ray.intersectPlane(dragPlane, hit)) {
+    // Carried past the right-hand wall is an attempt to bear off — both home
+    // boards are on that side of the table.
+    if (hit.x > FIELD_HALF_X) {
+      game.lifted = null;
+      tryMove(dragging.from, "off");
+      scene.remove(dragging.mesh);
+      dragging = null;
+      canvas.style.cursor = "grab";
+      renderPieces();
+      updateHud();
+      return;
+    }
     // The bar is not somewhere you can put a checker down — one only ever
     // arrives there by being hit — and leaving it in this search made it a
     // target with an enormous catchment. Its anchor sits in the middle of the
@@ -1985,10 +2222,10 @@ addEventListener("pointerup", (e) => {
       const d = (p.x - hit.x) ** 2 + (p.z - hit.z) ** 2;
       if (d < bestDist) { bestDist = d; bestKey = key; }
     }
-    delete state[dragging.fromKey].lifted;
-    if (bestKey) tryMove(dragging.fromKey, bestKey, dragging.color);
+    game.lifted = null;
+    if (bestKey) tryMove(dragging.from, Number(bestKey));
   } else {
-    delete state[dragging.fromKey].lifted;
+    game.lifted = null;
   }
   scene.remove(dragging.mesh);
   dragging = null;
@@ -2004,7 +2241,7 @@ addEventListener("pointercancel", () => {
     armThrow();
   }
   if (!dragging) return;
-  delete state[dragging.fromKey].lifted;
+  game.lifted = null;
   scene.remove(dragging.mesh);
   dragging = null;
   canvas.style.cursor = "grab";
@@ -2060,11 +2297,15 @@ renderPieces();
 dice(-4.1, .35, 5);
 dice(-3.0, -.5, 4);
 showDiceValues();
+// The dice on the table at the start are scenery, not a roll: the game waits
+// for you to pick them up and throw them.
+updateHud();
 
 const clock = new THREE.Clock();
 function animate() {
   const dt = Math.min(clock.getDelta(), .25);
   stepHeldDice(dt);
+  stepSlide(dt);
   stepDicePhysics(dt);
   renderer.render(scene, camera);
   requestAnimationFrame(animate);

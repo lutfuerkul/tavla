@@ -51,3 +51,21 @@ button:hover { background: #edbb69; }
   0%, 30% { transform: rotate(0deg); }
   60%, 100% { transform: rotate(-90deg); }
 }
+
+/* Ends the turn, and only lights up when the turn can actually be ended —
+   which is when every die that could be played has been. */
+#done { position: fixed; z-index: 3; left: 50%; bottom: 2.2rem; transform: translateX(-50%);
+  padding: .7rem 2.1rem; font: inherit; font-size: .82rem; letter-spacing: .16em;
+  text-transform: uppercase; color: #0d0a06; background: #e5ad54; border: 0;
+  border-radius: .4rem; cursor: pointer; transition: opacity .2s ease, background .2s ease; }
+#done:disabled { background: #2a241c; color: #6b6154; cursor: default; }
+#done:not(:disabled):hover { background: #f0bd68; }
+@media (max-width: 900px) and (orientation: portrait) { #done { display: none; } }
+
+/* Who is playing, chosen before the table is. */
+#modes { display: flex; gap: .6rem; justify-content: center; flex-wrap: wrap; margin-bottom: 1.1rem; }
+.mode-pick { padding: .5rem 1.1rem; font: inherit; font-size: .74rem; letter-spacing: .1em;
+  color: #b9ac95; background: transparent; border: 1px solid rgba(229,173,84,.22);
+  border-radius: 2rem; cursor: pointer; transition: color .2s ease, border-color .2s ease; }
+.mode-pick:hover { border-color: rgba(229,173,84,.6); color: #e8dcc4; }
+.mode-pick.chosen { color: #0d0a06; background: #e5ad54; border-color: #e5ad54; }

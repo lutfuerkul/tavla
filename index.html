@@ -13,6 +13,10 @@
         <p class="eyebrow">3B TAVLA</p>
         <h1>Masaya yaklaş.</h1>
         <p>Siyah ve kemik taşıyla hazırlanmış birinci şahıs tavla masası.</p>
+        <div id="modes">
+          <button class="mode-pick" data-mode="solo">Bilgisayara karşı</button>
+          <button class="mode-pick" data-mode="hotseat">İki kişi · aynı cihaz</button>
+        </div>
         <div id="boards">
           <button class="board-pick" data-board="eski">
             <span class="board-name">Eski masa</span>
@@ -27,12 +31,13 @@
             <span class="board-note">Figürlü kaplama, örgü kenarlık, uzun haneler</span>
           </button>
         </div>
-        <p class="hint">Masayı seç ve otur. Taşı sol tuşu basılı tutup sürükle. Zarlara basılı tut, en az iki saniye dönerler, bıraktığında karşıya fırlarlar.</p>
+        <p class="hint">Masayı seç ve otur. Zarlara basılı tut ve bırak, sonra taşlarını oyna; hamlen tamamlanınca Tamam aktifleşir. Taşı sol tuşu basılı tutup sürükle. Zarlara basılı tut, en az iki saniye dönerler, bıraktığında karşıya fırlarlar.</p>
       </section>
       <aside id="hud" aria-live="polite">
         <div><span>SIRA</span><strong>KEMİK</strong></div>
         <div><span>ZARLAR</span><strong>4 · 2</strong></div>
       </aside>
+      <button id="done" disabled>Tamam</button>
       <div id="crosshair" aria-hidden="true"></div>
       <div id="rotate" role="alert">
         <span class="rotate-icon" aria-hidden="true"></span>
