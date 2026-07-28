@@ -7,8 +7,8 @@ const enter = document.querySelector("#enter");
 const hud = document.querySelector("#hud");
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0c0a08);
-scene.fog = new THREE.FogExp2(0x0c0a08, 0.045);
+scene.background = new THREE.Color(0x0a0805);
+scene.fog = new THREE.FogExp2(0x0a0805, 0.042);
 
 // Fixed, near-top-down seat at the table — the camera never moves once
 // seated, so the mouse is free to drag checkers instead of looking around.
@@ -35,38 +35,56 @@ enter.addEventListener("click", () => {
   hud.classList.add("visible");
 });
 
-// Rosewood grain with a bezier-streak pattern plus a couple of oval
-// "eyes" (like the burl centerpiece on a real folding board's panels).
+// Rosewood grain with authentic-looking bezier streaks and subtle depth variation
 function woodPanelTexture(w, h, base, grain, eyes) {
   const c = document.createElement("canvas");
   c.width = w; c.height = h;
   const ctx = c.getContext("2d");
+
+  // Base color with subtle variation
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, w, h);
-  for (let i = 0; i < 46; i++) {
+
+  // Layered grain for depth
+  for (let i = 0; i < 52; i++) {
     const y = Math.random() * h;
     ctx.strokeStyle = grain;
-    ctx.globalAlpha = 0.05 + Math.random() * 0.09;
-    ctx.lineWidth = 1 + Math.random() * 2.2;
+    ctx.globalAlpha = 0.04 + Math.random() * 0.12;
+    ctx.lineWidth = 0.8 + Math.random() * 3;
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.bezierCurveTo(
-      w * 0.3, y + (Math.random() - 0.5) * 22,
-      w * 0.7, y + (Math.random() - 0.5) * 22,
-      w, y + (Math.random() - 0.5) * 14
+      w * 0.25, y + (Math.random() - 0.5) * 28,
+      w * 0.75, y + (Math.random() - 0.5) * 28,
+      w, y + (Math.random() - 0.5) * 16
     );
     ctx.stroke();
   }
+
+  // Add subtle secondary grain for realistic texture
+  for (let i = 0; i < 28; i++) {
+    const y = Math.random() * h;
+    ctx.strokeStyle = grain;
+    ctx.globalAlpha = 0.015 + Math.random() * 0.04;
+    ctx.lineWidth = 0.5 + Math.random() * 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.quadraticCurveTo(w * 0.5, y + (Math.random() - 0.5) * 40, w, y + (Math.random() - 0.5) * 8);
+    ctx.stroke();
+  }
+
+  // Wood grain eyes (burls)
   (eyes || []).forEach(([ex, ey, r]) => {
     for (let ring = 8; ring > 0; ring--) {
       ctx.strokeStyle = grain;
-      ctx.globalAlpha = 0.03 + (8 - ring) * 0.008;
-      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.025 + (8 - ring) * 0.006;
+      ctx.lineWidth = 0.8;
       ctx.beginPath();
-      ctx.ellipse(ex, ey, (r * ring) / 8, (r * ring) / 8 * 0.62, 0, 0, Math.PI * 2);
+      ctx.ellipse(ex, ey, (r * ring) / 8, (r * ring) / 8 * 0.65, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
   });
+
   ctx.globalAlpha = 1;
   const texture = new THREE.CanvasTexture(c);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -83,21 +101,45 @@ triangleTextureFlipped.center.set(0.5, 0.5);
 triangleTextureFlipped.rotation = Math.PI;
 triangleTextureFlipped.needsUpdate = true;
 
-const frame = new THREE.MeshPhysicalMaterial({ color: 0x14100d, roughness: .38, metalness: .06, clearcoat: .35, clearcoatRoughness: .3 });
+const frame = new THREE.MeshPhysicalMaterial({
+  color: 0x1a140f,
+  roughness: .35,
+  metalness: .08,
+  clearcoat: .4,
+  clearcoatRoughness: .25
+});
 const bevel = new THREE.MeshPhysicalMaterial({
-  map: woodPanelTexture(512, 512, "#3a2013", "#180b05"),
-  roughness: .3, metalness: .05, clearcoat: .4, clearcoatRoughness: .25,
+  map: woodPanelTexture(512, 512, "#4a3419", "#1a0f08"),
+  roughness: .28,
+  metalness: .06,
+  clearcoat: .45,
+  clearcoatRoughness: .22,
 });
 const panel = new THREE.MeshPhysicalMaterial({
-  map: woodPanelTexture(1024, 640, "#4a2a18", "#231007", [[256, 320, 95], [768, 320, 95]]),
-  roughness: .28, metalness: .03, clearcoat: .5, clearcoatRoughness: .2,
+  map: woodPanelTexture(1024, 640, "#5a3a22", "#2a1209", [[256, 320, 95], [768, 320, 95]]),
+  roughness: .25,
+  metalness: .04,
+  clearcoat: .55,
+  clearcoatRoughness: .18,
 });
-const brass = new THREE.MeshStandardMaterial({ color: 0xcda15a, roughness: .28, metalness: .82 });
-const pearl = new THREE.MeshStandardMaterial({ color: 0xf1ece0, roughness: .35, metalness: 0 });
-const ivory = new THREE.MeshPhysicalMaterial({ color: 0xe9e2d2, roughness: .22, metalness: 0, clearcoat: .65, clearcoatRoughness: .1 });
-const black = new THREE.MeshPhysicalMaterial({ color: 0x18191a, roughness: .2, metalness: .05, clearcoat: .7, clearcoatRoughness: .08 });
-const marquetryA = new THREE.MeshStandardMaterial({ map: triangleTexture, roughness: .4 });
-const marquetryB = new THREE.MeshStandardMaterial({ map: triangleTextureFlipped, roughness: .4 });
+const brass = new THREE.MeshStandardMaterial({ color: 0xd4b896, roughness: .25, metalness: .85 });
+const pearl = new THREE.MeshStandardMaterial({ color: 0xf5f0e8, roughness: .32, metalness: 0 });
+const ivory = new THREE.MeshPhysicalMaterial({
+  color: 0xf0e6d2,
+  roughness: .18,
+  metalness: 0,
+  clearcoat: .7,
+  clearcoatRoughness: .08
+});
+const black = new THREE.MeshPhysicalMaterial({
+  color: 0x1a1b1d,
+  roughness: .18,
+  metalness: .08,
+  clearcoat: .75,
+  clearcoatRoughness: .06
+});
+const marquetryA = new THREE.MeshStandardMaterial({ map: triangleTexture, roughness: .35 });
+const marquetryB = new THREE.MeshStandardMaterial({ map: triangleTextureFlipped, roughness: .35 });
 
 function box(width, height, depth, material, x = 0, y = 0, z = 0, bevelGeo = false) {
   const geometry = bevelGeo
@@ -161,31 +203,38 @@ function addBoard() {
   });
 }
 
-// Thin, dished disc — like a real bakelite/resin checker rather than a
-// tall chunky puck. The lathe profile gives it a slightly concave top
-// face and a rounded rim so it catches light the way a real piece does.
+// Premium bakelite/resin checker with refined geometry: slightly dished top,
+// rounded edges, and subtle beveling for an authentic appearance.
 const checkerGeometry = new THREE.LatheGeometry([
-  new THREE.Vector2(0, .028),
-  new THREE.Vector2(.32, .036),
-  new THREE.Vector2(.46, .085),
-  new THREE.Vector2(.49, .07),
-  new THREE.Vector2(.49, .012),
-  new THREE.Vector2(.43, 0),
+  new THREE.Vector2(0, .032),
+  new THREE.Vector2(.3, .042),
+  new THREE.Vector2(.48, .092),
+  new THREE.Vector2(.52, .078),
+  new THREE.Vector2(.52, .015),
+  new THREE.Vector2(.47, 0),
   new THREE.Vector2(0, 0),
-], 40);
+], 48);
 
 function dice(x, z, face) {
-  const material = new THREE.MeshPhysicalMaterial({ color: 0xf3ede0, roughness: .2, metalness: 0, clearcoat: .55, clearcoatRoughness: .1 });
+  const material = new THREE.MeshPhysicalMaterial({
+    color: 0xf8f2e6,
+    roughness: .16,
+    metalness: 0,
+    clearcoat: .65,
+    clearcoatRoughness: .08
+  });
   const size = .33;
-  const die = new THREE.Mesh(new THREE.BoxGeometry(size, size, size, 3, 3, 3), material);
+  const die = new THREE.Mesh(new THREE.BoxGeometry(size, size, size, 4, 4, 4), material);
   die.position.set(x, .47 + size / 2, z);
   die.rotation.set(.14, .3, -.08);
   die.castShadow = true;
+  die.receiveShadow = true;
   scene.add(die);
   const dots = [[-.08, .17], [.08, .17], [0, 0], [-.08, -.17], [.08, -.17]];
   dots.slice(0, face).forEach(([dx, dz]) => {
-    const dot = new THREE.Mesh(new THREE.SphereGeometry(.026, 14, 10), black);
-    dot.position.set(x + dx, .47 + size + .01, z + dz);
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(.028, 16, 12), black);
+    dot.position.set(x + dx, .47 + size + .015, z + dz);
+    dot.castShadow = true;
     scene.add(dot);
   });
 }
@@ -305,22 +354,34 @@ addEventListener("pointerup", (e) => {
 });
 
 function addRoom() {
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: 0x14100d, roughness: .9 }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: 0x0f0a08, roughness: .92 }));
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -.25;
   floor.receiveShadow = true;
   scene.add(floor);
 
-  const lamp = new THREE.PointLight(0xffb85a, 30, 28, 2);
-  lamp.position.set(0, 9, 1);
+  // Main warm key light emphasizing wood and materials
+  const lamp = new THREE.PointLight(0xffc878, 32, 30, 2);
+  lamp.position.set(0.5, 9.2, 0.8);
   lamp.castShadow = true;
   lamp.shadow.mapSize.set(1024, 1024);
+  lamp.shadow.bias = -0.0005;
   scene.add(lamp);
-  const fill = new THREE.HemisphereLight(0x8fa9ae, 0x20150d, 1.15);
+
+  // Fill light for shadow detail
+  const fill = new THREE.HemisphereLight(0x9db3ba, 0x1a0f08, 1.25);
   scene.add(fill);
-  const side = new THREE.DirectionalLight(0x9aa7aa, 1.6);
-  side.position.set(-6, 10, 4);
+
+  // Side light for rim highlights on pieces
+  const side = new THREE.DirectionalLight(0xa8bec5, 1.8);
+  side.position.set(-7, 11, 5);
+  side.castShadow = true;
   scene.add(side);
+
+  // Subtle back light for rim definition
+  const back = new THREE.DirectionalLight(0x8b9fa5, 0.6);
+  back.position.set(4, 8, -8);
+  scene.add(back);
 }
 
 addRoom();
