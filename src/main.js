@@ -1,5 +1,6 @@
 import * as THREE from "../vendor/three/three.module.min.js";
 import { PointerLockControls } from "../vendor/three/examples/jsm/controls/PointerLockControls.js";
+import { RoomEnvironment } from "../vendor/three/examples/jsm/environments/RoomEnvironment.js";
 
 const canvas = document.querySelector("#scene");
 const intro = document.querySelector("#intro");
@@ -22,6 +23,11 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.08;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+// Soft studio-style reflections for the metal, lacquer and clearcoat
+// surfaces below — generated in-scene so no external HDR asset is needed.
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
 
 const controls = new PointerLockControls(camera, document.body);
 
@@ -70,14 +76,86 @@ addEventListener("pointermove", (event) => {
   camera.rotation.set(pitch, yaw, 0, "YXZ");
 });
 
-const wood = new THREE.MeshStandardMaterial({ color: 0x442315, roughness: .3, metalness: .08 });
-const edgeWood = new THREE.MeshStandardMaterial({ color: 0x1e0d08, roughness: .22, metalness: .2 });
-const felt = new THREE.MeshStandardMaterial({ color: 0x18352f, roughness: .78, metalness: 0 });
-const gold = new THREE.MeshStandardMaterial({ color: 0xc88635, roughness: .22, metalness: .76 });
-const ivory = new THREE.MeshPhysicalMaterial({ color: 0xe7dac0, roughness: .21, metalness: .03, clearcoat: .42 });
-const black = new THREE.MeshPhysicalMaterial({ color: 0x101113, roughness: .15, metalness: .34, clearcoat: .7 });
-const creamPoint = new THREE.MeshStandardMaterial({ color: 0xdfc18c, roughness: .52 });
-const brownPoint = new THREE.MeshStandardMaterial({ color: 0x63291d, roughness: .43 });
+// Procedural grain so the wood reads as real timber instead of a flat
+// color — a handful of soft bezier streaks plus a few darker knots.
+function woodGrainTexture(base, grain, repeatX, repeatY) {
+  const size = 512;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 30; i++) {
+    const y = (i / 30) * size + (Math.random() - 0.5) * 8;
+    ctx.strokeStyle = grain;
+    ctx.globalAlpha = 0.07 + Math.random() * 0.1;
+    ctx.lineWidth = 1 + Math.random() * 2.6;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.bezierCurveTo(
+      size * 0.3, y + (Math.random() - 0.5) * 26,
+      size * 0.7, y + (Math.random() - 0.5) * 26,
+      size, y + (Math.random() - 0.5) * 14
+    );
+    ctx.stroke();
+  }
+  for (let i = 0; i < 5; i++) {
+    ctx.globalAlpha = 0.05 + Math.random() * 0.05;
+    ctx.fillStyle = grain;
+    ctx.beginPath();
+    ctx.ellipse(
+      Math.random() * size, Math.random() * size,
+      40 + Math.random() * 60, 6 + Math.random() * 9,
+      Math.random() * Math.PI, 0, Math.PI * 2
+    );
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  const texture = new THREE.CanvasTexture(c);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(repeatX, repeatY);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+// Faint per-pixel noise so the felt reads as woven cloth rather than a
+// flat fill under close-up lighting.
+function feltTexture(base) {
+  const size = 256;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+  const img = ctx.getImageData(0, 0, size, size);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const n = (Math.random() - 0.5) * 16;
+    img.data[i] += n;
+    img.data[i + 1] += n;
+    img.data[i + 2] += n;
+  }
+  ctx.putImageData(img, 0, 0);
+  const texture = new THREE.CanvasTexture(c);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(4, 3);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+const wood = new THREE.MeshPhysicalMaterial({
+  map: woodGrainTexture("#6b3a1d", "#2c1608", 5, 1.4),
+  roughness: .34, metalness: .04, clearcoat: .3, clearcoatRoughness: .28,
+});
+const edgeWood = new THREE.MeshPhysicalMaterial({
+  map: woodGrainTexture("#2b160b", "#140a04", 6, 2.6),
+  roughness: .22, metalness: .1, clearcoat: .55, clearcoatRoughness: .18,
+});
+const felt = new THREE.MeshStandardMaterial({ map: feltTexture("#17352f"), roughness: .82, metalness: 0 });
+const gold = new THREE.MeshStandardMaterial({ color: 0xd0943f, roughness: .16, metalness: .85 });
+const ivory = new THREE.MeshPhysicalMaterial({ color: 0xefe2c8, roughness: .18, metalness: .02, clearcoat: .55, clearcoatRoughness: .12 });
+const black = new THREE.MeshPhysicalMaterial({ color: 0x111214, roughness: .12, metalness: .28, clearcoat: .75, clearcoatRoughness: .08 });
+const creamPoint = new THREE.MeshStandardMaterial({ color: 0xe4c896, roughness: .48 });
+const brownPoint = new THREE.MeshStandardMaterial({ color: 0x6e2e1f, roughness: .4 });
 
 function box(width, height, depth, material, x = 0, y = 0, z = 0, bevel = false) {
   const geometry = bevel
@@ -99,11 +177,15 @@ function point(x0, x1, zOuter, zTip, material) {
   shape.closePath();
   const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), material);
   mesh.rotation.x = -Math.PI / 2;
-  mesh.position.y = .335;
+  mesh.position.y = .476;
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   scene.add(mesh);
 }
+
+// x-position of each of the 12 points along one edge of the board.
+// Mirrored front/back, this lays out the full 24-point board.
+const starts = [-6.55, -5.47, -4.39, -3.31, -2.23, -1.15, 1.15, 2.23, 3.31, 4.39, 5.47, 6.55];
 
 function addBoard() {
   box(15.6, .45, 10.9, edgeWood, 0, 0, 0, true);
@@ -114,7 +196,6 @@ function addBoard() {
   [-4.95, 4.95].forEach(z => box(14.7, .85, .42, edgeWood, 0, .58, z));
   [-3.63, 3.63].forEach(x => box(.13, .13, 8.7, gold, x, .5, 0));
 
-  const starts = [-6.55, -5.47, -4.39, -3.31, -2.23, -1.15, 1.15, 2.23, 3.31, 4.39, 5.47, 6.55];
   starts.forEach((x, i) => {
     point(x - .48, x + .48, -4.15, -.3, i % 2 ? brownPoint : creamPoint);
     point(x - .48, x + .48, 4.15, .3, i % 2 ? creamPoint : brownPoint);
@@ -152,8 +233,9 @@ function checker(x, z, material, stack = 1) {
   group.position.set(x, 0, z);
   scene.add(group);
 }
+
 function dice(x, z, face) {
-  const material = new THREE.MeshPhysicalMaterial({ color: 0xd9cab0, roughness: .28, clearcoat: .3 });
+  const material = new THREE.MeshPhysicalMaterial({ color: 0xefe6d3, roughness: .22, metalness: 0, clearcoat: .5, clearcoatRoughness: .1 });
   const die = new THREE.Mesh(new THREE.BoxGeometry(.72, .72, .72, 3, 3, 3), material);
   die.position.set(x, 1.02, z);
   die.rotation.set(.16, .34, -.1);
@@ -166,11 +248,24 @@ function dice(x, z, face) {
     scene.add(dot);
   });
 }
+
+// Standard backgammon starting position, 15 checkers per side:
+// 2 on each player's 24-point, 5 on the 13-point, 3 on the 8-point,
+// 5 on the 6-point. Point 24/13 sit on the far row, 8/6 on the near
+// row, mirrored front-to-back between the two colors.
 function addPieces() {
-  [[-6.05,-3.55,black,2],[-4.95,-3.55,black,5],[-2.75,-3.55,black,3],[5.95,-3.55,black,5],
-   [6.05,3.55,ivory,2],[4.95,3.55,ivory,5],[2.75,3.55,ivory,3],[-5.95,3.55,ivory,5]]
-    .forEach(args => checker(...args));
-  checker(-.1, 0, ivory, 1);
+  const farRow = 3.55;
+  const nearRow = -3.55;
+  [
+    [starts[11], farRow, ivory, 2],   // white: 24-point
+    [starts[0], farRow, ivory, 5],    // white: 13-point
+    [starts[4], nearRow, ivory, 3],   // white: 8-point
+    [starts[6], nearRow, ivory, 5],   // white: 6-point
+    [starts[11], nearRow, black, 2],  // black: 1-point
+    [starts[0], nearRow, black, 5],   // black: 12-point
+    [starts[4], farRow, black, 3],    // black: 17-point
+    [starts[6], farRow, black, 5],    // black: 19-point
+  ].forEach(args => checker(...args));
   dice(-.34, -.2, 5);
   dice(.5, .25, 4);
 }
