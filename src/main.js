@@ -513,18 +513,25 @@ function addPanelBoard() {
   // One floor, one leaf of veneer laid across the whole of it, and walls the
   // same thickness and height as the cases carry. The wide flat frame this
   // board used to sit on is gone: its edge is the outside of the wall.
+  //
+  // The veneer and the ridge keep the sizes they always had, running a
+  // quarter unit past the field and disappearing under the walls. Trimming
+  // them to the field would fit the same figure into a smaller panel, which
+  // rescales it — the inside of this board is meant to be untouched.
+  const PANEL_W = FIELD_HALF_X * 2 + .5;
+  const PANEL_D = FIELD_HALF * 2 + .5;
   const wallH = CASE_TOP - CASE_BOTTOM;
   const wallY = (CASE_BOTTOM + CASE_TOP) / 2;
   box(CASE_HALF_X * 2, FLOOR_T, CASE_HALF_Z * 2, frame, 0, CASE_BOTTOM + FLOOR_T / 2, 0);
-  box(FIELD_HALF_X * 2, .1, FIELD_HALF * 2, panel, 0, FELT_Y - .05, 0);
-  box(BAR_HALF * 2, .22, FIELD_HALF * 2, frame, 0, .5, 0);
+  box(PANEL_W, .1, PANEL_D, panel, 0, .42, 0);
+  box(BAR_HALF * 2, .22, PANEL_D + .18, frame, 0, .5, 0);
   [-1, 1].forEach(side => {
     box(WALL_T, wallH, CASE_HALF_Z * 2, frame, side * (FIELD_HALF_X + WALL_T / 2), wallY, 0);
     box(FIELD_HALF_X * 2, wallH, WALL_T, frame, 0, wallY, side * (FIELD_HALF + WALL_T / 2));
   });
 
   // Brass hinge pins across the centre seam, as it had.
-  [-FIELD_HALF * .56, FIELD_HALF * .56].forEach(z => {
+  [-PANEL_D * .28, PANEL_D * .28].forEach(z => {
     const pin = new THREE.Mesh(new THREE.CylinderGeometry(.09, .09, .55, 16), brass);
     pin.rotation.z = Math.PI / 2;
     pin.position.set(0, .58, z);
@@ -1877,6 +1884,15 @@ canvas.addEventListener("pointerdown", (e) => {
     showDiceValues();
     return;
   }
+
+  // While the dice are in the hand the pointer belongs to them, and it stays
+  // theirs after the release — a throw is armed but does not fire until the
+  // shake has run its two seconds. A press during that window used to fall
+  // through to here and lift a checker, and then the release went to the dice
+  // branch above and returned early, so the drag was never closed: a checker
+  // hanging off the cursor with its point still counting it as lifted, and
+  // the next release dropping it wherever the pointer happened to be.
+  if (heldDice) return;
 
   const hits = raycaster.intersectObjects(pieceMeshes, false);
   if (!hits.length) return;
