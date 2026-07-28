@@ -291,19 +291,22 @@ const brass = new THREE.MeshStandardMaterial({ color: 0xb99a63, roughness: .35, 
 const pearl = new THREE.MeshStandardMaterial({ color: 0xe8e2d6, roughness: .4, metalness: 0 });
 // The reference checkers are warm cream and dark graphite plastic — satin,
 // with one soft highlight each, nowhere near mirror-bright.
+// Warm ivory plastic with a soft sheen, and a near-black graphite that reads
+// far glossier — in the photos the dark piece throws a hard highlight off its
+// dome while the cream one stays satin.
 const ivory = new THREE.MeshPhysicalMaterial({
-  color: 0xe6dbc2,
-  roughness: .38,
+  color: 0xeee2c0,
+  roughness: .33,
   metalness: 0,
-  clearcoat: .38,
-  clearcoatRoughness: .16
+  clearcoat: .45,
+  clearcoatRoughness: .18
 });
 const black = new THREE.MeshPhysicalMaterial({
-  color: 0x15161a,
-  roughness: .34,
-  metalness: .02,
-  clearcoat: .42,
-  clearcoatRoughness: .14
+  color: 0x141518,
+  roughness: .16,
+  metalness: .04,
+  clearcoat: .7,
+  clearcoatRoughness: .06
 });
 // Points alternate pale maple and dark walnut, both carrying the same inlay.
 const marquetryA = new THREE.MeshStandardMaterial({
@@ -418,21 +421,33 @@ function addBoard() {
 // Dished checker profile, taken straight from the reference pieces: a raised
 // outer rim around a recessed circular dimple, with a rounded outer edge.
 const CHECKER_R = CHECKER_D / 2;
-const CHECKER_H = .145;
+const CHECKER_H = .15;
 // Profile runs bottom-centre outwards and up to the dished top. Listing it
 // in this order is what makes the revolved normals face outwards — reversed,
 // the discs render inside-out and read as hollow rings.
+// Profile read off the photographed pieces, running bottom-centre outwards:
+// a barrelled side wall, a flat outer rim, a step down into a recessed
+// channel, then a low dome rising back up out of the middle. That central
+// dome is what catches the highlight on the dark pieces.
 const checkerGeometry = new THREE.LatheGeometry([
   new THREE.Vector2(0, 0),
-  new THREE.Vector2(.45, 0),
-  new THREE.Vector2(CHECKER_R, .016),
-  new THREE.Vector2(CHECKER_R, .132),
-  new THREE.Vector2(.46, CHECKER_H),
-  new THREE.Vector2(.38, .141),
-  new THREE.Vector2(.29, .109),
-  new THREE.Vector2(.16, .099),
-  new THREE.Vector2(0, .095),
-], 64);
+  new THREE.Vector2(.40, 0),
+  new THREE.Vector2(.465, .012),
+  new THREE.Vector2(CHECKER_R, .05),
+  new THREE.Vector2(CHECKER_R, .10),
+  new THREE.Vector2(.478, .138),
+  new THREE.Vector2(.455, CHECKER_H),   // flat outer rim
+  new THREE.Vector2(.365, CHECKER_H),
+  new THREE.Vector2(.345, .128),        // step down into the channel
+  new THREE.Vector2(.325, .119),
+  new THREE.Vector2(.30, .117),         // channel floor
+  new THREE.Vector2(.275, .120),
+  new THREE.Vector2(.245, .131),        // dome springs from here
+  new THREE.Vector2(.20, .142),
+  new THREE.Vector2(.14, .149),
+  new THREE.Vector2(.07, .1525),
+  new THREE.Vector2(0, .153),           // dome crown, just proud of the rim
+], 96);
 
 // --- Dice ------------------------------------------------------------
 // A real die: every face carries its own pips, opposite faces sum to 7,
@@ -452,30 +467,19 @@ function dieFaceTexture(value) {
   c.width = c.height = 256;
   const ctx = c.getContext("2d");
 
-  // Slightly shaded ivory face so the die does not read as flat white.
-  const wash = ctx.createRadialGradient(112, 100, 20, 128, 128, 190);
+  // Bright white body, barely shaded — these are cheap moulded dice, not ivory.
+  const wash = ctx.createRadialGradient(110, 96, 30, 128, 128, 200);
   wash.addColorStop(0, "#ffffff");
-  wash.addColorStop(1, "#efe9df");
+  wash.addColorStop(1, "#f4f2ee");
   ctx.fillStyle = wash;
   ctx.fillRect(0, 0, 256, 256);
 
+  // Flat inked pips, as printed on the reference dice — no drilled well.
   PIP_LAYOUT[value].forEach(([gx, gy]) => {
-    const x = PIP_GRID[gx];
-    const y = PIP_GRID[gy];
-    // Drilled-and-inked pip: a soft dark well with a tiny specular edge.
-    const well = ctx.createRadialGradient(x - 5, y - 6, 2, x, y, 24);
-    well.addColorStop(0, "#3d3d40");
-    well.addColorStop(.45, "#141416");
-    well.addColorStop(1, "#050506");
-    ctx.fillStyle = well;
+    ctx.fillStyle = "#0a0a0b";
     ctx.beginPath();
-    ctx.arc(x, y, 23, 0, Math.PI * 2);
+    ctx.arc(PIP_GRID[gx], PIP_GRID[gy], 21, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,.35)";
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.arc(x, y, 23.4, Math.PI * .15, Math.PI * .95);
-    ctx.stroke();
   });
 
   const texture = new THREE.CanvasTexture(c);
@@ -506,17 +510,18 @@ function roundedDieGeometry(size, radius, segments = 10) {
   return geometry;
 }
 
-const DIE_SIZE = .4;
-const dieGeometry = roundedDieGeometry(DIE_SIZE, DIE_SIZE * .17, 12);
+// Measured off the photos: a die is a bit over a quarter of a checker across.
+const DIE_SIZE = CHECKER_D * .27;
+const dieGeometry = roundedDieGeometry(DIE_SIZE, DIE_SIZE * .13, 12);
 // BoxGeometry material order is +x, -x, +y, -y, +z, -z. Opposite faces sum
 // to seven, exactly like a real die.
 const DIE_FACES = [1, 6, 2, 5, 3, 4];
 const dieMaterials = DIE_FACES.map(value => new THREE.MeshPhysicalMaterial({
   map: dieFaceTexture(value),
-  roughness: .13,
+  roughness: .22,
   metalness: 0,
-  clearcoat: .8,
-  clearcoatRoughness: .04,
+  clearcoat: .6,
+  clearcoatRoughness: .1,
 }));
 
 // Rotation that brings a given value onto the top (+y) face.
@@ -529,6 +534,19 @@ const FACE_UP = {
   4: new THREE.Euler(Math.PI / 2, 0, 0),
 };
 
+// Local face normals, paired with the value printed on them.
+const DIE_NORMALS = [
+  [new THREE.Vector3(1, 0, 0), 1],
+  [new THREE.Vector3(-1, 0, 0), 6],
+  [new THREE.Vector3(0, 1, 0), 2],
+  [new THREE.Vector3(0, -1, 0), 5],
+  [new THREE.Vector3(0, 0, 1), 3],
+  [new THREE.Vector3(0, 0, -1), 4],
+];
+
+const FELT_Y = .47;
+const diceMeshes = [];
+
 function dice(x, z, face) {
   const die = new THREE.Mesh(dieGeometry, dieMaterials);
   const orient = new THREE.Quaternion().setFromEuler(FACE_UP[face]);
@@ -538,11 +556,142 @@ function dice(x, z, face) {
     (Math.random() - .5) * .9
   );
   die.quaternion.copy(yaw).multiply(orient);
-  die.position.set(x, .47 + DIE_SIZE / 2, z);
+  die.position.set(x, FELT_Y + DIE_SIZE / 2, z);
   die.castShadow = true;
   die.receiveShadow = true;
+  die.userData.die = {
+    mode: "rest",
+    value: face,
+    vel: new THREE.Vector3(),
+    spin: new THREE.Vector3(),
+    still: 0,
+  };
   scene.add(die);
+  diceMeshes.push(die);
   return die;
+}
+
+// Which value is facing up right now.
+function readDie(die) {
+  let best = 2, bestDot = -Infinity;
+  const v = new THREE.Vector3();
+  for (const [normal, value] of DIE_NORMALS) {
+    v.copy(normal).applyQuaternion(die.quaternion);
+    if (v.y > bestDot) { bestDot = v.y; best = value; }
+  }
+  return best;
+}
+
+// Rotate the die the shortest way so its upmost face sits exactly level,
+// leaving the yaw wherever the throw left it.
+function settleDie(die) {
+  let bestNormal = null, bestDot = -Infinity;
+  const v = new THREE.Vector3();
+  for (const [normal] of DIE_NORMALS) {
+    v.copy(normal).applyQuaternion(die.quaternion);
+    if (v.y > bestDot) { bestDot = v.y; bestNormal = normal; }
+  }
+  v.copy(bestNormal).applyQuaternion(die.quaternion);
+  const fix = new THREE.Quaternion().setFromUnitVectors(v, new THREE.Vector3(0, 1, 0));
+  die.quaternion.premultiply(fix).normalize();
+  die.position.y = FELT_Y + DIE_SIZE / 2;
+  const s = die.userData.die;
+  s.mode = "rest";
+  s.vel.set(0, 0, 0);
+  s.spin.set(0, 0, 0);
+  s.value = readDie(die);
+  showDiceValues();
+}
+
+function showDiceValues() {
+  const readout = hud.querySelectorAll("strong")[1];
+  if (!readout) return;
+  const rolling = diceMeshes.some(d => d.userData.die.mode !== "rest");
+  readout.textContent = rolling
+    ? "…"
+    : diceMeshes.map(d => d.userData.die.value).join(" · ");
+}
+
+// Corner offsets used to find where the die actually touches the felt, so it
+// tumbles onto an edge instead of hovering like a ball.
+const DIE_CORNERS = [];
+for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+  DIE_CORNERS.push(new THREE.Vector3(sx, sy, sz).multiplyScalar(DIE_SIZE / 2));
+}
+
+const GRAVITY = -26;
+const BOUNCE = .36;
+const THROW_WALL_X = FIELD_HALF_X - DIE_SIZE;
+const THROW_WALL_Z = FIELD_HALF - DIE_SIZE;
+
+// Physics runs on a fixed timestep and catches up across however many frames
+// the machine manages, so a throw takes the same real time to settle whether
+// the page is running at 120fps or struggling along at 5.
+const PHYSICS_STEP = 1 / 120;
+let physicsDebt = 0;
+
+function stepDicePhysics(frameDt) {
+  physicsDebt = Math.min(physicsDebt + frameDt, .5);
+  while (physicsDebt >= PHYSICS_STEP) {
+    for (const die of diceMeshes) stepDie(die, PHYSICS_STEP);
+    physicsDebt -= PHYSICS_STEP;
+  }
+}
+
+function stepDie(die, dt) {
+  const s = die.userData.die;
+  if (s.mode !== "throw") return;
+
+  s.vel.y += GRAVITY * dt;
+  die.position.addScaledVector(s.vel, dt);
+
+  // Integrate the spin: dq/dt = ½ ω q.
+  const q = die.quaternion;
+  const dq = new THREE.Quaternion(s.spin.x, s.spin.y, s.spin.z, 0).multiply(q);
+  q.set(
+    q.x + .5 * dq.x * dt,
+    q.y + .5 * dq.y * dt,
+    q.z + .5 * dq.z * dt,
+    q.w + .5 * dq.w * dt
+  ).normalize();
+
+  // Rails around the playing field.
+  ["x", "z"].forEach(axis => {
+    const limit = axis === "x" ? THROW_WALL_X : THROW_WALL_Z;
+    if (Math.abs(die.position[axis]) > limit) {
+      die.position[axis] = Math.sign(die.position[axis]) * limit;
+      s.vel[axis] *= -BOUNCE;
+      s.spin.multiplyScalar(.85);
+    }
+  });
+
+  // Lowest corner decides the contact, which is what makes it tumble.
+  let lowest = Infinity;
+  const c = new THREE.Vector3();
+  for (const corner of DIE_CORNERS) {
+    c.copy(corner).applyQuaternion(die.quaternion);
+    lowest = Math.min(lowest, die.position.y + c.y);
+  }
+
+  if (lowest < FELT_Y) {
+    die.position.y += FELT_Y - lowest;
+    if (s.vel.y < 0) s.vel.y = -s.vel.y * BOUNCE;
+    s.vel.x *= .78;
+    s.vel.z *= .78;
+    // Sliding contact kicks the die over rather than just damping it.
+    s.spin.multiplyScalar(.62);
+    s.spin.x += -s.vel.z * .9;
+    s.spin.z += s.vel.x * .9;
+
+    if (s.vel.length() < .55 && s.spin.length() < 2.2) {
+      s.still += dt;
+      if (s.still > .12) settleDie(die);
+    } else {
+      s.still = 0;
+    }
+  } else {
+    s.still = 0;
+  }
 }
 
 // --- Checker positions & drag-to-move -------------------------------
@@ -651,9 +800,36 @@ function setPointerFromEvent(e) {
   pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 }
 
+// Dice are lifted onto a plane above the board while held, so the throw can
+// be aimed by flicking the pointer.
+const LIFT_Y = 1.5;
+const liftPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -LIFT_Y);
+let heldDie = null;
+
+function pointerOnPlane(plane, out) {
+  raycaster.setFromCamera(pointer, camera);
+  return raycaster.ray.intersectPlane(plane, out) ? out : null;
+}
+
 canvas.addEventListener("pointerdown", (e) => {
   setPointerFromEvent(e);
   raycaster.setFromCamera(pointer, camera);
+
+  // Dice sit on top of everything, so they get first claim on the pointer.
+  const dieHit = raycaster.intersectObjects(diceMeshes, false);
+  if (dieHit.length) {
+    const die = dieHit[0].object;
+    const s = die.userData.die;
+    s.mode = "held";
+    s.vel.set(0, 0, 0);
+    s.still = 0;
+    heldDie = { die, last: die.position.clone(), lastT: performance.now() };
+    canvas.setPointerCapture?.(e.pointerId);
+    canvas.style.cursor = "grabbing";
+    showDiceValues();
+    return;
+  }
+
   const hits = raycaster.intersectObjects(pieceMeshes, false);
   if (!hits.length) return;
   const key = hits[0].object.userData.pointKey;
@@ -662,7 +838,44 @@ canvas.addEventListener("pointerdown", (e) => {
   canvas.style.cursor = "grabbing";
 });
 
+addEventListener("pointermove", (e) => {
+  if (!heldDie) return;
+  setPointerFromEvent(e);
+  const target = pointerOnPlane(liftPlane, new THREE.Vector3());
+  if (!target) return;
+  const { die } = heldDie;
+  const now = performance.now();
+  const dt = Math.max((now - heldDie.lastT) / 1000, 1 / 240);
+  // Velocity of the hand, kept for the moment of release.
+  die.userData.die.vel.copy(target).sub(heldDie.last).divideScalar(dt).clampLength(0, 26);
+  die.position.copy(target);
+  // Tumble a little while it is being waved around.
+  die.rotateX(dt * 2.4);
+  die.rotateY(dt * 1.7);
+  heldDie.last.copy(target);
+  heldDie.lastT = now;
+});
+
 addEventListener("pointerup", (e) => {
+  if (heldDie) {
+    const { die } = heldDie;
+    const s = die.userData.die;
+    s.mode = "throw";
+    // Always give it enough spin to actually tumble, even on a lazy drop.
+    const speed = s.vel.length();
+    s.spin.set(
+      (Math.random() - .5) * 2 + -s.vel.z * 1.6,
+      (Math.random() - .5) * 6,
+      (Math.random() - .5) * 2 + s.vel.x * 1.6
+    ).clampLength(6 + speed, 26);
+    s.vel.y = Math.min(s.vel.y, 1.5);
+    s.still = 0;
+    heldDie = null;
+    canvas.style.cursor = "grab";
+    showDiceValues();
+    return;
+  }
+
   if (!dragging) return;
   setPointerFromEvent(e);
   raycaster.setFromCamera(pointer, camera);
@@ -725,12 +938,16 @@ renderPieces();
 // Both dice land in one half of the board, the way they do after a throw.
 dice(-4.1, .35, 5);
 dice(-3.0, -.5, 4);
+showDiceValues();
 
 const clock = new THREE.Clock();
 function animate() {
+  const dt = Math.min(clock.getDelta(), .25);
   const elapsed = clock.getElapsedTime();
   const lamp = scene.children.find(o => o.isPointLight);
   if (lamp) lamp.intensity = 42 + Math.sin(elapsed * 1.4) * 1.2;
+  // Sub-step so a fast throw cannot tunnel through the felt.
+  stepDicePhysics(dt);
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }
@@ -741,3 +958,4 @@ addEventListener("resize", () => {
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });
+
