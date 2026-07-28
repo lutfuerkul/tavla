@@ -1392,16 +1392,26 @@ starts.forEach((x, i) => {
 POINTS.barW = { x: 0, z: -TIP_Z * .5, baseZ: -TIP_Z * .45, dir: -1 };
 POINTS.barB = { x: 0, z: TIP_Z * .5, baseZ: TIP_Z * .45, dir: 1 };
 
-// Five checkers fill a point; anything beyond that starts a second layer on
-// top of the first five, exactly as it works on a real board.
+// Six checkers lie flat on a point. Past that they go on top — but set across
+// the join between two of the ones below rather than squarely on one, because
+// from a seat above the board a checker placed straight on top hides the one
+// under it and the pile reads as a single checker. Half a checker along makes
+// the layer above show as its own row.
+//
+// Each layer is therefore one shorter than the one below and starts half a
+// checker further in, so a tall point steps up as a pyramid: six, then five,
+// then four. That is nineteen before the apex, and fifteen is all either side
+// has.
+const CHECKERS_FLAT = 6;
+
 function checkerSeat(key, index) {
   const p = POINTS[key];
-  const layer = Math.floor(index / 5);
-  const slot = index % 5;
+  let layer = 0, slot = index, row = CHECKERS_FLAT;
+  while (slot >= row && row > 1) { slot -= row; layer++; row--; }
   return {
     x: p.x,
     y: .47 + layer * (CHECKER_H + .004),
-    z: p.baseZ + p.dir * slot * CHECKER_GAP,
+    z: p.baseZ + p.dir * (layer * CHECKER_GAP / 2 + slot * CHECKER_GAP),
   };
 }
 
