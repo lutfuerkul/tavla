@@ -10,7 +10,12 @@ const hud = document.querySelector("#hud");
 // only in what is laid inside it: how long the points run, how heavy the
 // braid is, and how the veneer is figured.
 const BOARDS = {
-  klasik: {
+  // The board that was on the table before any of this: a flat panel with a
+  // low frame round it, a strip down the middle, and two brass pins for the
+  // hinges. It is lit the way it was lit, which is darker than the trays can
+  // stand — they have walls to shade their own interiors, and this has none.
+  eski: {
+    shape: "panel",
     pointLen: 5,
     pointHalf: .5,
     braidBand: 13,
@@ -19,8 +24,22 @@ const BOARDS = {
     pale: ["#e4d6a6", "#c9b884"],
     dark: ["#432a13", "#2c1a09"],
     gloss: { roughness: .4, clearcoat: .34, clearcoatRoughness: .18 },
+    room: { env: .22, fill: .16, hemi: .42, ambient: .1 },
+  },
+  klasik: {
+    shape: "tray",
+    pointLen: 5,
+    pointHalf: .5,
+    braidBand: 13,
+    braidStep: 17,
+    veneer: { base: "#54381c", grain: "#1d0e03", eye: 95, figure: .35, mirrored: false },
+    pale: ["#e4d6a6", "#c9b884"],
+    dark: ["#432a13", "#2c1a09"],
+    gloss: { roughness: .4, clearcoat: .34, clearcoatRoughness: .18 },
+    room: { env: .5, fill: .3, hemi: .85, ambient: .22 },
   },
   star: {
+    shape: "tray",
     pointLen: 5.35,
     pointHalf: null,                 // bases meet: one braid serves two points
     braidBand: 26,
@@ -29,10 +48,11 @@ const BOARDS = {
     pale: ["#e4d6a6", "#c9b884"],
     dark: ["#6d4c2a", "#2a1608"],
     gloss: { roughness: .3, clearcoat: .95, clearcoatRoughness: .04 },
+    room: { env: .5, fill: .3, hemi: .85, ambient: .22 },
   },
 };
 const BOARD_KEY = "tavla.board";
-const boardName = localStorage.getItem(BOARD_KEY) === "star" ? "star" : "klasik";
+const boardName = BOARDS[localStorage.getItem(BOARD_KEY)] ? localStorage.getItem(BOARD_KEY) : "klasik";
 const BOARD = BOARDS[boardName];
 
 const scene = new THREE.Scene();
@@ -63,7 +83,7 @@ const pmremGenerator = new THREE.PMREMGenerator(renderer);
 scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
 // The room probe is only here to give the lacquer something to reflect. At
 // full strength it lights the whole board and flattens every material.
-scene.environmentIntensity = .5;
+scene.environmentIntensity = BOARD.room.env;
 
 function sitDown() {
   intro.classList.add("hidden");
@@ -382,8 +402,11 @@ const marquetryB = new THREE.MeshStandardMaterial({
   metalness: 0
 });
 
-function box(width, height, depth, material, x = 0, y = 0, z = 0) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
+function box(width, height, depth, material, x = 0, y = 0, z = 0, chamfer = false) {
+  const geometry = chamfer
+    ? new THREE.BoxGeometry(width, height, depth, 3, 2, 3)
+    : new THREE.BoxGeometry(width, height, depth);
+  const mesh = new THREE.Mesh(geometry, material);
   mesh.position.set(x, y, z);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -459,7 +482,65 @@ const CASE_BOTTOM = FELT_Y - FLOOR_T;
 const CASE_HALF_X = FIELD_HALF_X + WALL_T;
 const CASE_HALF_Z = FIELD_HALF + WALL_T;
 
+// What a die meets in the middle of the board: two full walls on the trays,
+// where a die thrown into one half stays in that half, and a five millimetre
+// ridge on the old panel, which a die rides straight over.
+const BAR_RISE = BOARD.shape === "panel" ? .11 : WALL_H / 2;
+const BAR_TOP = BOARD.shape === "panel" ? .61 : CASE_TOP;
+
 function addBoard() {
+  if (BOARD.shape === "panel") addPanelBoard(); else addTrayBoard();
+
+  starts.forEach((x, i) => {
+    point(x - POINT_HALF, x + POINT_HALF, -FIELD_HALF, -TIP_Z, i % 2 ? marquetryB : marquetryA);
+    point(x - POINT_HALF, x + POINT_HALF, FIELD_HALF, TIP_Z, i % 2 ? marquetryA : marquetryB);
+  });
+}
+
+// The old board: a panel sitting on a frame, with the middle of the board a
+// strip laid on top of it rather than anything you could bounce a die off.
+const PANEL_W = FIELD_HALF_X * 2 + .5;
+const PANEL_D = FIELD_HALF * 2 + .5;
+
+function addPanelBoard() {
+  const frame = new THREE.MeshPhysicalMaterial({
+    color: 0x120d09, roughness: .45, metalness: .04, clearcoat: .3, clearcoatRoughness: .22,
+  });
+  const bevel = new THREE.MeshPhysicalMaterial({
+    map: woodPanelTexture(512, 512, "#33210f", "#120802"),
+    roughness: .42, metalness: .04, clearcoat: .3, clearcoatRoughness: .2,
+  });
+  const panel = new THREE.MeshPhysicalMaterial({
+    map: woodPanelTexture(1024, 640, BOARD.veneer.base, BOARD.veneer.grain,
+      [[256, 320, 95], [768, 320, 95]], BOARD.veneer.figure),
+    metalness: .03, ...BOARD.gloss,
+  });
+
+  box(PANEL_W + 2.2, .45, PANEL_D + 2.2, frame, 0, 0, 0, true);
+  box(PANEL_W + 1.2, .18, PANEL_D + 1.2, bevel, 0, .28, 0, true);
+  box(PANEL_W, .1, PANEL_D, panel, 0, .42, 0);
+  box(BAR_HALF * 2, .22, PANEL_D + .18, frame, 0, .5, 0);
+
+  // Brass hinge pins across the centre seam, as it had.
+  [-PANEL_D * .28, PANEL_D * .28].forEach(z => {
+    const pin = new THREE.Mesh(new THREE.CylinderGeometry(.09, .09, .55, 16), brass);
+    pin.rotation.z = Math.PI / 2;
+    pin.position.set(0, .58, z);
+    pin.castShadow = true;
+    scene.add(pin);
+  });
+
+  // Pearl markers set into the long rails.
+  [-1, 1].forEach(side => {
+    [-4, -1.4, 1.4, 4].forEach(z => {
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(.055, 12, 10), pearl);
+      dot.position.set(side * (PANEL_W / 2 + .55), .62, z);
+      scene.add(dot);
+    });
+  });
+}
+
+function addTrayBoard() {
   // Two trays, hinged down the middle. Each is drawn as a floor with four
   // walls standing on it: the outer long wall, the two end walls, and the
   // inner wall at the seam. The walls run the full height of the case and the
@@ -489,11 +570,6 @@ function addBoard() {
     face.position.set(side * (BAR_HALF + FIELD_HALF_X) / 2, FELT_Y - .02, 0);
     face.receiveShadow = true;
     scene.add(face);
-  });
-
-  starts.forEach((x, i) => {
-    point(x - POINT_HALF, x + POINT_HALF, -FIELD_HALF, -TIP_Z, i % 2 ? marquetryB : marquetryA);
-    point(x - POINT_HALF, x + POINT_HALF, FIELD_HALF, TIP_Z, i % 2 ? marquetryA : marquetryB);
   });
 
   addHinges();
@@ -1289,8 +1365,8 @@ const CONTACT_SKIN = DIE_SIZE * .15;
 const DIE_HALVES = new THREE.Vector3(DIE_INNER, DIE_INNER, DIE_INNER);
 // The bar down the middle of the board stands proud of the felt, and the
 // checkers stand proud of that. Both are in the dice's way.
-const BAR_HALVES = new THREE.Vector3(BAR_HALF, WALL_H / 2, CASE_HALF_Z);
-const BAR_CENTRE = new THREE.Vector3(0, FELT_Y + WALL_H / 2, 0);
+const BAR_HALVES = new THREE.Vector3(BAR_HALF, BAR_RISE, CASE_HALF_Z);
+const BAR_CENTRE = new THREE.Vector3(0, BAR_TOP - BAR_RISE, 0);
 const CHECKER_HALVES = new THREE.Vector3(CHECKER_R, CHECKER_H / 2, CHECKER_R);
 // Nothing further away than this can be touching, whatever the angles.
 const CHECKER_RANGE = (CHECKER_R + DIE_INNER * Math.sqrt(3) + DIE_RADIUS) ** 2;
@@ -1521,17 +1597,18 @@ starts.forEach((x, i) => {
 POINTS.barW = { x: 0, z: -TIP_Z * .5, baseZ: -TIP_Z * .45, dir: -1 };
 POINTS.barB = { x: 0, z: TIP_Z * .5, baseZ: TIP_Z * .45, dir: 1 };
 
-// Six checkers lie flat on a point. Past that they go on top — but set across
-// the join between two of the ones below rather than squarely on one, because
-// from a seat above the board a checker placed straight on top hides the one
-// under it and the pile reads as a single checker. Half a checker along makes
-// the layer above show as its own row.
+// Five checkers lie flat on a point. Past that they go on top — but set
+// across the join between two of the ones below rather than squarely on one,
+// because from a seat above the board a checker placed straight on top hides
+// the one under it and the pile reads as a single checker. Half a checker
+// along makes the layer above show as its own row.
 //
 // Each layer is therefore one shorter than the one below and starts half a
-// checker further in, so a tall point steps up as a pyramid: six, then five,
-// then four. That is nineteen before the apex, and fifteen is all either side
-// has.
-const CHECKERS_FLAT = 6;
+// checker further in, so a tall point steps up as a pyramid: five, four,
+// three, two, one. That is fifteen, which is exactly what either side owns —
+// one colour piled on a single point comes out as a clean pyramid with a
+// single checker at its apex.
+const CHECKERS_FLAT = 5;
 
 function checkerSeat(key, index) {
   const p = POINTS[key];
@@ -1912,14 +1989,14 @@ function addRoom() {
   // Quadrant fills keep the corners of the board level with the middle, but
   // stay well under the key so they do not cancel its shading.
   [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([x, z]) => {
-    const fill = new THREE.DirectionalLight(0xeef1f4, .3);
+    const fill = new THREE.DirectionalLight(0xeef1f4, BOARD.room.fill);
     fill.position.set(x * 11, 7, z * 11);
     scene.add(fill);
   });
 
   // Just enough lift to keep the darks open rather than crushed.
-  scene.add(new THREE.HemisphereLight(0xdfe7ee, 0x40301f, .85));
-  scene.add(new THREE.AmbientLight(0xfff6e8, .22));
+  scene.add(new THREE.HemisphereLight(0xdfe7ee, 0x40301f, BOARD.room.hemi));
+  scene.add(new THREE.AmbientLight(0xfff6e8, BOARD.room.ambient));
 }
 
 addRoom();
