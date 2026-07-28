@@ -13,8 +13,8 @@ scene.background = new THREE.Color(0x100d0a);
 scene.fog = new THREE.FogExp2(0x100d0a, 0.038);
 
 const camera = new THREE.PerspectiveCamera(56, innerWidth / innerHeight, 0.1, 100);
-camera.position.set(0, 7.6, 12.2);
-camera.lookAt(0, 0.9, 0);
+camera.position.set(0, 9.6, 9.4);
+camera.lookAt(0, 0.6, 0);
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
@@ -206,28 +206,19 @@ function addBoard() {
   rail.position.y = .84;
   rail.scale.z = .69;
   scene.add(rail);
-
-  for (const x of [-6.4, 6.4]) {
-    for (const z of [-4.15, 4.15]) {
-      const ornament = new THREE.Mesh(new THREE.CylinderGeometry(.15, .15, .07, 20), gold);
-      ornament.position.set(x, .88, z);
-      ornament.castShadow = true;
-      scene.add(ornament);
-    }
-  }
 }
 
 function checker(x, z, material, stack = 1) {
   const group = new THREE.Group();
   for (let i = 0; i < stack; i++) {
     const body = new THREE.Mesh(new THREE.CylinderGeometry(.47, .52, .16, 48), material);
-    body.position.y = .63 + i * .18;
+    body.position.y = .55 + i * .16;
     body.castShadow = true;
     body.receiveShadow = true;
     group.add(body);
     const ring = new THREE.Mesh(new THREE.TorusGeometry(.4, .026, 8, 42), material === ivory ? gold : edgeWood);
     ring.rotation.x = Math.PI / 2;
-    ring.position.y = .72 + i * .18;
+    ring.position.y = .64 + i * .16;
     group.add(ring);
   }
   group.position.set(x, 0, z);
@@ -237,14 +228,14 @@ function checker(x, z, material, stack = 1) {
 function dice(x, z, face) {
   const material = new THREE.MeshPhysicalMaterial({ color: 0xefe6d3, roughness: .22, metalness: 0, clearcoat: .5, clearcoatRoughness: .1 });
   const die = new THREE.Mesh(new THREE.BoxGeometry(.72, .72, .72, 3, 3, 3), material);
-  die.position.set(x, 1.02, z);
+  die.position.set(x, .83, z);
   die.rotation.set(.16, .34, -.1);
   die.castShadow = true;
   scene.add(die);
   const dots = [[-.16, .38], [.16, .38], [0, 0], [-.16, -.38], [.16, -.38]];
   dots.slice(0, face).forEach(([dx, dz]) => {
     const dot = new THREE.Mesh(new THREE.SphereGeometry(.055, 16, 12), black);
-    dot.position.set(x + dx, 1.4, z + dz);
+    dot.position.set(x + dx, 1.21, z + dz);
     scene.add(dot);
   });
 }
