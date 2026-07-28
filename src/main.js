@@ -473,57 +473,117 @@ const PIP_LAYOUT = {
   6: [["lo", "lo"], ["hi", "lo"], ["lo", "mid"], ["hi", "mid"], ["lo", "hi"], ["hi", "hi"]],
 };
 
-function dieFaceTexture(value) {
-  const SIZE = 512;
+const PIP_TEXTURE_SIZE = 1024;
+// How deep a pip is drilled, as a fraction of its width, and the sine of the
+// resulting lean at the rim: for a cap of depth d in a pip of radius R the
+// ball that cut it has radius (R² + d²) / 2d, so sin θ at the rim is
+// 2(d/R) / (1 + (d/R)²).
+const PIP_DEPTH = .32;
+const PIP_LEAN = 2 * PIP_DEPTH / (1 + PIP_DEPTH * PIP_DEPTH);
+
+function faceCanvas() {
   const c = document.createElement("canvas");
-  c.width = c.height = SIZE;
-  const ctx = c.getContext("2d");
-  const k = SIZE / 256;
+  c.width = c.height = PIP_TEXTURE_SIZE;
+  return [c, c.getContext("2d"), PIP_TEXTURE_SIZE / 256];
+}
+
+// Two maps for one face, drawn from the same layout: what colour the face is,
+// and which way it faces. The pips are drilled wells, and the normal map is
+// what actually makes them read as holes — before it they were flat discs
+// with a highlight painted on the lit side, which is what a dome looks like,
+// not a hole. It goes on the lacquer as well as the resin underneath, because
+// a clearcoat left flat mirrors straight over the top of a well and fills it
+// back in.
+function dieFaceMaps(value) {
+  const [colourCanvas, ctx, k] = faceCanvas();
+  const [normalCanvas, normals] = faceCanvas();
+  const [roughCanvas, rough] = faceCanvas();
+  const surface = normals.createImageData(PIP_TEXTURE_SIZE, PIP_TEXTURE_SIZE);
+  const pixels = surface.data;
+  for (let i = 0; i < pixels.length; i += 4) {
+    pixels[i] = 128; pixels[i + 1] = 128; pixels[i + 2] = 255; pixels[i + 3] = 255;
+  }
 
   // Cast-resin white with the faintest warmth, near enough to flat.
   const wash = ctx.createRadialGradient(220 * k, 192 * k, 60 * k, 128 * k, 128 * k, 210 * k);
   wash.addColorStop(0, "#ffffff");
   wash.addColorStop(1, "#f3f1ec");
   ctx.fillStyle = wash;
-  ctx.fillRect(0, 0, SIZE, SIZE);
+  ctx.fillRect(0, 0, PIP_TEXTURE_SIZE, PIP_TEXTURE_SIZE);
+  // The body is polished; the paint filling the pips is not. The map scales
+  // the material's roughness, so the body is the darker value of the two.
+  rough.fillStyle = "#8f8f8f";
+  rough.fillRect(0, 0, PIP_TEXTURE_SIZE, PIP_TEXTURE_SIZE);
 
-  // Pips are drilled and filled: a hard, saturated colour with a thin shaded
-  // lip where the drill breaks the surface. The one is red, the rest are the
-  // dark brown-black of the reference dice.
-  // The one is drilled wider than the rest, as it is on real dice.
+  // The one is drilled wider than the rest, as it is on real dice, and filled
+  // red; the others take the dark brown-black of the reference dice.
   const R = (value === 1 ? 36 : 28) * k;
+  const red = value === 1;
   PIP_LAYOUT[value].forEach(([gx, gy]) => {
     const x = PIP_GRID[gx] * k;
     const y = PIP_GRID[gy] * k;
-    const red = value === 1;
 
     ctx.fillStyle = red ? "#c8161b" : "#2b211c";
     ctx.beginPath();
     ctx.arc(x, y, R, 0, Math.PI * 2);
     ctx.fill();
 
-    // Deeper toward the bottom of the well.
-    const shade = ctx.createRadialGradient(x - R * .28, y - R * .32, R * .08, x, y, R * 1.02);
-    shade.addColorStop(0, red ? "rgba(255,120,110,.55)" : "rgba(120,96,84,.5)");
-    shade.addColorStop(.55, "rgba(0,0,0,0)");
-    shade.addColorStop(1, "rgba(0,0,0,.45)");
-    ctx.fillStyle = shade;
+    rough.fillStyle = "#ffffff";
+    rough.beginPath();
+    rough.arc(x, y, R, 0, Math.PI * 2);
+    rough.fill();
+
+    // Ambient occlusion in the well: paint sitting in a drilled hollow is
+    // darkest where the wall turns over, whichever way the light happens to
+    // be. The shape of the lighting is left to the depth map.
+    const inWell = ctx.createRadialGradient(x, y, R * .15, x, y, R);
+    inWell.addColorStop(0, "rgba(0,0,0,0)");
+    inWell.addColorStop(.72, red ? "rgba(90,6,10,.30)" : "rgba(0,0,0,.26)");
+    inWell.addColorStop(1, red ? "rgba(70,4,8,.55)" : "rgba(0,0,0,.5)");
+    ctx.fillStyle = inWell;
     ctx.beginPath();
     ctx.arc(x, y, R, 0, Math.PI * 2);
     ctx.fill();
 
-    // Bright rim on the lit side of the drilled edge.
-    ctx.strokeStyle = "rgba(255,255,255,.5)";
-    ctx.lineWidth = 2 * k;
-    ctx.beginPath();
-    ctx.arc(x, y, R + k, Math.PI * .95, Math.PI * 1.85);
-    ctx.stroke();
+    // The well is a spherical cap, the shape a ball-nose drill leaves. On its
+    // wall the surface leans in towards the axis — straight up at the bottom,
+    // furthest over at the rim — so the normal is (-r̂ sin θ, cos θ) with
+    // sin θ = r / Rs, Rs being the radius of the ball that cut it. A pip is
+    // drilled about a third as deep as it is wide, so the rim leans over by
+    // thirty-odd degrees, not ninety: cut it as a full hemisphere and the pips
+    // come out as polished beads sitting in the face.
+    const span = Math.ceil(R) + 1;
+    for (let py = Math.floor(y - span); py <= y + span; py++) {
+      if (py < 0 || py >= PIP_TEXTURE_SIZE) continue;
+      for (let px = Math.floor(x - span); px <= x + span; px++) {
+        if (px < 0 || px >= PIP_TEXTURE_SIZE) continue;
+        const ux = (px + .5 - x) / R;
+        const uy = (py + .5 - y) / R;
+        const t = Math.hypot(ux, uy);
+        if (t > 1) continue;
+        // Ease the last of the wall off so the rim does not alias into a
+        // ring of stair steps.
+        const edge = t > .94 ? (1 - t) / .06 : 1;
+        const lean = t * PIP_LEAN;
+        const nz = Math.sqrt(Math.max(0, 1 - lean * lean));
+        const o = (py * PIP_TEXTURE_SIZE + px) * 4;
+        // Canvas y runs down the image and the green channel runs up it.
+        pixels[o] = Math.round((-ux * PIP_LEAN * edge * .5 + .5) * 255);
+        pixels[o + 1] = Math.round((uy * PIP_LEAN * edge * .5 + .5) * 255);
+        pixels[o + 2] = Math.round(((nz + (1 - nz) * (1 - edge)) * .5 + .5) * 255);
+      }
+    }
   });
+  normals.putImageData(surface, 0, 0);
 
-  const texture = new THREE.CanvasTexture(c);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 16;
-  return texture;
+  const map = new THREE.CanvasTexture(colourCanvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.anisotropy = 16;
+  const normalMap = new THREE.CanvasTexture(normalCanvas);
+  normalMap.anisotropy = 16;
+  const roughnessMap = new THREE.CanvasTexture(roughCanvas);
+  roughnessMap.anisotropy = 16;
+  return { map, normalMap, clearcoatNormalMap: normalMap, roughnessMap };
 }
 
 // Push a segmented cube's vertices onto a rounded-cube surface so the die
@@ -548,19 +608,26 @@ function roundedDieGeometry(size, radius, segments = 10) {
   return geometry;
 }
 
-// 10mm dice against the 36mm checker. Real dice break the corner only
-// slightly — about a twelfth of the edge.
+// 10mm dice against the 36mm checker. A moulded die has its corners properly
+// broken, not just eased — the collider uses this same radius, so the die
+// bounces on the corner you can see rather than on a sharp one hidden inside
+// it. Enough segments that the corner reads as turned rather than chamfered.
 const DIE_SIZE = 10 * MM;
-const dieGeometry = roundedDieGeometry(DIE_SIZE, DIE_SIZE * .085, 14);
+const DIE_RADIUS = DIE_SIZE * .15;
+const dieGeometry = roundedDieGeometry(DIE_SIZE, DIE_RADIUS, 24);
 // BoxGeometry material order is +x, -x, +y, -y, +z, -z. Opposite faces sum
 // to seven, exactly like a real die.
 const DIE_FACES = [1, 6, 2, 5, 3, 4];
 const dieMaterials = DIE_FACES.map(value => new THREE.MeshPhysicalMaterial({
-  map: dieFaceTexture(value),
-  roughness: .22,
+  ...dieFaceMaps(value),
+  // Polished resin: a slightly broken surface under a hard lacquer, rather
+  // than one uniform semi-gloss.
+  // The map takes this down to about a third for the polished body and leaves
+  // it here for the paint in the pips.
+  roughness: .62,
   metalness: 0,
-  clearcoat: .6,
-  clearcoatRoughness: .1,
+  clearcoat: .85,
+  clearcoatRoughness: .07,
 }));
 
 // Rotation that brings a given value onto the top (+y) face.
@@ -663,7 +730,7 @@ function lowestCorner(die) {
     v.copy(corner).applyQuaternion(die.quaternion);
     lowest = Math.min(lowest, die.position.y + v.y);
   }
-  return lowest;
+  return lowest - DIE_RADIUS;
 }
 
 // A resting die that gets hit hard enough joins the throw again.
@@ -689,12 +756,18 @@ function showDiceValues() {
 // touches, so bounce, skid, tumble and roll are not four effects dialled in
 // separately — they all fall out of the same solve.
 
-// Corner offsets from the centre. Contacts are found here, which is what lets
-// a die catch an edge and tumble instead of hovering like a ball.
-const DIE_CORNERS = [];
+// The die is not a sharp box: its corners are turned to a radius, and the
+// collider is the same shape the eye sees — a box of side (a - 2r) with a ball
+// of radius r rolled around it. So these eight offsets are the centres of the
+// corner balls, not the corners themselves, and every contact against the die
+// stands the ball's radius off them. Left as sharp corners the die would pivot
+// on a point a millimetre outside its own surface, hanging in the air on a
+// corner that is not there.
 const DIE_HALF = DIE_SIZE / 2;
+const DIE_INNER = DIE_HALF - DIE_RADIUS;
+const DIE_CORNERS = [];
 for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
-  DIE_CORNERS.push(new THREE.Vector3(sx, sy, sz).multiplyScalar(DIE_HALF));
+  DIE_CORNERS.push(new THREE.Vector3(sx, sy, sz).multiplyScalar(DIE_INNER));
 }
 
 // Real gravity, expressed in board units: a unit is 36mm, so 9.81 m/s² is
@@ -755,6 +828,7 @@ function stepDicePhysics(frameDt) {
     for (let i = 0; i < SOLVER_ITERATIONS; i++) {
       for (const c of contacts) solveContact(c);
     }
+    resolvePenetration();
     for (const die of diceMeshes) checkStopped(die, PHYSICS_STEP);
     physicsDebt -= PHYSICS_STEP;
   }
@@ -771,6 +845,7 @@ const _torque = new THREE.Vector3();
 const _offset = new THREE.Vector3();
 const _offsetB = new THREE.Vector3();
 const _corner = new THREE.Vector3();
+const _touch = new THREE.Vector3();
 const _local = new THREE.Vector3();
 const _normal = new THREE.Vector3();
 const _invQ = new THREE.Quaternion();
@@ -901,39 +976,120 @@ function collectContacts() {
   }
 }
 
+// The contacts say how the dice should move; this says where they are allowed
+// to be. It runs a few times over because the corrections argue with each
+// other: lifting a die off a checker can put it through a rail, holding it
+// inside the rails can put it into the other die, and either can push it back
+// onto the bar. Three passes settles it. The overlap is shared between two
+// dice and taken entirely by the die when the other party is the board.
+const PENETRATION_PASSES = 3;
+
+function resolvePenetration() {
+  for (let pass = 0; pass < PENETRATION_PASSES; pass++) {
+    for (const die of diceMeshes) {
+      if (die.userData.die.mode === "held") continue;
+      pushOffBar(die);
+      pushOffCheckers(die);
+    }
+    for (let i = 0; i < diceMeshes.length; i++) {
+      for (let k = i + 1; k < diceMeshes.length; k++) {
+        pushDiceApart(diceMeshes[i], diceMeshes[k]);
+      }
+    }
+    for (const die of diceMeshes) {
+      if (die.userData.die.mode !== "held") keepInsideField(die);
+    }
+  }
+}
+
+function pushOffBar(die) {
+  boxAxes(die, _axA);
+  if (!boxesOverlap(die.position, dieSupport, _axA, DIE_HALVES,
+                    BAR_CENTRE, boxSupport, WORLD_AXES, BAR_HALVES)) return;
+  die.position.addScaledVector(_sat.normal, _sat.depth);
+  die.userData.die.touching = true;
+}
+
+function pushOffCheckers(die) {
+  const reach = DIE_INNER * Math.sqrt(3) + DIE_RADIUS;
+  for (const checker of pieceMeshes) {
+    const dx = die.position.x - checker.position.x;
+    const dz = die.position.z - checker.position.z;
+    if (dx * dx + dz * dz > CHECKER_RANGE) continue;
+    _centre.set(checker.position.x, checker.position.y + CHECKER_H / 2, checker.position.z);
+    if (die.position.y - reach > _centre.y + CHECKER_H / 2) continue;
+    boxAxes(die, _axA);
+    if (!discOverlap(die.position, _axA, DIE_HALVES, _centre, CHECKER_HALVES)) continue;
+    die.position.addScaledVector(_sat.normal, _sat.depth);
+    die.userData.die.touching = true;
+  }
+}
+
+function pushDiceApart(dieA, dieB) {
+  if (dieA.userData.die.mode === "held" || dieB.userData.die.mode === "held") return;
+  boxAxes(dieA, _axA);
+  boxAxes(dieB, _axB);
+  if (!boxesOverlap(dieA.position, dieSupport, _axA, DIE_HALVES,
+                    dieB.position, dieSupport, _axB, DIE_HALVES)) return;
+  dieA.position.addScaledVector(_sat.normal, _sat.depth * .5);
+  dieB.position.addScaledVector(_sat.normal, _sat.depth * -.5);
+  dieA.userData.die.touching = true;
+  dieB.userData.die.touching = true;
+}
+
 // The felt, and the rails around the field. Every corner that has gone
 // through gets its own contact, so a die coming down flat is caught by four
 // of them and one landing on a single corner is spun about it. It is a corner
 // of the die that has to stop at a rail, not its centre.
 function boardContacts(die) {
   const s = die.userData.die;
-  let lift = 0, pushX = 0, sideX = 0, pushZ = 0, sideZ = 0;
 
   for (const corner of DIE_CORNERS) {
     _offset.copy(corner).applyQuaternion(die.quaternion);
     _corner.copy(_offset).add(die.position);
 
-    if (_corner.y < FELT_Y) {
-      lift = Math.max(lift, FELT_Y - _corner.y);
-      addContact(s, null, _offset, null, FELT_UP, FELT_BOUNCE, FELT_FRICTION);
+    if (_corner.y - DIE_RADIUS < FELT_Y) {
+      _touch.copy(_offset).addScaledVector(FELT_UP, -DIE_RADIUS);
+      addContact(s, null, _touch, null, FELT_UP, FELT_BOUNCE, FELT_FRICTION);
     }
-    const overX = Math.abs(_corner.x) - WALL_X;
+    const overX = Math.abs(_corner.x) + DIE_RADIUS - WALL_X;
     if (overX > 0) {
       _normal.set(-Math.sign(_corner.x), 0, 0);
-      addContact(s, null, _offset, null, _normal, RAIL_BOUNCE, RAIL_FRICTION);
-      if (overX > pushX) { pushX = overX; sideX = Math.sign(_corner.x); }
+      _touch.copy(_offset).addScaledVector(_normal, -DIE_RADIUS);
+      addContact(s, null, _touch, null, _normal, RAIL_BOUNCE, RAIL_FRICTION);
     }
-    const overZ = Math.abs(_corner.z) - WALL_Z;
+    const overZ = Math.abs(_corner.z) + DIE_RADIUS - WALL_Z;
     if (overZ > 0) {
       _normal.set(0, 0, -Math.sign(_corner.z));
-      addContact(s, null, _offset, null, _normal, RAIL_BOUNCE, RAIL_FRICTION);
-      if (overZ > pushZ) { pushZ = overZ; sideZ = Math.sign(_corner.z); }
+      _touch.copy(_offset).addScaledVector(_normal, -DIE_RADIUS);
+      addContact(s, null, _touch, null, _normal, RAIL_BOUNCE, RAIL_FRICTION);
     }
   }
 
+}
+
+// Whatever the bar and the checkers did to the die on the way past, it does
+// not finish a substep outside the field. Held back to the end so it is the
+// last word: correcting the rails first only for a checker to shove the die
+// back through them leaves it outside until the next substep catches it.
+function keepInsideField(die) {
+  let lift = 0, pushX = 0, sideX = 0, pushZ = 0, sideZ = 0;
+  for (const corner of DIE_CORNERS) {
+    _offset.copy(corner).applyQuaternion(die.quaternion);
+    _corner.copy(_offset).add(die.position);
+    lift = Math.max(lift, FELT_Y - (_corner.y - DIE_RADIUS));
+    const overX = Math.abs(_corner.x) + DIE_RADIUS - WALL_X;
+    if (overX > pushX) { pushX = overX; sideX = Math.sign(_corner.x); }
+    const overZ = Math.abs(_corner.z) + DIE_RADIUS - WALL_Z;
+    if (overZ > pushZ) { pushZ = overZ; sideZ = Math.sign(_corner.z); }
+  }
   if (lift > 0) die.position.y += lift;
   if (pushX > 0) die.position.x -= sideX * pushX;
   if (pushZ > 0) die.position.z -= sideZ * pushZ;
+  // Anything that had to be pushed was touching, whether or not the contact
+  // pass caught it. A die held up by this alone and never counted as touching
+  // is a die that never counts as stopped either.
+  if (lift > 0 || pushX > 0 || pushZ > 0) die.userData.die.touching = true;
 }
 
 // Everything a die can hit besides the felt is a convex solid, so they are
@@ -965,14 +1121,14 @@ const _sat = { depth: 0, normal: new THREE.Vector3() };
 // side of it and is not what is touching.
 const CONTACT_SKIN = DIE_SIZE * .15;
 
-const DIE_HALVES = new THREE.Vector3(DIE_HALF, DIE_HALF, DIE_HALF);
+const DIE_HALVES = new THREE.Vector3(DIE_INNER, DIE_INNER, DIE_INNER);
 // The bar down the middle of the board stands proud of the felt, and the
 // checkers stand proud of that. Both are in the dice's way.
 const BAR_HALVES = new THREE.Vector3(BAR_HALF, .11, (PANEL_D + .18) / 2);
 const BAR_CENTRE = new THREE.Vector3(0, .5, 0);
 const CHECKER_HALVES = new THREE.Vector3(CHECKER_R, CHECKER_H / 2, CHECKER_R);
 // Nothing further away than this can be touching, whatever the angles.
-const CHECKER_RANGE = (CHECKER_R + DIE_HALF * Math.sqrt(3)) ** 2;
+const CHECKER_RANGE = (CHECKER_R + DIE_INNER * Math.sqrt(3) + DIE_RADIUS) ** 2;
 const BAR_BOUNCE = .42, BAR_FRICTION = .32;
 const CHECKER_BOUNCE = .45, CHECKER_FRICTION = .3;
 
@@ -995,6 +1151,12 @@ function discSupport(axes, half, dir) {
   return half.x * Math.hypot(dir.x, dir.z) + half.y * Math.abs(dir.y);
 }
 
+// A die reaches its corner radius further than its inner box in every
+// direction, which is exactly what rolling a ball around a box does.
+function dieSupport(axes, half, dir) {
+  return boxSupport(axes, half, dir) + DIE_RADIUS;
+}
+
 // Walk a set of candidate axes, keeping the shallowest overlap. Bails out the
 // moment one of them shows a gap, because that alone proves they are apart.
 function shallowestOverlap(count, posA, supportA, axesA, halfA, posB, supportB, axesB, halfB) {
@@ -1015,7 +1177,7 @@ function shallowestOverlap(count, posA, supportA, axesA, halfA, posB, supportB, 
 
 // Box against box: the face normals of both, plus the cross products of their
 // edges, which is what catches two of them meeting corner to corner.
-function boxesOverlap(posA, axesA, halfA, posB, axesB, halfB) {
+function boxesOverlap(posA, supportA, axesA, halfA, posB, supportB, axesB, halfB) {
   let count = 0;
   for (let i = 0; i < 3; i++) _axes[count++].copy(axesA[i]);
   for (let i = 0; i < 3; i++) _axes[count++].copy(axesB[i]);
@@ -1025,8 +1187,8 @@ function boxesOverlap(posA, axesA, halfA, posB, axesB, halfB) {
       if (axis.lengthSq() > 1e-8) { axis.normalize(); count++; }   // skip parallel edges
     }
   }
-  return shallowestOverlap(count, posA, boxSupport, axesA, halfA,
-                                  posB, boxSupport, axesB, halfB);
+  return shallowestOverlap(count, posA, supportA, axesA, halfA,
+                                  posB, supportB, axesB, halfB);
 }
 
 // Box against checker. A disc has no edges to cross, so the candidates are its
@@ -1036,7 +1198,7 @@ function discOverlap(posA, axesA, halfA, posB, halfB) {
   _axes[1].set(posA.x - posB.x, 0, posA.z - posB.z);
   if (_axes[1].lengthSq() < 1e-9) _axes[1].set(1, 0, 0); else _axes[1].normalize();
   for (let i = 0; i < 3; i++) _axes[2 + i].copy(axesA[i]);
-  return shallowestOverlap(5, posA, boxSupport, axesA, halfA,
+  return shallowestOverlap(5, posA, dieSupport, axesA, halfA,
                               posB, discSupport, WORLD_AXES, halfB);
 }
 
@@ -1051,9 +1213,9 @@ function pressedCorners(die, centre, support, axes, half, towards) {
   _t1.normalize();
   _t2.crossVectors(n, _t1);
 
-  const reach = support(axes, half, n);
-  const spread1 = support(axes, half, _t1);
-  const spread2 = support(axes, half, _t2);
+  const reach = support(axes, half, n) + DIE_RADIUS;
+  const spread1 = support(axes, half, _t1) + DIE_RADIUS;
+  const spread2 = support(axes, half, _t2) + DIE_RADIUS;
 
   let found = 0;
   for (const corner of DIE_CORNERS) {
@@ -1063,7 +1225,8 @@ function pressedCorners(die, centre, support, axes, half, towards) {
     if (depth <= 0 || depth > _sat.depth + CONTACT_SKIN) continue;
     if (Math.abs(_local.dot(_t1)) > spread1) continue;
     if (Math.abs(_local.dot(_t2)) > spread2) continue;
-    _points[found++].copy(_corner);
+    // The ball touches a radius short of its own centre.
+    _points[found++].copy(_corner).addScaledVector(n, -towards * DIE_RADIUS);
   }
   return found;
 }
@@ -1074,13 +1237,13 @@ function barContacts(die) {
   const s = die.userData.die;
   if (s.mode !== "throw") return;
   boxAxes(die, _axA);
-  if (!boxesOverlap(die.position, _axA, DIE_HALVES, BAR_CENTRE, WORLD_AXES, BAR_HALVES)) return;
+  if (!boxesOverlap(die.position, dieSupport, _axA, DIE_HALVES,
+                    BAR_CENTRE, boxSupport, WORLD_AXES, BAR_HALVES)) return;
   const hits = pressedCorners(die, BAR_CENTRE, boxSupport, WORLD_AXES, BAR_HALVES, 1);
   for (let i = 0; i < hits; i++) {
     _offset.copy(_points[i]).sub(die.position);
     addContact(s, null, _offset, null, _sat.normal, BAR_BOUNCE, BAR_FRICTION);
   }
-  die.position.addScaledVector(_sat.normal, _sat.depth);
 }
 
 // The checkers. They are the board as far as a die is concerned: a die that
@@ -1090,7 +1253,7 @@ function checkerContacts(die) {
   const s = die.userData.die;
   if (s.mode !== "throw") return;
   boxAxes(die, _axA);
-  const reach = DIE_HALF * Math.sqrt(3);
+  const reach = DIE_INNER * Math.sqrt(3) + DIE_RADIUS;
   for (const checker of pieceMeshes) {
     const dx = die.position.x - checker.position.x;
     const dz = die.position.z - checker.position.z;
@@ -1104,7 +1267,6 @@ function checkerContacts(die) {
       _offset.copy(_points[i]).sub(die.position);
       addContact(s, null, _offset, null, _sat.normal, CHECKER_BOUNCE, CHECKER_FRICTION);
     }
-    die.position.addScaledVector(_sat.normal, _sat.depth);
   }
 }
 
@@ -1114,18 +1276,13 @@ function diePairContacts(dieA, dieB) {
   if (sa.mode === "held" || sb.mode === "held") return;
   boxAxes(dieA, _axA);
   boxAxes(dieB, _axB);
-  if (!boxesOverlap(dieA.position, _axA, DIE_HALVES, dieB.position, _axB, DIE_HALVES)) return;
+  if (!boxesOverlap(dieA.position, dieSupport, _axA, DIE_HALVES,
+                    dieB.position, dieSupport, _axB, DIE_HALVES)) return;
 
   let hits = pressedCorners(dieA, dieB.position, boxSupport, _axB, DIE_HALVES, 1);
   for (let i = 0; i < hits; i++) addDieContact(dieA, dieB, _points[i]);
   hits = pressedCorners(dieB, dieA.position, boxSupport, _axA, DIE_HALVES, -1);
   for (let i = 0; i < hits; i++) addDieContact(dieA, dieB, _points[i]);
-
-  // Then share the overlap out, once, along that same normal. Doing it per
-  // contact instead pushes the pair apart once for every corner that happens
-  // to be touching, and two dice that land together end up flung apart.
-  dieA.position.addScaledVector(_sat.normal, _sat.depth * .5);
-  dieB.position.addScaledVector(_sat.normal, _sat.depth * -.5);
 }
 
 // One contact between the pair, at a point both of them share.
