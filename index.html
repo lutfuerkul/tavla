@@ -13,8 +13,17 @@
         <p class="eyebrow">3B TAVLA</p>
         <h1>Masaya yaklaş.</h1>
         <p>Siyah ve kemik taşıyla hazırlanmış birinci şahıs tavla masası.</p>
-        <button id="enter">Masaya otur</button>
-        <p class="hint">Taşı sol tuşu basılı tutup sürükle. Zarlara basılı tut, en az iki saniye dönerler, bıraktığında karşıya fırlarlar.</p>
+        <div id="boards">
+          <button class="board-pick" data-board="klasik">
+            <span class="board-name">Klasik masa</span>
+            <span class="board-note">Ceviz zemin, ince kenarlık</span>
+          </button>
+          <button class="board-pick" data-board="star">
+            <span class="board-name">Ceviz kaplama masa</span>
+            <span class="board-note">Figürlü kaplama, örgü kenarlık, uzun haneler</span>
+          </button>
+        </div>
+        <p class="hint">Masayı seç ve otur. Taşı sol tuşu basılı tutup sürükle. Zarlara basılı tut, en az iki saniye dönerler, bıraktığında karşıya fırlarlar.</p>
       </section>
       <aside id="hud" aria-live="polite">
         <div><span>SIRA</span><strong>KEMİK</strong></div>

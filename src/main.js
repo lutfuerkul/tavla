@@ -3,8 +3,37 @@ import { RoomEnvironment } from "../vendor/three/examples/jsm/environments/RoomE
 
 const canvas = document.querySelector("#scene");
 const intro = document.querySelector("#intro");
-const enter = document.querySelector("#enter");
 const hud = document.querySelector("#hud");
+
+// Two boards to choose from at the door. They share the case — the tray
+// walls, the seam and the hinges are the same joinery on both — and differ
+// only in what is laid inside it: how long the points run, how heavy the
+// braid is, and how the veneer is figured.
+const BOARDS = {
+  klasik: {
+    pointLen: 5,
+    pointHalf: .5,
+    braidBand: 13,
+    braidStep: 17,
+    veneer: { base: "#54381c", grain: "#1d0e03", eye: 95, figure: .35, mirrored: false },
+    pale: ["#e4d6a6", "#c9b884"],
+    dark: ["#432a13", "#2c1a09"],
+    gloss: { roughness: .4, clearcoat: .34, clearcoatRoughness: .18 },
+  },
+  star: {
+    pointLen: 5.35,
+    pointHalf: null,                 // bases meet: one braid serves two points
+    braidBand: 26,
+    braidStep: 30,
+    veneer: { base: "#7b5730", grain: "#251306", eye: 165, figure: 1, mirrored: true },
+    pale: ["#e4d6a6", "#c9b884"],
+    dark: ["#6d4c2a", "#2a1608"],
+    gloss: { roughness: .3, clearcoat: .95, clearcoatRoughness: .04 },
+  },
+};
+const BOARD_KEY = "tavla.board";
+const boardName = localStorage.getItem(BOARD_KEY) === "star" ? "star" : "klasik";
+const BOARD = BOARDS[boardName];
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x060402);
@@ -36,10 +65,27 @@ scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).textur
 // full strength it lights the whole board and flattens every material.
 scene.environmentIntensity = .5;
 
-enter.addEventListener("click", () => {
+function sitDown() {
   intro.classList.add("hidden");
   hud.classList.add("visible");
+}
+
+// Picking the board that is already on the table just opens the door. Picking
+// the other one has to reload, because the two differ in the geometry of the
+// points and that is settled before the scene is built.
+document.querySelectorAll("[data-board]").forEach(button => {
+  button.classList.toggle("chosen", button.dataset.board === boardName);
+  button.addEventListener("click", () => {
+    if (button.dataset.board === boardName) return sitDown();
+    localStorage.setItem(BOARD_KEY, button.dataset.board);
+    sessionStorage.setItem("tavla.sitOnLoad", "1");
+    location.reload();
+  });
 });
+if (sessionStorage.getItem("tavla.sitOnLoad")) {
+  sessionStorage.removeItem("tavla.sitOnLoad");
+  sitDown();
+}
 
 // Advanced Perlin-like noise function for organic wood grain
 function noise(x, y, seed = 0) {
@@ -65,7 +111,7 @@ function fbm(x, y, octaves = 6, seed = 0) {
 
 // Professional rosewood grain using advanced procedural generation
 // Matches reference board with organic, realistic wood appearance
-function woodPanelTexture(w, h, base, grain, eyes) {
+function woodPanelTexture(w, h, base, grain, eyes, figure = 1) {
   const c = document.createElement("canvas");
   c.width = w; c.height = h;
   const ctx = c.getContext("2d");
@@ -139,10 +185,10 @@ function woodPanelTexture(w, h, base, grain, eyes) {
   // Add wood grain eyes (burls)
   (eyes || []).forEach(([ex, ey, r]) => {
     for (let ring = 14; ring > 0; ring--) {
-      const alpha = (0.12 + (12 - ring) * 0.012) * (1 - ring / 14);
+      const alpha = (0.12 + (12 - ring) * 0.012) * (1 - ring / 14) * figure;
       ctx.strokeStyle = grain;
       ctx.globalAlpha = alpha;
-      ctx.lineWidth = 1.6 + Math.random() * 1.1;
+      ctx.lineWidth = (1.6 + Math.random() * 1.1) * (0.5 + figure * 0.5);
       ctx.beginPath();
       ctx.ellipse(ex, ey, (r * ring) / 14, (r * ring) / 14 * 0.55, Math.random() * 0.22, 0, Math.PI * 2);
       ctx.stroke();
@@ -219,8 +265,8 @@ function marquetryPointTexture(body, bodyShade, withInlay = true) {
   // last one, and the top two thirds of the point come out as solid cream
   // with the braid only legible down by the base.
   if (withInlay) {
-    const BAND = 26;                       // width of the braid, in texture px
-    const STEP = 30;                       // spacing of the strands along it
+    const BAND = BOARD.braidBand;          // width of the braid, in texture px
+    const STEP = BOARD.braidStep;          // spacing of the strands along it
     ctx.save();
     ctx.clip(outer);
     [[bl, 1], [br, -1]].forEach(([corner, sign]) => {
@@ -285,19 +331,20 @@ const shell = new THREE.MeshPhysicalMaterial({
 });
 // One leaf of veneer, split and opened out, so the two halves mirror each
 // other and the figure lands at the centre of both.
-const veneerTexture = woodPanelTexture(768, 900, "#7b5730", "#251306", [[384, 450, 165]]);
+const veneerTexture = woodPanelTexture(768, 900, BOARD.veneer.base, BOARD.veneer.grain,
+  [[384, 450, BOARD.veneer.eye]], BOARD.veneer.figure);
 const veneerL = new THREE.MeshPhysicalMaterial({
   map: veneerTexture,
-  roughness: .3,
   metalness: .03,
-  clearcoat: .95,
-  clearcoatRoughness: .04,
+  ...BOARD.gloss,
 });
 const veneerR = veneerL.clone();
-veneerR.map = veneerTexture.clone();
-veneerR.map.wrapS = THREE.RepeatWrapping;
-veneerR.map.repeat.x = -1;
-veneerR.map.needsUpdate = true;
+if (BOARD.veneer.mirrored) {
+  veneerR.map = veneerTexture.clone();
+  veneerR.map.wrapS = THREE.RepeatWrapping;
+  veneerR.map.repeat.x = -1;
+  veneerR.map.needsUpdate = true;
+}
 // Aged brass: the hinges on the reference board have gone dull and warm.
 const brass = new THREE.MeshStandardMaterial({ color: 0x9b7f4b, roughness: .5, metalness: .85 });
 const screwSlot = new THREE.MeshStandardMaterial({ color: 0x2a2216, roughness: .6, metalness: .5 });
@@ -325,12 +372,12 @@ const black = new THREE.MeshPhysicalMaterial({
 });
 // Points alternate pale maple and dark walnut, both carrying the same inlay.
 const marquetryA = new THREE.MeshStandardMaterial({
-  map: marquetryPointTexture("#e4d6a6", "#c9b884"),
+  map: marquetryPointTexture(...BOARD.pale),
   roughness: .5,
   metalness: 0
 });
 const marquetryB = new THREE.MeshStandardMaterial({
-  map: marquetryPointTexture("#6d4c2a", "#2a1608", false),
+  map: marquetryPointTexture(...BOARD.dark, false),
   roughness: .52,
   metalness: 0
 });
@@ -382,9 +429,9 @@ function point(x0, x1, zOuter, zTip, material) {
 // 1.71:1, only ten checkers deep, and its outer points hung off the felt.
 const CHECKER_D = 1.0;
 const PITCH = CHECKER_D * 1.06;      // centre-to-centre of neighbouring points
-const POINT_HALF = PITCH / 2;        // bases meet, so one braid serves two points
+const POINT_HALF = BOARD.pointHalf ?? PITCH / 2;
 const BAR_HALF = .42;
-const POINT_LEN = CHECKER_D * 5.35;  // long, so the facing tips nearly meet
+const POINT_LEN = CHECKER_D * BOARD.pointLen;
 const FIELD_HALF = CHECKER_D * 6;    // twelve checkers of depth, halved
 const TIP_Z = FIELD_HALF - POINT_LEN;
 
