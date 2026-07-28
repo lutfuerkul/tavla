@@ -841,15 +841,19 @@ function resetState() {
   for (let n = 1; n <= 24; n++) state[n] = { color: null, count: 0 };
   state.barW = { color: "ivory", count: 0 };
   state.barB = { color: "black", count: 0 };
-  // Standard backgammon starting position, 15 checkers per side.
-  state[24] = { color: "ivory", count: 2 };
-  state[13] = { color: "ivory", count: 5 };
-  state[8] = { color: "ivory", count: 3 };
-  state[6] = { color: "ivory", count: 5 };
-  state[1] = { color: "black", count: 2 };
-  state[12] = { color: "black", count: 5 };
-  state[17] = { color: "black", count: 3 };
-  state[19] = { color: "black", count: 5 };
+  // Opening layout, 15 checkers a side. Points 1-12 are the row furthest from
+  // the seat, 13-24 the near one, and a point faces its mirror at 25 minus
+  // its number — same column, other row — so the two colours sit opposite
+  // each other in matching runs.
+  state[12] = { color: "black", count: 2 };   // far row, far left
+  state[1] = { color: "black", count: 5 };    // far row, far right
+  state[17] = { color: "black", count: 5 };   // near row, left of the bar
+  state[19] = { color: "black", count: 3 };   // near row, right of the bar
+
+  state[13] = { color: "ivory", count: 2 };   // opposite point 12
+  state[24] = { color: "ivory", count: 5 };   // opposite point 1
+  state[8] = { color: "ivory", count: 5 };    // opposite point 17
+  state[6] = { color: "ivory", count: 3 };    // opposite point 19
 }
 
 const piecesGroup = new THREE.Group();
