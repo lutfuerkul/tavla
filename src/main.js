@@ -1926,8 +1926,16 @@ addEventListener("pointerup", (e) => {
   raycaster.setFromCamera(pointer, camera);
   const hit = new THREE.Vector3();
   if (raycaster.ray.intersectPlane(dragPlane, hit)) {
+    // The bar is not somewhere you can put a checker down — one only ever
+    // arrives there by being hit — and leaving it in this search made it a
+    // target with an enormous catchment. Its anchor sits in the middle of the
+    // board, nearer to the tip half of the two points either side of it than
+    // those points' own anchors are, so a checker dropped on the inner end of
+    // them walked itself out to the middle instead of landing where it was
+    // put. The drop resolves to one of the twenty-four points, and only those.
     let bestKey = null, bestDist = Infinity;
     for (const key in POINTS) {
+      if (key === "barW" || key === "barB") continue;
       const p = POINTS[key];
       const d = (p.x - hit.x) ** 2 + (p.z - hit.z) ** 2;
       if (d < bestDist) { bestDist = d; bestKey = key; }
