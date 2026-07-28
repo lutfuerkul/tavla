@@ -13,7 +13,7 @@ scene.fog = new THREE.FogExp2(0x060402, 0.04);
 // Fixed, near-top-down seat at the table — the camera never moves once
 // seated, so the mouse is free to drag checkers instead of looking around.
 const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.1, 100);
-camera.position.set(0, 12.4, 3.6);
+camera.position.set(0, 16.4, 5.1);
 camera.lookAt(0, 0.4, 0);
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -359,26 +359,45 @@ function point(x0, x1, zOuter, zTip, material) {
   scene.add(mesh);
 }
 
-// x-position of each of the 12 points along one edge of the board.
-// Mirrored front/back, this lays out the full 24-point board.
-const starts = [-6.55, -5.47, -4.39, -3.31, -2.23, -1.15, 1.15, 2.23, 3.31, 4.39, 5.47, 6.55];
-const NEAR_Z = -3.55;
-const FAR_Z = 3.55;
+// Everything below is derived from one number: the checker diameter. A real
+// board is laid out in checker-widths — a point holds five, the two facing
+// points leave a two-checker gap down the middle, so the playing field is
+// twelve checkers deep. Adjacent points sit about one checker apart, which
+// makes the open board very close to square. The board this replaces was
+// 1.71:1, only ten checkers deep, and its outer points hung off the felt.
+const CHECKER_D = 1.0;
+const PITCH = CHECKER_D * 1.06;      // centre-to-centre of neighbouring points
+const POINT_HALF = .5;               // half the width of a point's base
+const BAR_HALF = .42;
+const POINT_LEN = CHECKER_D * 5;     // a point holds exactly five checkers
+const FIELD_HALF = CHECKER_D * 6;    // twelve checkers of depth, halved
+const TIP_Z = FIELD_HALF - POINT_LEN;
+
+// Six columns either side of the bar, mirrored front to back for 24 points.
+const starts = [];
+for (let k = 5; k >= 0; k--) starts.push(-(BAR_HALF + POINT_HALF + PITCH * k));
+for (let k = 0; k <= 5; k++) starts.push(BAR_HALF + POINT_HALF + PITCH * k);
+const NEAR_Z = -(FIELD_HALF - POINT_LEN / 2);
+const FAR_Z = FIELD_HALF - POINT_LEN / 2;
+
+const FIELD_HALF_X = starts[starts.length - 1] + POINT_HALF;
+const PANEL_W = FIELD_HALF_X * 2 + .5;
+const PANEL_D = FIELD_HALF * 2 + .5;
 
 function addBoard() {
-  box(15.6, .45, 10.9, frame, 0, 0, 0, true);
-  box(14.6, .18, 9.9, bevel, 0, .28, 0, true);
-  box(13.35, .1, 8.65, panel, 0, .42, 0);
-  box(.72, .22, 8.83, frame, 0, .5, 0);
+  box(PANEL_W + 2.2, .45, PANEL_D + 2.2, frame, 0, 0, 0, true);
+  box(PANEL_W + 1.2, .18, PANEL_D + 1.2, bevel, 0, .28, 0, true);
+  box(PANEL_W, .1, PANEL_D, panel, 0, .42, 0);
+  box(BAR_HALF * 2, .22, PANEL_D + .18, frame, 0, .5, 0);
 
   starts.forEach((x, i) => {
-    point(x - .53, x + .53, -4.15, -.3, i % 2 ? marquetryB : marquetryA);
-    point(x - .53, x + .53, 4.15, .3, i % 2 ? marquetryA : marquetryB);
+    point(x - POINT_HALF, x + POINT_HALF, -FIELD_HALF, -TIP_Z, i % 2 ? marquetryB : marquetryA);
+    point(x - POINT_HALF, x + POINT_HALF, FIELD_HALF, TIP_Z, i % 2 ? marquetryA : marquetryB);
   });
 
   // Brass hinge pins across the centre seam, like a folding board's hinges.
-  [-1.6, 1.6].forEach(z => {
-    const hinge = new THREE.Mesh(new THREE.CylinderGeometry(.09, .09, .5, 16), brass);
+  [-PANEL_D * .28, PANEL_D * .28].forEach(z => {
+    const hinge = new THREE.Mesh(new THREE.CylinderGeometry(.09, .09, .55, 16), brass);
     hinge.rotation.z = Math.PI / 2;
     hinge.position.set(0, .58, z);
     hinge.castShadow = true;
@@ -386,8 +405,9 @@ function addBoard() {
   });
 
   // Small pearl position markers set into the long rails.
-  [-7.36, 7.36].forEach(x => {
-    [-3, -1, 1, 3].forEach(z => {
+  const railX = PANEL_W / 2 + .55;
+  [-railX, railX].forEach(x => {
+    [-4, -1.4, 1.4, 4].forEach(z => {
       const dot = new THREE.Mesh(new THREE.SphereGeometry(.055, 12, 10), pearl);
       dot.position.set(x, .62, z);
       scene.add(dot);
@@ -397,21 +417,21 @@ function addBoard() {
 
 // Dished checker profile, taken straight from the reference pieces: a raised
 // outer rim around a recessed circular dimple, with a rounded outer edge.
-const CHECKER_R = .41;
-const CHECKER_H = .118;
+const CHECKER_R = CHECKER_D / 2;
+const CHECKER_H = .145;
 // Profile runs bottom-centre outwards and up to the dished top. Listing it
 // in this order is what makes the revolved normals face outwards — reversed,
 // the discs render inside-out and read as hollow rings.
 const checkerGeometry = new THREE.LatheGeometry([
   new THREE.Vector2(0, 0),
-  new THREE.Vector2(.37, 0),
-  new THREE.Vector2(CHECKER_R, .013),
-  new THREE.Vector2(CHECKER_R, .108),
-  new THREE.Vector2(.38, CHECKER_H),
-  new THREE.Vector2(.31, .115),
-  new THREE.Vector2(.24, .089),
-  new THREE.Vector2(.13, .081),
-  new THREE.Vector2(0, .078),
+  new THREE.Vector2(.45, 0),
+  new THREE.Vector2(CHECKER_R, .016),
+  new THREE.Vector2(CHECKER_R, .132),
+  new THREE.Vector2(.46, CHECKER_H),
+  new THREE.Vector2(.38, .141),
+  new THREE.Vector2(.29, .109),
+  new THREE.Vector2(.16, .099),
+  new THREE.Vector2(0, .095),
 ], 64);
 
 // --- Dice ------------------------------------------------------------
@@ -531,14 +551,16 @@ function dice(x, z, face) {
 // Each point stores the anchor used for drop hit-testing plus the seat of
 // its first checker and the direction the rest of them run in — checkers
 // lie down the length of a point, they are not stacked into a tower.
-const CHECKER_GAP = .8;
+const CHECKER_GAP = CHECKER_D;
 const POINTS = {};
 starts.forEach((x, i) => {
-  POINTS[12 - i] = { x, z: NEAR_Z, baseZ: -4.15 + CHECKER_R + .06, dir: 1 };
-  POINTS[13 + i] = { x, z: FAR_Z, baseZ: 4.15 - CHECKER_R - .06, dir: -1 };
+  POINTS[12 - i] = { x, z: NEAR_Z, baseZ: -FIELD_HALF + CHECKER_R, dir: 1 };
+  POINTS[13 + i] = { x, z: FAR_Z, baseZ: FIELD_HALF - CHECKER_R, dir: -1 };
 });
-POINTS.barW = { x: 0, z: -1.45, baseZ: -1.0, dir: -1 };
-POINTS.barB = { x: 0, z: 1.45, baseZ: 1.0, dir: 1 };
+// Checkers sent to the bar sit on the centre divider, in the gap the two
+// facing rows of points leave open.
+POINTS.barW = { x: 0, z: -TIP_Z * .5, baseZ: -TIP_Z * .45, dir: -1 };
+POINTS.barB = { x: 0, z: TIP_Z * .5, baseZ: TIP_Z * .45, dir: 1 };
 
 // Five checkers fill a point; anything beyond that starts a second layer on
 // top of the first five, exactly as it works on a real board.
@@ -667,31 +689,31 @@ function addRoom() {
 
   // Key light: a warm lamp hanging over the board. It carries the shadows,
   // everything else only lifts the darks.
-  const key = new THREE.DirectionalLight(0xffe9c4, 1.5);
+  const key = new THREE.DirectionalLight(0xffe9c4, 2.1);
   key.position.set(-5, 12, 5);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
   key.shadow.bias = -0.0004;
-  key.shadow.camera.left = -11;
-  key.shadow.camera.right = 11;
-  key.shadow.camera.top = 9;
-  key.shadow.camera.bottom = -9;
+  key.shadow.camera.left = -13;
+  key.shadow.camera.right = 13;
+  key.shadow.camera.top = 13;
+  key.shadow.camera.bottom = -13;
   key.shadow.camera.near = 1;
-  key.shadow.camera.far = 30;
+  key.shadow.camera.far = 34;
   scene.add(key);
 
   // Warm falloff over the centre of the board so the middle glows slightly
   // brighter than the rails, the way a table lamp actually behaves.
-  const lamp = new THREE.PointLight(0xffd9a0, 26, 26, 2);
-  lamp.position.set(0.5, 8.5, 1);
+  const lamp = new THREE.PointLight(0xffd9a0, 42, 34, 2);
+  lamp.position.set(0.5, 10.5, 1);
   scene.add(lamp);
 
   // Cool sky bounce, kept low — this is what was washing the board out.
-  const fill = new THREE.HemisphereLight(0x9fb4c4, 0x120a05, .35);
+  const fill = new THREE.HemisphereLight(0x9fb4c4, 0x120a05, .55);
   scene.add(fill);
 
   // Gentle opposite-side fill so the far row is not left in the dark.
-  const side = new THREE.DirectionalLight(0xbcd0dc, .35);
+  const side = new THREE.DirectionalLight(0xbcd0dc, .55);
   side.position.set(7, 9, -6);
   scene.add(side);
 }
@@ -701,14 +723,14 @@ addBoard();
 resetState();
 renderPieces();
 // Both dice land in one half of the board, the way they do after a throw.
-dice(-3.95, .15, 5);
-dice(-2.95, -.45, 4);
+dice(-4.1, .35, 5);
+dice(-3.0, -.5, 4);
 
 const clock = new THREE.Clock();
 function animate() {
   const elapsed = clock.getElapsedTime();
   const lamp = scene.children.find(o => o.isPointLight);
-  if (lamp) lamp.intensity = 26 + Math.sin(elapsed * 1.4) * .8;
+  if (lamp) lamp.intensity = 42 + Math.sin(elapsed * 1.4) * 1.2;
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }
