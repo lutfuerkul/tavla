@@ -21,3 +21,12 @@ button:hover { background: #edbb69; }
 #crosshair { position: fixed; z-index: 1; top: 50%; left: 50%; width: 8px; height: 8px; margin: -4px; border: 1px solid rgba(247,235,207,.8); border-radius: 50%; opacity: 0; transition: opacity .35s; }
 #crosshair.visible { opacity: .8; }
 @media (max-width: 600px) { #hud { top: .8rem; left: .8rem; gap: .5rem; } #hud div { min-width: 5.8rem; } }
+/* Two boards to choose from at the door. */
+#boards { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+.board-pick { display: grid; gap: .35rem; padding: 1rem 1.4rem; min-width: 13rem; text-align: left;
+  background: rgba(20,15,10,.72); color: #e8dcc4; border: 1px solid rgba(229,173,84,.28);
+  border-radius: .5rem; cursor: pointer; transition: border-color .2s ease, background .2s ease; }
+.board-pick:hover { border-color: rgba(229,173,84,.75); background: rgba(34,25,15,.85); }
+.board-pick.chosen { border-color: #e5ad54; }
+.board-name { font-size: .95rem; letter-spacing: .04em; }
+.board-note { font-size: .68rem; color: #9b907e; line-height: 1.5; }
