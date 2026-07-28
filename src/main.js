@@ -24,17 +24,51 @@ renderer.toneMappingExposure = 1.08;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const controls = new PointerLockControls(camera, document.body);
-controls.addEventListener("lock", () => {
+
+function showTable() {
   intro.classList.add("hidden");
   hud.classList.add("visible");
   crosshair.classList.add("visible");
-});
-controls.addEventListener("unlock", () => {
+}
+function showIntro() {
   intro.classList.remove("hidden");
   hud.classList.remove("visible");
   crosshair.classList.remove("visible");
+}
+
+controls.addEventListener("unlock", showIntro);
+
+enter.addEventListener("click", () => {
+  showTable();
+  try {
+    controls.lock();
+  } catch {
+    // Pointer Lock unsupported/blocked (touch devices, some embedded
+    // browsers) — the drag-to-look fallback below still lets the
+    // player look around, so the table stays visible either way.
+  }
 });
-enter.addEventListener("click", () => controls.lock());
+
+let dragging = false;
+let lastX = 0;
+let lastY = 0;
+let yaw = 0;
+let pitch = 0;
+canvas.addEventListener("pointerdown", (event) => {
+  if (controls.isLocked) return;
+  dragging = true;
+  lastX = event.clientX;
+  lastY = event.clientY;
+});
+addEventListener("pointerup", () => { dragging = false; });
+addEventListener("pointermove", (event) => {
+  if (!dragging || controls.isLocked) return;
+  yaw -= (event.clientX - lastX) * 0.0035;
+  pitch = Math.max(-1.2, Math.min(1.2, pitch - (event.clientY - lastY) * 0.0035));
+  lastX = event.clientX;
+  lastY = event.clientY;
+  camera.rotation.set(pitch, yaw, 0, "YXZ");
+});
 
 const wood = new THREE.MeshStandardMaterial({ color: 0x442315, roughness: .3, metalness: .08 });
 const edgeWood = new THREE.MeshStandardMaterial({ color: 0x1e0d08, roughness: .22, metalness: .2 });
