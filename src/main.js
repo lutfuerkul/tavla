@@ -13,7 +13,7 @@ scene.fog = new THREE.FogExp2(0x060402, 0.04);
 // Fixed, near-top-down seat at the table — the camera never moves once
 // seated, so the mouse is free to drag checkers instead of looking around.
 const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.1, 100);
-camera.position.set(0, 16.4, 5.1);
+camera.position.set(0, 17.6, 5.7);
 camera.lookAt(0, 0.4, 0);
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -801,10 +801,11 @@ function setPointerFromEvent(e) {
 }
 
 // Dice are lifted onto a plane above the board while held, so the throw can
-// be aimed by flicking the pointer.
+// be aimed by flicking the pointer. Both dice always come up together and are
+// thrown as a pair — you shake the cup, not one die at a time.
 const LIFT_Y = 1.5;
 const liftPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -LIFT_Y);
-let heldDie = null;
+let heldDice = null;
 
 function pointerOnPlane(plane, out) {
   raycaster.setFromCamera(pointer, camera);
@@ -816,14 +817,26 @@ canvas.addEventListener("pointerdown", (e) => {
   raycaster.setFromCamera(pointer, camera);
 
   // Dice sit on top of everything, so they get first claim on the pointer.
+  // Grabbing either one scoops up the whole pair.
   const dieHit = raycaster.intersectObjects(diceMeshes, false);
   if (dieHit.length) {
-    const die = dieHit[0].object;
-    const s = die.userData.die;
-    s.mode = "held";
-    s.vel.set(0, 0, 0);
-    s.still = 0;
-    heldDie = { die, last: die.position.clone(), lastT: performance.now() };
+    const anchor = pointerOnPlane(liftPlane, new THREE.Vector3())
+      || dieHit[0].object.position.clone();
+    heldDice = {
+      last: anchor.clone(),
+      lastT: performance.now(),
+      vel: new THREE.Vector3(),
+      shake: 0,
+      entries: diceMeshes.map((die, i) => {
+        const s = die.userData.die;
+        s.mode = "held";
+        s.vel.set(0, 0, 0);
+        s.still = 0;
+        // Sit them either side of the hand so they read as a pair.
+        const angle = i * Math.PI + Math.random() * .6;
+        return { die, radius: .26 + i * .04, phase: angle };
+      }),
+    };
     canvas.setPointerCapture?.(e.pointerId);
     canvas.style.cursor = "grabbing";
     showDiceValues();
@@ -839,38 +852,56 @@ canvas.addEventListener("pointerdown", (e) => {
 });
 
 addEventListener("pointermove", (e) => {
-  if (!heldDie) return;
+  if (!heldDice) return;
   setPointerFromEvent(e);
   const target = pointerOnPlane(liftPlane, new THREE.Vector3());
   if (!target) return;
-  const { die } = heldDie;
   const now = performance.now();
-  const dt = Math.max((now - heldDie.lastT) / 1000, 1 / 240);
+  const dt = Math.max((now - heldDice.lastT) / 1000, 1 / 240);
+
   // Velocity of the hand, kept for the moment of release.
-  die.userData.die.vel.copy(target).sub(heldDie.last).divideScalar(dt).clampLength(0, 26);
-  die.position.copy(target);
-  // Tumble a little while it is being waved around.
-  die.rotateX(dt * 2.4);
-  die.rotateY(dt * 1.7);
-  heldDie.last.copy(target);
-  heldDie.lastT = now;
+  heldDice.vel.copy(target).sub(heldDice.last).divideScalar(dt).clampLength(0, 26);
+  // Shaking harder swirls them faster around each other.
+  heldDice.shake += dt * (3 + heldDice.vel.length() * .6);
+
+  heldDice.entries.forEach(({ die, radius, phase }, i) => {
+    const a = heldDice.shake + phase;
+    die.position.set(
+      target.x + Math.cos(a) * radius,
+      target.y + i * .05,
+      target.z + Math.sin(a) * radius
+    );
+    die.rotateX(dt * (3.2 + i));
+    die.rotateY(dt * (2.4 + i * .8));
+  });
+
+  heldDice.last.copy(target);
+  heldDice.lastT = now;
 });
 
 addEventListener("pointerup", (e) => {
-  if (heldDie) {
-    const { die } = heldDie;
-    const s = die.userData.die;
-    s.mode = "throw";
-    // Always give it enough spin to actually tumble, even on a lazy drop.
-    const speed = s.vel.length();
-    s.spin.set(
-      (Math.random() - .5) * 2 + -s.vel.z * 1.6,
-      (Math.random() - .5) * 6,
-      (Math.random() - .5) * 2 + s.vel.x * 1.6
-    ).clampLength(6 + speed, 26);
-    s.vel.y = Math.min(s.vel.y, 1.5);
-    s.still = 0;
-    heldDie = null;
+  if (heldDice) {
+    heldDice.entries.forEach(({ die }) => {
+      const s = die.userData.die;
+      s.mode = "throw";
+      // Both leave the hand together, but with enough scatter that they do
+      // not fly in formation and land in a neat stack.
+      s.vel.copy(heldDice.vel).add(new THREE.Vector3(
+        (Math.random() - .5) * 3,
+        0,
+        (Math.random() - .5) * 3
+      ));
+      s.vel.y = Math.min(s.vel.y, 1.5);
+      // Always enough spin to actually tumble, even on a lazy drop.
+      const speed = s.vel.length();
+      s.spin.set(
+        (Math.random() - .5) * 2 + -s.vel.z * 1.6,
+        (Math.random() - .5) * 6,
+        (Math.random() - .5) * 2 + s.vel.x * 1.6
+      ).clampLength(6 + speed, 26);
+      s.still = 0;
+    });
+    heldDice = null;
     canvas.style.cursor = "grab";
     showDiceValues();
     return;
