@@ -35,52 +35,60 @@ enter.addEventListener("click", () => {
   hud.classList.add("visible");
 });
 
-// Rosewood grain with authentic-looking bezier streaks and subtle depth variation
+// Professional rosewood grain - matching reference quality
+// Deeper, more dramatic grain with stronger visual impact
 function woodPanelTexture(w, h, base, grain, eyes) {
   const c = document.createElement("canvas");
   c.width = w; c.height = h;
   const ctx = c.getContext("2d");
 
-  // Base color with subtle variation
+  // Rich base with subtle color variation
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, w, h);
 
-  // Layered grain for depth
-  for (let i = 0; i < 52; i++) {
+  // Add subtle base noise for depth
+  for (let i = 0; i < 1000; i++) {
+    ctx.fillStyle = grain;
+    ctx.globalAlpha = 0.001 + Math.random() * 0.003;
+    ctx.fillRect(Math.random() * w, Math.random() * h, 1, 1);
+  }
+
+  // Strong primary grain streaks - very prominent
+  for (let i = 0; i < 68; i++) {
     const y = Math.random() * h;
     ctx.strokeStyle = grain;
-    ctx.globalAlpha = 0.04 + Math.random() * 0.12;
-    ctx.lineWidth = 0.8 + Math.random() * 3;
+    ctx.globalAlpha = 0.08 + Math.random() * 0.18;
+    ctx.lineWidth = 1.2 + Math.random() * 4;
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.bezierCurveTo(
-      w * 0.25, y + (Math.random() - 0.5) * 28,
-      w * 0.75, y + (Math.random() - 0.5) * 28,
-      w, y + (Math.random() - 0.5) * 16
+      w * 0.2, y + (Math.random() - 0.5) * 32,
+      w * 0.8, y + (Math.random() - 0.5) * 32,
+      w, y + (Math.random() - 0.5) * 18
     );
     ctx.stroke();
   }
 
-  // Add subtle secondary grain for realistic texture
-  for (let i = 0; i < 28; i++) {
+  // Secondary fine grain for detail
+  for (let i = 0; i < 45; i++) {
     const y = Math.random() * h;
     ctx.strokeStyle = grain;
-    ctx.globalAlpha = 0.015 + Math.random() * 0.04;
-    ctx.lineWidth = 0.5 + Math.random() * 1.5;
+    ctx.globalAlpha = 0.02 + Math.random() * 0.06;
+    ctx.lineWidth = 0.4 + Math.random() * 1.8;
     ctx.beginPath();
     ctx.moveTo(0, y);
-    ctx.quadraticCurveTo(w * 0.5, y + (Math.random() - 0.5) * 40, w, y + (Math.random() - 0.5) * 8);
+    ctx.quadraticCurveTo(w * 0.5, y + (Math.random() - 0.5) * 50, w, y + (Math.random() - 0.5) * 12);
     ctx.stroke();
   }
 
-  // Wood grain eyes (burls)
+  // Wood grain eyes (burls) - visible but not overpowering
   (eyes || []).forEach(([ex, ey, r]) => {
-    for (let ring = 8; ring > 0; ring--) {
+    for (let ring = 10; ring > 0; ring--) {
       ctx.strokeStyle = grain;
-      ctx.globalAlpha = 0.025 + (8 - ring) * 0.006;
-      ctx.lineWidth = 0.8;
+      ctx.globalAlpha = 0.03 + (10 - ring) * 0.004;
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.ellipse(ex, ey, (r * ring) / 8, (r * ring) / 8 * 0.65, 0, 0, Math.PI * 2);
+      ctx.ellipse(ex, ey, (r * ring) / 10, (r * ring) / 10 * 0.62, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
   });
@@ -102,44 +110,44 @@ triangleTextureFlipped.rotation = Math.PI;
 triangleTextureFlipped.needsUpdate = true;
 
 const frame = new THREE.MeshPhysicalMaterial({
-  color: 0x2a1f18,
-  roughness: .32,
-  metalness: .1,
-  clearcoat: .45,
-  clearcoatRoughness: .2
+  color: 0x1a1410,
+  roughness: .28,
+  metalness: .12,
+  clearcoat: .55,
+  clearcoatRoughness: .15
 });
 const bevel = new THREE.MeshPhysicalMaterial({
-  map: woodPanelTexture(512, 512, "#3a2818", "#1a0f05"),
-  roughness: .26,
-  metalness: .08,
-  clearcoat: .5,
-  clearcoatRoughness: .18,
+  map: woodPanelTexture(512, 512, "#2a1f15", "#0a0502"),
+  roughness: .22,
+  metalness: .1,
+  clearcoat: .6,
+  clearcoatRoughness: .12,
 });
 const panel = new THREE.MeshPhysicalMaterial({
-  map: woodPanelTexture(1024, 640, "#4a3020", "#1a0a02", [[256, 320, 95], [768, 320, 95]]),
-  roughness: .23,
-  metalness: .05,
-  clearcoat: .6,
-  clearcoatRoughness: .15,
+  map: woodPanelTexture(1024, 640, "#3a2818", "#080402", [[256, 320, 95], [768, 320, 95]]),
+  roughness: .2,
+  metalness: .08,
+  clearcoat: .65,
+  clearcoatRoughness: .1,
 });
 const brass = new THREE.MeshStandardMaterial({ color: 0xd4b896, roughness: .25, metalness: .85 });
-const pearl = new THREE.MeshStandardMaterial({ color: 0xf8f4ec, roughness: .28, metalness: 0 });
+const pearl = new THREE.MeshStandardMaterial({ color: 0xfcfaf6, roughness: .25, metalness: 0 });
 const ivory = new THREE.MeshPhysicalMaterial({
-  color: 0xf5ede2,
-  roughness: .15,
+  color: 0xf9f5ed,
+  roughness: .12,
   metalness: 0,
-  clearcoat: .78,
-  clearcoatRoughness: .05
+  clearcoat: .85,
+  clearcoatRoughness: .03
 });
 const black = new THREE.MeshPhysicalMaterial({
-  color: 0x0f1012,
-  roughness: .12,
-  metalness: .1,
-  clearcoat: .85,
-  clearcoatRoughness: .04
+  color: 0x0a0b0c,
+  roughness: .08,
+  metalness: .15,
+  clearcoat: .9,
+  clearcoatRoughness: .02
 });
-const marquetryA = new THREE.MeshStandardMaterial({ map: triangleTexture, roughness: .35 });
-const marquetryB = new THREE.MeshStandardMaterial({ map: triangleTextureFlipped, roughness: .35 });
+const marquetryA = new THREE.MeshStandardMaterial({ map: triangleTexture, roughness: .3 });
+const marquetryB = new THREE.MeshStandardMaterial({ map: triangleTextureFlipped, roughness: .3 });
 
 function box(width, height, depth, material, x = 0, y = 0, z = 0, bevelGeo = false) {
   const geometry = bevelGeo
@@ -354,33 +362,33 @@ addEventListener("pointerup", (e) => {
 });
 
 function addRoom() {
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: 0x0f0a08, roughness: .92 }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: 0x08050302, roughness: .94 }));
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -.25;
   floor.receiveShadow = true;
   scene.add(floor);
 
-  // Main warm key light emphasizing wood and materials
-  const lamp = new THREE.PointLight(0xffc878, 32, 30, 2);
-  lamp.position.set(0.5, 9.2, 0.8);
+  // Premium bright key light - professional photography style
+  const lamp = new THREE.PointLight(0xffd89a, 36, 32, 2);
+  lamp.position.set(1, 10.5, 1.5);
   lamp.castShadow = true;
-  lamp.shadow.mapSize.set(1024, 1024);
-  lamp.shadow.bias = -0.0005;
+  lamp.shadow.mapSize.set(2048, 2048);
+  lamp.shadow.bias = -0.0003;
   scene.add(lamp);
 
-  // Fill light for shadow detail
-  const fill = new THREE.HemisphereLight(0x9db3ba, 0x1a0f08, 1.25);
+  // Bright fill light for excellent shadow detail
+  const fill = new THREE.HemisphereLight(0xa8c2ce, 0x0f0805, 1.4);
   scene.add(fill);
 
-  // Side light for rim highlights on pieces
-  const side = new THREE.DirectionalLight(0xa8bec5, 1.8);
-  side.position.set(-7, 11, 5);
+  // Strong side light for premium piece highlighting
+  const side = new THREE.DirectionalLight(0xb8d5e0, 2.2);
+  side.position.set(-8, 12, 6);
   side.castShadow = true;
   scene.add(side);
 
-  // Subtle back light for rim definition
-  const back = new THREE.DirectionalLight(0x8b9fa5, 0.6);
-  back.position.set(4, 8, -8);
+  // Defined back light for edge definition
+  const back = new THREE.DirectionalLight(0x9aa8b0, 0.9);
+  back.position.set(5, 9, -9);
   scene.add(back);
 }
 
