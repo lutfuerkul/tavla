@@ -1,0 +1,23 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Playfair+Display:wght@600;700&display=swap");
+
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body, #app, #scene { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+body { background: #090807; color: #f3ead7; font-family: "DM Mono", monospace; }
+#scene { display: block; }
+#intro { position: fixed; z-index: 2; inset: 0; display: grid; place-content: center; text-align: center; padding: 2rem; background: radial-gradient(circle at center, transparent 0 20%, rgba(4,3,2,.75) 90%); transition: opacity .55s ease, visibility .55s ease; }
+#intro.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+.eyebrow { color: #e5ad54; letter-spacing: .22em; font-size: .72rem; margin: 0 0 1rem; }
+h1 { font: 700 clamp(3rem, 8vw, 7rem)/.95 "Playfair Display", serif; margin: 0; text-shadow: 0 8px 32px #000; }
+#intro > p:not(.eyebrow):not(.hint) { max-width: 34rem; margin: 1.4rem auto 2rem; color: #d2c8b4; line-height: 1.7; }
+button { justify-self: center; padding: .9rem 1.5rem; border: 1px solid #e6b45e; border-radius: 2px; background: #c78735; color: #211508; cursor: pointer; font: 500 .78rem "DM Mono", monospace; letter-spacing: .12em; text-transform: uppercase; box-shadow: 0 5px 30px rgba(203,132,41,.22); }
+button:hover { background: #edbb69; }
+.hint { margin-top: 1.5rem; color: #9b907e; font-size: .67rem; }
+#hud { position: fixed; z-index: 1; top: 1.5rem; left: 1.5rem; display: flex; gap: 1.25rem; opacity: 0; transition: opacity .35s ease; }
+#hud.visible { opacity: 1; }
+#hud div { min-width: 7.2rem; padding: .7rem .8rem; border-left: 1px solid rgba(231,182,102,.75); background: linear-gradient(90deg, rgba(8,6,4,.7), transparent); }
+#hud span { display: block; color: #ad9470; font-size: .55rem; letter-spacing: .15em; margin-bottom: .3rem; }
+#hud strong { color: #eee3ce; font-size: .72rem; letter-spacing: .06em; }
+#crosshair { position: fixed; z-index: 1; top: 50%; left: 50%; width: 8px; height: 8px; margin: -4px; border: 1px solid rgba(247,235,207,.8); border-radius: 50%; opacity: 0; transition: opacity .35s; }
+#crosshair.visible { opacity: .8; }
+@media (max-width: 600px) { #hud { top: .8rem; left: .8rem; gap: .5rem; } #hud div { min-width: 5.8rem; } }
