@@ -602,8 +602,14 @@ function addTrayBoard() {
 // Two butt hinges across the seam, sitting on top of the inner walls where a
 // folding board carries them: a leaf screwed to each wall, the knuckle in the
 // gap between, and two screws through each leaf.
-const HINGE_LEN = 1.15;
-const HINGE_LEAF = .34;
+// The leaves have to stay well clear of the checkers standing on the points
+// either side of the middle. Those points are a checker's width from the
+// seam, so a leaf reaching a third of a unit out leaves under a millimetre
+// between the two — and at a tall window, where the board is seen at more of
+// an angle, the parallax on something standing this far above the checkers
+// closes that and the hinge is drawn across them.
+const HINGE_LEN = 1.0;
+const HINGE_LEAF = .2;
 const HINGE_PLATE = .045;
 
 function addHinges() {
@@ -616,15 +622,15 @@ function addHinges() {
       leaf.castShadow = true;
 
       // Two countersunk screws per leaf, each with its cross recess.
-      [-.3, .3].forEach(along => {
+      [-.28, .28].forEach(along => {
         const head = new THREE.Mesh(
-          new THREE.CylinderGeometry(.055, .05, .028, 16), brass);
+          new THREE.CylinderGeometry(.042, .038, .026, 16), brass);
         head.position.set(side * (SEAM / 2 + HINGE_LEAF / 2),
           CASE_TOP + HINGE_PLATE, z + along * HINGE_LEN);
         scene.add(head);
         for (let turn = 0; turn < 2; turn++) {
           const slot = new THREE.Mesh(
-            new THREE.BoxGeometry(turn ? .012 : .075, .006, turn ? .075 : .012),
+            new THREE.BoxGeometry(turn ? .01 : .058, .006, turn ? .058 : .01),
             screwSlot);
           slot.position.copy(head.position).setY(CASE_TOP + HINGE_PLATE + .012);
           scene.add(slot);
@@ -1609,8 +1615,15 @@ starts.forEach((x, i) => {
 });
 // Checkers sent to the bar sit on the centre divider, in the gap the two
 // facing rows of points leave open.
-POINTS.barW = { x: 0, z: -TIP_Z * .5, baseZ: -TIP_Z * .45, dir: -1, onBar: true };
-POINTS.barB = { x: 0, z: TIP_Z * .5, baseZ: TIP_Z * .45, dir: 1, onBar: true };
+// The two bar stacks start half a checker either side of the middle and grow
+// apart, so the innermost of one clears the innermost of the other. Seating
+// them off the tip of the points instead made that gap depend on how long the
+// points run — nine tenths of a checker on the boards with short points, and
+// little over half a checker on the one with long ones, so the two colours
+// grew into each other.
+const BAR_BASE = CHECKER_D * .55;
+POINTS.barW = { x: 0, z: -BAR_BASE, baseZ: -BAR_BASE, dir: -1, onBar: true };
+POINTS.barB = { x: 0, z: BAR_BASE, baseZ: BAR_BASE, dir: 1, onBar: true };
 
 // Five checkers lie flat on a point. Past that they go on top — but set
 // across the join between two of the ones below rather than squarely on one,
@@ -1749,7 +1762,10 @@ let heldDice = null;
 
 // Height a dragged checker rides at, high enough to read as lifted off the
 // board without leaving the felt behind.
-const CARRY_Y = .95;
+// A carried checker rides above the walls, not through them. At the height of
+// the playing surface plus a bit it cut into the wall whenever it was dragged
+// out to an edge, and you saw the checker sliced open by it.
+const CARRY_Y = CASE_TOP + .3;
 const carryPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -CARRY_Y);
 
 function pointerOnPlane(plane, out) {
