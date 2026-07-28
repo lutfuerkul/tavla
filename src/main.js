@@ -22,13 +22,16 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.25;
+renderer.toneMappingExposure = .95;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 // Soft studio-style reflections for the lacquer and clearcoat surfaces
 // below — generated in-scene so no external HDR asset is needed.
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
 scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+// The room probe is only here to give the lacquer something to reflect. At
+// full strength it lights the whole board and flattens every material.
+scene.environmentIntensity = .3;
 
 enter.addEventListener("click", () => {
   intro.classList.add("hidden");
@@ -159,62 +162,159 @@ function hexToRgb(hex) {
   } : { r: 0, g: 0, b: 0 };
 }
 
-// The 24 triangle points use a real photo of a maple marquetry point,
-// cropped from the reference board, instead of a flat painted color.
-const triangleLoader = new THREE.TextureLoader();
-const triangleTexture = triangleLoader.load(new URL("./assets/triangle.png", import.meta.url).href);
-triangleTexture.colorSpace = THREE.SRGBColorSpace;
-const triangleTextureFlipped = triangleTexture.clone();
-triangleTextureFlipped.center.set(0.5, 0.5);
-triangleTextureFlipped.rotation = Math.PI;
-triangleTextureFlipped.needsUpdate = true;
+// Each point is drawn to match the reference marquetry: a grained body with
+// a fine braided inlay band running up both edges, framed by hairlines. The
+// photo crop this replaces was off-centre, so every point carried a wedge of
+// somebody else's background wood.
+function marquetryPointTexture(body, bodyShade, withInlay = true) {
+  const W = 256, H = 768;
+  const c = document.createElement("canvas");
+  c.width = W; c.height = H;
+  const ctx = c.getContext("2d");
 
+  // UV v=0 is the base (textures are flipped in Y), so the tip points up.
+  const apex = [W / 2, 12];
+  const bl = [7, H - 5];
+  const br = [W - 7, H - 5];
+  const cx = (apex[0] + bl[0] + br[0]) / 3;
+  const cy = (apex[1] + bl[1] + br[1]) / 3;
+  const inset = (p, k) => [cx + (p[0] - cx) * k, cy + (p[1] - cy) * k];
+
+  const tri = (a, b, d) => {
+    const p = new Path2D();
+    p.moveTo(a[0], a[1]); p.lineTo(b[0], b[1]); p.lineTo(d[0], d[1]); p.closePath();
+    return p;
+  };
+
+  const outer = tri(apex, bl, br);
+  const K = .88;
+  const [aIn, blIn, brIn] = [inset(apex, K), inset(bl, K), inset(br, K)];
+  const inner = tri(aIn, blIn, brIn);
+
+  // Body: grained wood along the length of the point.
+  ctx.save();
+  ctx.clip(outer);
+  const wash = ctx.createLinearGradient(0, 0, W, H);
+  wash.addColorStop(0, body);
+  wash.addColorStop(.55, bodyShade);
+  wash.addColorStop(1, body);
+  ctx.fillStyle = wash;
+  ctx.fillRect(0, 0, W, H);
+  for (let i = 0; i < 90; i++) {
+    const x = Math.random() * W;
+    ctx.strokeStyle = bodyShade;
+    ctx.globalAlpha = .05 + Math.random() * .13;
+    ctx.lineWidth = .5 + Math.random() * 1.6;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.quadraticCurveTo(x + (Math.random() - .5) * 26, H / 2, x + (Math.random() - .5) * 18, H);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  // Only the pale maple points carry the braid. On the reference board the
+  // dark points are the plain walnut field between them.
+  if (withInlay) {
+    const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    const ring = new Path2D();
+    ring.addPath(outer);
+    ring.addPath(inner);
+    ctx.save();
+    ctx.clip(ring, "evenodd");
+    ctx.fillStyle = "#2b1808";
+    ctx.fill(outer);
+    ctx.strokeStyle = "#efe2b4";
+    ctx.lineWidth = 3.4;
+    ctx.lineCap = "round";
+    [[bl, apex, blIn, aIn], [br, apex, brIn, aIn]].forEach(([o0, o1, i0, i1]) => {
+      for (let t = 0; t < 1; t += .016) {
+        const a = lerp(o0, o1, t);
+        const b = lerp(i0, i1, t + .011);
+        ctx.beginPath();
+        ctx.moveTo(a[0], a[1]);
+        ctx.lineTo(b[0], b[1]);
+        ctx.stroke();
+      }
+    });
+    ctx.restore();
+
+    // Hairlines frame the braid along the two slanted edges only — the base
+    // of a point runs straight into the rail, with no inlay across it.
+    ctx.lineCap = "butt";
+    [[bl, apex, blIn, aIn], [br, apex, brIn, aIn]].forEach(([o0, o1, i0, i1]) => {
+      ctx.strokeStyle = "#f6ecc8";
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(o0[0], o0[1]);
+      ctx.lineTo(o1[0], o1[1]);
+      ctx.stroke();
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(i0[0], i0[1]);
+      ctx.lineTo(i1[0], i1[1]);
+      ctx.stroke();
+    });
+  }
+
+  const texture = new THREE.CanvasTexture(c);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  return texture;
+}
+
+// Lacquered wood reads as a soft sheen, not a mirror: moderate clearcoat over
+// a fairly rough diffuse base. Cranking gloss any higher blows the board out
+// to white under the overhead light.
 const frame = new THREE.MeshPhysicalMaterial({
-  color: 0x0f0a06,
-  roughness: .24,
-  metalness: .16,
-  clearcoat: .62,
-  clearcoatRoughness: .1
+  color: 0x120d09,
+  roughness: .45,
+  metalness: .04,
+  clearcoat: .3,
+  clearcoatRoughness: .22
 });
 const bevel = new THREE.MeshPhysicalMaterial({
-  map: woodPanelTexture(512, 512, "#1a1208", "#040100"),
-  roughness: .18,
-  metalness: .14,
-  clearcoat: .68,
-  clearcoatRoughness: .08,
+  map: woodPanelTexture(512, 512, "#33210f", "#120802"),
+  roughness: .42,
+  metalness: .04,
+  clearcoat: .3,
+  clearcoatRoughness: .2,
 });
 const panel = new THREE.MeshPhysicalMaterial({
-  map: woodPanelTexture(1024, 640, "#2a1d0c", "#030100", [[256, 320, 95], [768, 320, 95]]),
-  roughness: .16,
-  metalness: .12,
-  clearcoat: .72,
-  clearcoatRoughness: .06,
+  map: woodPanelTexture(1024, 640, "#54381c", "#1d0e03", [[256, 320, 95], [768, 320, 95]]),
+  roughness: .4,
+  metalness: .03,
+  clearcoat: .34,
+  clearcoatRoughness: .18,
 });
-const brass = new THREE.MeshStandardMaterial({ color: 0xe0c9a0, roughness: .22, metalness: .88 });
-const pearl = new THREE.MeshStandardMaterial({ color: 0xfefcfa, roughness: .22, metalness: 0 });
+const brass = new THREE.MeshStandardMaterial({ color: 0xb99a63, roughness: .35, metalness: .8 });
+const pearl = new THREE.MeshStandardMaterial({ color: 0xe8e2d6, roughness: .4, metalness: 0 });
+// The reference checkers are warm cream and dark graphite plastic — satin,
+// with one soft highlight each, nowhere near mirror-bright.
 const ivory = new THREE.MeshPhysicalMaterial({
-  color: 0xfaf7f0,
-  roughness: .1,
+  color: 0xe6dbc2,
+  roughness: .38,
   metalness: 0,
-  clearcoat: .9,
-  clearcoatRoughness: .02
+  clearcoat: .38,
+  clearcoatRoughness: .16
 });
 const black = new THREE.MeshPhysicalMaterial({
-  color: 0x080809,
-  roughness: .06,
-  metalness: .18,
-  clearcoat: .92,
-  clearcoatRoughness: .01
+  color: 0x15161a,
+  roughness: .34,
+  metalness: .02,
+  clearcoat: .42,
+  clearcoatRoughness: .14
 });
+// Points alternate pale maple and dark walnut, both carrying the same inlay.
 const marquetryA = new THREE.MeshStandardMaterial({
-  map: triangleTexture,
-  roughness: .28,
-  metalness: .02
+  map: marquetryPointTexture("#e4d6a6", "#c9b884"),
+  roughness: .5,
+  metalness: 0
 });
 const marquetryB = new THREE.MeshStandardMaterial({
-  map: triangleTextureFlipped,
-  roughness: .28,
-  metalness: .02
+  map: marquetryPointTexture("#432a13", "#2c1a09", false),
+  roughness: .52,
+  metalness: 0
 });
 
 function box(width, height, depth, material, x = 0, y = 0, z = 0, bevelGeo = false) {
@@ -235,10 +335,26 @@ function point(x0, x1, zOuter, zTip, material) {
   shape.lineTo(x1, zOuter);
   shape.lineTo((x0 + x1) / 2, zTip);
   shape.closePath();
-  const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), material);
+  const geometry = new THREE.ShapeGeometry(shape);
+  // ShapeGeometry hands back the raw 2D shape coordinates as UVs, which sit
+  // far outside 0..1 here — the marquetry photo would just clamp to one edge
+  // pixel. Rebase them onto the triangle's own bounding box so the texture
+  // spans each point, tip pointing inwards.
+  geometry.computeBoundingBox();
+  const bb = geometry.boundingBox;
+  const spanX = bb.max.x - bb.min.x;
+  const spanY = bb.max.y - bb.min.y;
+  const uv = geometry.attributes.uv;
+  const flip = zTip < zOuter;
+  for (let i = 0; i < uv.count; i++) {
+    const u = (uv.getX(i) - bb.min.x) / spanX;
+    const v = (uv.getY(i) - bb.min.y) / spanY;
+    uv.setXY(i, u, flip ? 1 - v : v);
+  }
+  uv.needsUpdate = true;
+  const mesh = new THREE.Mesh(geometry, material);
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.y = .476;
-  mesh.castShadow = true;
   mesh.receiveShadow = true;
   scene.add(mesh);
 }
@@ -256,8 +372,8 @@ function addBoard() {
   box(.72, .22, 8.83, frame, 0, .5, 0);
 
   starts.forEach((x, i) => {
-    point(x - .48, x + .48, -4.15, -.3, i % 2 ? marquetryB : marquetryA);
-    point(x - .48, x + .48, 4.15, .3, i % 2 ? marquetryA : marquetryB);
+    point(x - .53, x + .53, -4.15, -.3, i % 2 ? marquetryB : marquetryA);
+    point(x - .53, x + .53, 4.15, .3, i % 2 ? marquetryA : marquetryB);
   });
 
   // Brass hinge pins across the centre seam, like a folding board's hinges.
@@ -279,52 +395,163 @@ function addBoard() {
   });
 }
 
-// Premium flat disc checker - precisely matching reference board proportions
-// Shallow dome with perfect rim for professional bakelite appearance
+// Dished checker profile, taken straight from the reference pieces: a raised
+// outer rim around a recessed circular dimple, with a rounded outer edge.
+const CHECKER_R = .41;
+const CHECKER_H = .118;
+// Profile runs bottom-centre outwards and up to the dished top. Listing it
+// in this order is what makes the revolved normals face outwards — reversed,
+// the discs render inside-out and read as hollow rings.
 const checkerGeometry = new THREE.LatheGeometry([
-  new THREE.Vector2(0, .02),
-  new THREE.Vector2(.34, .026),
-  new THREE.Vector2(.57, .038),
-  new THREE.Vector2(.60, .032),
-  new THREE.Vector2(.60, .005),
-  new THREE.Vector2(.55, 0),
   new THREE.Vector2(0, 0),
+  new THREE.Vector2(.37, 0),
+  new THREE.Vector2(CHECKER_R, .013),
+  new THREE.Vector2(CHECKER_R, .108),
+  new THREE.Vector2(.38, CHECKER_H),
+  new THREE.Vector2(.31, .115),
+  new THREE.Vector2(.24, .089),
+  new THREE.Vector2(.13, .081),
+  new THREE.Vector2(0, .078),
 ], 64);
 
-function dice(x, z, face) {
-  const material = new THREE.MeshPhysicalMaterial({
-    color: 0xfdfbf8,
-    roughness: .09,
-    metalness: 0,
-    clearcoat: .88,
-    clearcoatRoughness: .02
+// --- Dice ------------------------------------------------------------
+// A real die: every face carries its own pips, opposite faces sum to 7,
+// and the cube is rounded off at the corners the way a moulded die is.
+const PIP_GRID = { lo: 74, mid: 128, hi: 182 };
+const PIP_LAYOUT = {
+  1: [["mid", "mid"]],
+  2: [["lo", "lo"], ["hi", "hi"]],
+  3: [["lo", "lo"], ["mid", "mid"], ["hi", "hi"]],
+  4: [["lo", "lo"], ["hi", "lo"], ["lo", "hi"], ["hi", "hi"]],
+  5: [["lo", "lo"], ["hi", "lo"], ["mid", "mid"], ["lo", "hi"], ["hi", "hi"]],
+  6: [["lo", "lo"], ["hi", "lo"], ["lo", "mid"], ["hi", "mid"], ["lo", "hi"], ["hi", "hi"]],
+};
+
+function dieFaceTexture(value) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 256;
+  const ctx = c.getContext("2d");
+
+  // Slightly shaded ivory face so the die does not read as flat white.
+  const wash = ctx.createRadialGradient(112, 100, 20, 128, 128, 190);
+  wash.addColorStop(0, "#ffffff");
+  wash.addColorStop(1, "#efe9df");
+  ctx.fillStyle = wash;
+  ctx.fillRect(0, 0, 256, 256);
+
+  PIP_LAYOUT[value].forEach(([gx, gy]) => {
+    const x = PIP_GRID[gx];
+    const y = PIP_GRID[gy];
+    // Drilled-and-inked pip: a soft dark well with a tiny specular edge.
+    const well = ctx.createRadialGradient(x - 5, y - 6, 2, x, y, 24);
+    well.addColorStop(0, "#3d3d40");
+    well.addColorStop(.45, "#141416");
+    well.addColorStop(1, "#050506");
+    ctx.fillStyle = well;
+    ctx.beginPath();
+    ctx.arc(x, y, 23, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.35)";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(x, y, 23.4, Math.PI * .15, Math.PI * .95);
+    ctx.stroke();
   });
-  const size = .38;
-  const die = new THREE.Mesh(new THREE.BoxGeometry(size, size, size, 6, 6, 6), material);
-  die.position.set(x, .47 + size / 2, z);
-  die.rotation.set(.14, .3, -.08);
+
+  const texture = new THREE.CanvasTexture(c);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  return texture;
+}
+
+// Push a segmented cube's vertices onto a rounded-cube surface so the die
+// has moulded corners instead of razor edges. UVs are untouched, so each
+// face keeps its own pip texture.
+function roundedDieGeometry(size, radius, segments = 10) {
+  const geometry = new THREE.BoxGeometry(size, size, size, segments, segments, segments);
+  const pos = geometry.attributes.position;
+  const half = size / 2;
+  const inner = half - radius;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const cx = Math.max(-inner, Math.min(inner, v.x));
+    const cy = Math.max(-inner, Math.min(inner, v.y));
+    const cz = Math.max(-inner, Math.min(inner, v.z));
+    const dx = v.x - cx, dy = v.y - cy, dz = v.z - cz;
+    const len = Math.hypot(dx, dy, dz) || 1;
+    pos.setXYZ(i, cx + (dx / len) * radius, cy + (dy / len) * radius, cz + (dz / len) * radius);
+  }
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+const DIE_SIZE = .4;
+const dieGeometry = roundedDieGeometry(DIE_SIZE, DIE_SIZE * .17, 12);
+// BoxGeometry material order is +x, -x, +y, -y, +z, -z. Opposite faces sum
+// to seven, exactly like a real die.
+const DIE_FACES = [1, 6, 2, 5, 3, 4];
+const dieMaterials = DIE_FACES.map(value => new THREE.MeshPhysicalMaterial({
+  map: dieFaceTexture(value),
+  roughness: .13,
+  metalness: 0,
+  clearcoat: .8,
+  clearcoatRoughness: .04,
+}));
+
+// Rotation that brings a given value onto the top (+y) face.
+const FACE_UP = {
+  2: new THREE.Euler(0, 0, 0),
+  5: new THREE.Euler(Math.PI, 0, 0),
+  1: new THREE.Euler(0, 0, Math.PI / 2),
+  6: new THREE.Euler(0, 0, -Math.PI / 2),
+  3: new THREE.Euler(-Math.PI / 2, 0, 0),
+  4: new THREE.Euler(Math.PI / 2, 0, 0),
+};
+
+function dice(x, z, face) {
+  const die = new THREE.Mesh(dieGeometry, dieMaterials);
+  const orient = new THREE.Quaternion().setFromEuler(FACE_UP[face]);
+  // A little yaw so the pair does not sit in perfect parade alignment.
+  const yaw = new THREE.Quaternion().setFromAxisAngle(
+    new THREE.Vector3(0, 1, 0),
+    (Math.random() - .5) * .9
+  );
+  die.quaternion.copy(yaw).multiply(orient);
+  die.position.set(x, .47 + DIE_SIZE / 2, z);
   die.castShadow = true;
   die.receiveShadow = true;
   scene.add(die);
-  const dots = [[-.11, .19], [.11, .19], [0, 0], [-.11, -.19], [.11, -.19]];
-  dots.slice(0, face).forEach(([dx, dz]) => {
-    const dot = new THREE.Mesh(new THREE.SphereGeometry(.035, 20, 16), black);
-    dot.position.set(x + dx, .47 + size + .025, z + dz);
-    dot.castShadow = true;
-    scene.add(dot);
-  });
+  return die;
 }
 
 // --- Checker positions & drag-to-move -------------------------------
 // Point numbering follows the standard 1-24 convention. Points 1-12 sit
 // on the near row, 13-24 on the far row, mirrored across the bar.
+// Each point stores the anchor used for drop hit-testing plus the seat of
+// its first checker and the direction the rest of them run in — checkers
+// lie down the length of a point, they are not stacked into a tower.
+const CHECKER_GAP = .8;
 const POINTS = {};
 starts.forEach((x, i) => {
-  POINTS[12 - i] = { x, z: NEAR_Z };
-  POINTS[13 + i] = { x, z: FAR_Z };
+  POINTS[12 - i] = { x, z: NEAR_Z, baseZ: -4.15 + CHECKER_R + .06, dir: 1 };
+  POINTS[13 + i] = { x, z: FAR_Z, baseZ: 4.15 - CHECKER_R - .06, dir: -1 };
 });
-POINTS.barW = { x: .18, z: 0 };
-POINTS.barB = { x: -.18, z: 0 };
+POINTS.barW = { x: 0, z: -1.45, baseZ: -1.0, dir: -1 };
+POINTS.barB = { x: 0, z: 1.45, baseZ: 1.0, dir: 1 };
+
+// Five checkers fill a point; anything beyond that starts a second layer on
+// top of the first five, exactly as it works on a real board.
+function checkerSeat(key, index) {
+  const p = POINTS[key];
+  const layer = Math.floor(index / 5);
+  const slot = index % 5;
+  return {
+    x: p.x,
+    y: .47 + layer * (CHECKER_H + .004),
+    z: p.baseZ + p.dir * slot * CHECKER_GAP,
+  };
+}
 
 let state = {};
 function resetState() {
@@ -353,11 +580,13 @@ function renderPieces() {
   for (const key in state) {
     const s = state[key];
     if (!s.count) continue;
-    const { x, z } = POINTS[key];
     const material = s.color === "ivory" ? ivory : black;
     for (let i = 0; i < s.count; i++) {
+      const seat = checkerSeat(key, i);
       const body = new THREE.Mesh(checkerGeometry, material);
-      body.position.set(x, .47 + i * .09, z);
+      body.position.set(seat.x, seat.y, seat.z);
+      // A hair of yaw per checker so the row reads as hand-placed.
+      body.rotation.y = (Math.random() - .5) * .5;
       body.castShadow = true;
       body.receiveShadow = true;
       body.userData.pointKey = key;
@@ -436,48 +665,50 @@ function addRoom() {
   floor.receiveShadow = true;
   scene.add(floor);
 
-  // Gallery-quality main key light - warm professional tone
-  const lamp = new THREE.PointLight(0xffe4a8, 38, 34, 2);
-  lamp.position.set(1.2, 11, 2);
-  lamp.castShadow = true;
-  lamp.shadow.mapSize.set(2048, 2048);
-  lamp.shadow.bias = -0.0002;
+  // Key light: a warm lamp hanging over the board. It carries the shadows,
+  // everything else only lifts the darks.
+  const key = new THREE.DirectionalLight(0xffe9c4, 1.5);
+  key.position.set(-5, 12, 5);
+  key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.bias = -0.0004;
+  key.shadow.camera.left = -11;
+  key.shadow.camera.right = 11;
+  key.shadow.camera.top = 9;
+  key.shadow.camera.bottom = -9;
+  key.shadow.camera.near = 1;
+  key.shadow.camera.far = 30;
+  scene.add(key);
+
+  // Warm falloff over the centre of the board so the middle glows slightly
+  // brighter than the rails, the way a table lamp actually behaves.
+  const lamp = new THREE.PointLight(0xffd9a0, 26, 26, 2);
+  lamp.position.set(0.5, 8.5, 1);
   scene.add(lamp);
 
-  // Sophisticated fill light with blue tone for professional look
-  const fill = new THREE.HemisphereLight(0xb0c8d8, 0x0a0603, 1.5);
+  // Cool sky bounce, kept low — this is what was washing the board out.
+  const fill = new THREE.HemisphereLight(0x9fb4c4, 0x120a05, .35);
   scene.add(fill);
 
-  // Strong primary side light for piece definition
-  const side = new THREE.DirectionalLight(0xc0dce8, 2.4);
-  side.position.set(-9, 13, 7);
-  side.castShadow = true;
-  side.shadow.mapSize.set(2048, 2048);
+  // Gentle opposite-side fill so the far row is not left in the dark.
+  const side = new THREE.DirectionalLight(0xbcd0dc, .35);
+  side.position.set(7, 9, -6);
   scene.add(side);
-
-  // Secondary side light from opposite direction
-  const sideB = new THREE.DirectionalLight(0xa8b8c0, 0.8);
-  sideB.position.set(6, 10, -5);
-  scene.add(sideB);
-
-  // Subtle back light for rim highlighting
-  const back = new THREE.DirectionalLight(0x9ba8b0, 1.1);
-  back.position.set(5, 9, -10);
-  scene.add(back);
 }
 
 addRoom();
 addBoard();
 resetState();
 renderPieces();
-dice(-.28, -.15, 5);
-dice(.32, .2, 4);
+// Both dice land in one half of the board, the way they do after a throw.
+dice(-3.95, .15, 5);
+dice(-2.95, -.45, 4);
 
 const clock = new THREE.Clock();
 function animate() {
   const elapsed = clock.getElapsedTime();
   const lamp = scene.children.find(o => o.isPointLight);
-  if (lamp) lamp.intensity = 28 + Math.sin(elapsed * 1.4) * 1.2;
+  if (lamp) lamp.intensity = 26 + Math.sin(elapsed * 1.4) * .8;
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }
