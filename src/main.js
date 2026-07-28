@@ -22,7 +22,7 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
+renderer.toneMappingExposure = 1.2;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 // Soft studio-style reflections for the lacquer and clearcoat surfaces
@@ -35,60 +35,102 @@ enter.addEventListener("click", () => {
   hud.classList.add("visible");
 });
 
-// Professional rosewood grain - matching reference quality
-// Deeper, more dramatic grain with stronger visual impact
+// Advanced Perlin-like noise function for organic wood grain
+function noise(x, y, seed = 0) {
+  const n = Math.sin(x * 12.9898 + y * 78.233 + seed) * 43758.5453;
+  return n - Math.floor(n);
+}
+
+// Fractional Brownian Motion - multi-octave noise for realistic texture
+function fbm(x, y, octaves = 6, seed = 0) {
+  let value = 0;
+  let amplitude = 1;
+  let frequency = 1;
+  let maxValue = 0;
+
+  for (let i = 0; i < octaves; i++) {
+    value += amplitude * (noise(x * frequency, y * frequency, seed + i) * 2 - 1);
+    maxValue += amplitude;
+    amplitude *= 0.5;
+    frequency *= 2;
+  }
+  return value / maxValue;
+}
+
+// Professional rosewood grain using advanced procedural generation
+// Matches reference board with organic, realistic wood appearance
 function woodPanelTexture(w, h, base, grain, eyes) {
   const c = document.createElement("canvas");
   c.width = w; c.height = h;
   const ctx = c.getContext("2d");
+  const imageData = ctx.createImageData(w, h);
+  const data = imageData.data;
 
-  // Rich base with subtle color variation
-  ctx.fillStyle = base;
-  ctx.fillRect(0, 0, w, h);
+  // Parse colors
+  const baseRGB = hexToRgb(base);
+  const grainRGB = hexToRgb(grain);
 
-  // Add subtle base noise for depth
-  for (let i = 0; i < 1000; i++) {
-    ctx.fillStyle = grain;
-    ctx.globalAlpha = 0.001 + Math.random() * 0.003;
-    ctx.fillRect(Math.random() * w, Math.random() * h, 1, 1);
+  // Generate wood texture using FBM
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      // Multi-scale noise for realistic wood
+      const scale1 = fbm(x / 200, y / 150, 4, 0);
+      const scale2 = fbm(x / 80, y / 60, 5, 100);
+      const scale3 = fbm(x / 30, y / 25, 3, 200);
+
+      // Combine scales with weights for natural look
+      const grain1 = scale1 * 0.6;
+      const grain2 = scale2 * 0.25 * Math.sin(y / 20) * Math.cos(x / 40);
+      const grain3 = scale3 * 0.15;
+
+      const grainAmount = grain1 + grain2 + grain3;
+      const normalized = Math.max(0, Math.min(1, (grainAmount + 1) * 0.5));
+
+      // Interpolate between base and grain color
+      const r = Math.round(baseRGB.r + (grainRGB.r - baseRGB.r) * normalized * 0.8);
+      const g = Math.round(baseRGB.g + (grainRGB.g - baseRGB.g) * normalized * 0.8);
+      const b = Math.round(baseRGB.b + (grainRGB.b - baseRGB.b) * normalized * 0.8);
+
+      const idx = (y * w + x) * 4;
+      data[idx] = r;
+      data[idx + 1] = g;
+      data[idx + 2] = b;
+      data[idx + 3] = 255;
+    }
   }
 
-  // Strong primary grain streaks - very prominent
-  for (let i = 0; i < 68; i++) {
+  ctx.putImageData(imageData, 0, 0);
+
+  // Add dramatic wood grain streaks for visual impact
+  for (let i = 0; i < 75; i++) {
     const y = Math.random() * h;
-    ctx.strokeStyle = grain;
-    ctx.globalAlpha = 0.08 + Math.random() * 0.18;
-    ctx.lineWidth = 1.2 + Math.random() * 4;
+    const intensity = 0.1 + Math.random() * 0.2;
+    const gradient = ctx.createLinearGradient(0, y - 5, 0, y + 5);
+    gradient.addColorStop(0, `rgba(${grainRGB.r}, ${grainRGB.g}, ${grainRGB.b}, 0)`);
+    gradient.addColorStop(0.5, `rgba(${grainRGB.r}, ${grainRGB.g}, ${grainRGB.b}, ${intensity})`);
+    gradient.addColorStop(1, `rgba(${grainRGB.r}, ${grainRGB.g}, ${grainRGB.b}, 0)`);
+
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = 1.5 + Math.random() * 3.5;
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.bezierCurveTo(
-      w * 0.2, y + (Math.random() - 0.5) * 32,
-      w * 0.8, y + (Math.random() - 0.5) * 32,
-      w, y + (Math.random() - 0.5) * 18
+      w * 0.2, y + (Math.random() - 0.5) * 35,
+      w * 0.8, y + (Math.random() - 0.5) * 35,
+      w, y + (Math.random() - 0.5) * 20
     );
     ctx.stroke();
   }
 
-  // Secondary fine grain for detail
-  for (let i = 0; i < 45; i++) {
-    const y = Math.random() * h;
-    ctx.strokeStyle = grain;
-    ctx.globalAlpha = 0.02 + Math.random() * 0.06;
-    ctx.lineWidth = 0.4 + Math.random() * 1.8;
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.quadraticCurveTo(w * 0.5, y + (Math.random() - 0.5) * 50, w, y + (Math.random() - 0.5) * 12);
-    ctx.stroke();
-  }
-
-  // Wood grain eyes (burls) - visible but not overpowering
+  // Add wood grain eyes (burls)
   (eyes || []).forEach(([ex, ey, r]) => {
-    for (let ring = 10; ring > 0; ring--) {
+    for (let ring = 12; ring > 0; ring--) {
+      const alpha = (0.04 + (12 - ring) * 0.003) * (1 - ring / 12);
       ctx.strokeStyle = grain;
-      ctx.globalAlpha = 0.03 + (10 - ring) * 0.004;
-      ctx.lineWidth = 1;
+      ctx.globalAlpha = alpha;
+      ctx.lineWidth = 0.8 + Math.random() * 0.4;
       ctx.beginPath();
-      ctx.ellipse(ex, ey, (r * ring) / 10, (r * ring) / 10 * 0.62, 0, 0, Math.PI * 2);
+      ctx.ellipse(ex, ey, (r * ring) / 12, (r * ring) / 12 * 0.63, Math.random() * 0.3, 0, Math.PI * 2);
       ctx.stroke();
     }
   });
@@ -97,6 +139,16 @@ function woodPanelTexture(w, h, base, grain, eyes) {
   const texture = new THREE.CanvasTexture(c);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
+}
+
+// Helper to convert hex color to RGB
+function hexToRgb(hex) {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16)
+  } : { r: 0, g: 0, b: 0 };
 }
 
 // The 24 triangle points use a real photo of a maple marquetry point,
@@ -110,41 +162,41 @@ triangleTextureFlipped.rotation = Math.PI;
 triangleTextureFlipped.needsUpdate = true;
 
 const frame = new THREE.MeshPhysicalMaterial({
-  color: 0x1a1410,
-  roughness: .28,
-  metalness: .12,
-  clearcoat: .55,
-  clearcoatRoughness: .15
+  color: 0x16110b,
+  roughness: .26,
+  metalness: .14,
+  clearcoat: .58,
+  clearcoatRoughness: .12
 });
 const bevel = new THREE.MeshPhysicalMaterial({
-  map: woodPanelTexture(512, 512, "#2a1f15", "#0a0502"),
-  roughness: .22,
-  metalness: .1,
-  clearcoat: .6,
-  clearcoatRoughness: .12,
-});
-const panel = new THREE.MeshPhysicalMaterial({
-  map: woodPanelTexture(1024, 640, "#3a2818", "#080402", [[256, 320, 95], [768, 320, 95]]),
+  map: woodPanelTexture(512, 512, "#251a0f", "#070301"),
   roughness: .2,
-  metalness: .08,
+  metalness: .12,
   clearcoat: .65,
   clearcoatRoughness: .1,
 });
-const brass = new THREE.MeshStandardMaterial({ color: 0xe0c9a0, roughness: .22, metalness: .88 });
-const pearl = new THREE.MeshStandardMaterial({ color: 0xfcfaf6, roughness: .25, metalness: 0 });
-const ivory = new THREE.MeshPhysicalMaterial({
-  color: 0xf9f5ed,
-  roughness: .12,
-  metalness: 0,
-  clearcoat: .85,
-  clearcoatRoughness: .03
+const panel = new THREE.MeshPhysicalMaterial({
+  map: woodPanelTexture(1024, 640, "#352510", "#050200", [[256, 320, 95], [768, 320, 95]]),
+  roughness: .18,
+  metalness: .1,
+  clearcoat: .7,
+  clearcoatRoughness: .08,
 });
-const black = new THREE.MeshPhysicalMaterial({
-  color: 0x0a0b0c,
-  roughness: .08,
-  metalness: .15,
+const brass = new THREE.MeshStandardMaterial({ color: 0xe0c9a0, roughness: .22, metalness: .88 });
+const pearl = new THREE.MeshStandardMaterial({ color: 0xfefcfa, roughness: .22, metalness: 0 });
+const ivory = new THREE.MeshPhysicalMaterial({
+  color: 0xfaf7f0,
+  roughness: .1,
+  metalness: 0,
   clearcoat: .9,
   clearcoatRoughness: .02
+});
+const black = new THREE.MeshPhysicalMaterial({
+  color: 0x080809,
+  roughness: .06,
+  metalness: .18,
+  clearcoat: .92,
+  clearcoatRoughness: .01
 });
 const marquetryA = new THREE.MeshStandardMaterial({ map: triangleTexture, roughness: .3 });
 const marquetryB = new THREE.MeshStandardMaterial({ map: triangleTextureFlipped, roughness: .3 });
@@ -362,33 +414,39 @@ addEventListener("pointerup", (e) => {
 });
 
 function addRoom() {
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: 0x08050302, roughness: .94 }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: 0x050301, roughness: .95 }));
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -.25;
   floor.receiveShadow = true;
   scene.add(floor);
 
-  // Premium bright key light - professional photography style
-  const lamp = new THREE.PointLight(0xffd89a, 36, 32, 2);
-  lamp.position.set(1, 10.5, 1.5);
+  // Gallery-quality main key light - warm professional tone
+  const lamp = new THREE.PointLight(0xffe4a8, 38, 34, 2);
+  lamp.position.set(1.2, 11, 2);
   lamp.castShadow = true;
   lamp.shadow.mapSize.set(2048, 2048);
-  lamp.shadow.bias = -0.0003;
+  lamp.shadow.bias = -0.0002;
   scene.add(lamp);
 
-  // Bright fill light for excellent shadow detail
-  const fill = new THREE.HemisphereLight(0xa8c2ce, 0x0f0805, 1.4);
+  // Sophisticated fill light with blue tone for professional look
+  const fill = new THREE.HemisphereLight(0xb0c8d8, 0x0a0603, 1.5);
   scene.add(fill);
 
-  // Strong side light for premium piece highlighting
-  const side = new THREE.DirectionalLight(0xb8d5e0, 2.2);
-  side.position.set(-8, 12, 6);
+  // Strong primary side light for piece definition
+  const side = new THREE.DirectionalLight(0xc0dce8, 2.4);
+  side.position.set(-9, 13, 7);
   side.castShadow = true;
+  side.shadow.mapSize.set(2048, 2048);
   scene.add(side);
 
-  // Defined back light for edge definition
-  const back = new THREE.DirectionalLight(0x9aa8b0, 0.9);
-  back.position.set(5, 9, -9);
+  // Secondary side light from opposite direction
+  const sideB = new THREE.DirectionalLight(0xa8b8c0, 0.8);
+  sideB.position.set(6, 10, -5);
+  scene.add(sideB);
+
+  // Subtle back light for rim highlighting
+  const back = new THREE.DirectionalLight(0x9ba8b0, 1.1);
+  back.position.set(5, 9, -10);
   scene.add(back);
 }
 
