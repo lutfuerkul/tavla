@@ -102,41 +102,41 @@ triangleTextureFlipped.rotation = Math.PI;
 triangleTextureFlipped.needsUpdate = true;
 
 const frame = new THREE.MeshPhysicalMaterial({
-  color: 0x1a140f,
-  roughness: .35,
-  metalness: .08,
-  clearcoat: .4,
-  clearcoatRoughness: .25
+  color: 0x2a1f18,
+  roughness: .32,
+  metalness: .1,
+  clearcoat: .45,
+  clearcoatRoughness: .2
 });
 const bevel = new THREE.MeshPhysicalMaterial({
-  map: woodPanelTexture(512, 512, "#4a3419", "#1a0f08"),
-  roughness: .28,
-  metalness: .06,
-  clearcoat: .45,
-  clearcoatRoughness: .22,
-});
-const panel = new THREE.MeshPhysicalMaterial({
-  map: woodPanelTexture(1024, 640, "#5a3a22", "#2a1209", [[256, 320, 95], [768, 320, 95]]),
-  roughness: .25,
-  metalness: .04,
-  clearcoat: .55,
+  map: woodPanelTexture(512, 512, "#3a2818", "#1a0f05"),
+  roughness: .26,
+  metalness: .08,
+  clearcoat: .5,
   clearcoatRoughness: .18,
 });
+const panel = new THREE.MeshPhysicalMaterial({
+  map: woodPanelTexture(1024, 640, "#4a3020", "#1a0a02", [[256, 320, 95], [768, 320, 95]]),
+  roughness: .23,
+  metalness: .05,
+  clearcoat: .6,
+  clearcoatRoughness: .15,
+});
 const brass = new THREE.MeshStandardMaterial({ color: 0xd4b896, roughness: .25, metalness: .85 });
-const pearl = new THREE.MeshStandardMaterial({ color: 0xf5f0e8, roughness: .32, metalness: 0 });
+const pearl = new THREE.MeshStandardMaterial({ color: 0xf8f4ec, roughness: .28, metalness: 0 });
 const ivory = new THREE.MeshPhysicalMaterial({
-  color: 0xf0e6d2,
-  roughness: .18,
+  color: 0xf5ede2,
+  roughness: .15,
   metalness: 0,
-  clearcoat: .7,
-  clearcoatRoughness: .08
+  clearcoat: .78,
+  clearcoatRoughness: .05
 });
 const black = new THREE.MeshPhysicalMaterial({
-  color: 0x1a1b1d,
-  roughness: .18,
-  metalness: .08,
-  clearcoat: .75,
-  clearcoatRoughness: .06
+  color: 0x0f1012,
+  roughness: .12,
+  metalness: .1,
+  clearcoat: .85,
+  clearcoatRoughness: .04
 });
 const marquetryA = new THREE.MeshStandardMaterial({ map: triangleTexture, roughness: .35 });
 const marquetryB = new THREE.MeshStandardMaterial({ map: triangleTextureFlipped, roughness: .35 });
@@ -203,37 +203,37 @@ function addBoard() {
   });
 }
 
-// Premium bakelite/resin checker with refined geometry: slightly dished top,
-// rounded edges, and subtle beveling for an authentic appearance.
+// Flat disc-like checker matching real backgammon pieces - shallow profile
+// with very slight dome and rounded edges
 const checkerGeometry = new THREE.LatheGeometry([
-  new THREE.Vector2(0, .032),
-  new THREE.Vector2(.3, .042),
-  new THREE.Vector2(.48, .092),
-  new THREE.Vector2(.52, .078),
-  new THREE.Vector2(.52, .015),
-  new THREE.Vector2(.47, 0),
+  new THREE.Vector2(0, .018),
+  new THREE.Vector2(.35, .024),
+  new THREE.Vector2(.56, .035),
+  new THREE.Vector2(.58, .028),
+  new THREE.Vector2(.58, .006),
+  new THREE.Vector2(.54, 0),
   new THREE.Vector2(0, 0),
-], 48);
+], 56);
 
 function dice(x, z, face) {
   const material = new THREE.MeshPhysicalMaterial({
-    color: 0xf8f2e6,
-    roughness: .16,
+    color: 0xfbf8f3,
+    roughness: .12,
     metalness: 0,
-    clearcoat: .65,
-    clearcoatRoughness: .08
+    clearcoat: .82,
+    clearcoatRoughness: .03
   });
-  const size = .33;
-  const die = new THREE.Mesh(new THREE.BoxGeometry(size, size, size, 4, 4, 4), material);
+  const size = .36;
+  const die = new THREE.Mesh(new THREE.BoxGeometry(size, size, size, 5, 5, 5), material);
   die.position.set(x, .47 + size / 2, z);
   die.rotation.set(.14, .3, -.08);
   die.castShadow = true;
   die.receiveShadow = true;
   scene.add(die);
-  const dots = [[-.08, .17], [.08, .17], [0, 0], [-.08, -.17], [.08, -.17]];
+  const dots = [[-.1, .18], [.1, .18], [0, 0], [-.1, -.18], [.1, -.18]];
   dots.slice(0, face).forEach(([dx, dz]) => {
-    const dot = new THREE.Mesh(new THREE.SphereGeometry(.028, 16, 12), black);
-    dot.position.set(x + dx, .47 + size + .015, z + dz);
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(.032, 18, 14), black);
+    dot.position.set(x + dx, .47 + size + .02, z + dz);
     dot.castShadow = true;
     scene.add(dot);
   });
