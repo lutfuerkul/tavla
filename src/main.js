@@ -672,6 +672,7 @@ function dice(x, z, face) {
     spin: new THREE.Vector3(),
     still: 0,
     touching: false,
+    offContact: 0,
     cocked: false,
   };
   scene.add(die);
@@ -738,6 +739,7 @@ function wakeDie(die) {
   const s = die.userData.die;
   s.mode = "throw";
   s.still = 0;
+  s.offContact = 0;
   s.cocked = false;
   showDiceValues();
 }
@@ -775,13 +777,43 @@ for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
 // tuned against that rather than against an invented scale.
 const GRAVITY = -9.81 / (36 / 1000);
 const FELT_UP = new THREE.Vector3(0, 1, 0);
-// Mass only ever appears in ratios here, so the die is the unit of mass. A
-// solid cube of side a has I = m a² / 6 about every axis through its centre,
-// so its inertia is a single scalar that stays correct however the die is
-// turned — there is no tensor to rotate.
+// Mass only ever appears in ratios here, so the die is the unit of mass.
+// Cubic symmetry survives the rounding, so the inertia stays a single scalar
+// that is correct however the die is turned — there is no tensor to rotate.
+//
+// It is not a sharp cube's I = m a² / 6 though. Rounding the corners takes
+// mass off the corners, which is the mass furthest from the axis, so the die
+// spins easier than the sharp figure says — at this radius the coefficient is
+// .157 rather than .167, six per cent lower. The shape is a box grown by a
+// ball, so it cuts into pieces that each have a closed form: the core box, six
+// face slabs, twelve quarter cylinders along the edges and eight sphere
+// octants at the corners. Each piece's own second moment about the axis plus
+// its offset squared, summed, over the whole volume.
+function roundedCubeInertia(size, radius) {
+  const r = radius, c = size / 2 - radius;
+  const slab = 4 * c * c * r;                        // one face slab
+  const edge = Math.PI * r * r / 4 * (2 * c);        // one edge quarter cylinder
+  const octant = Math.PI * r ** 3 / 6;               // one corner octant
+  const volume = 8 * c ** 3 + 6 * slab + 12 * edge + 8 * octant;
+
+  const moment =
+      16 * c ** 5 / 3                                                    // core box
+    + 2 * slab * (2 * c * c / 3)                                         // slabs on the axis
+    + 4 * slab * ((r * r + 4 * c * c) / 12 + (c + r / 2) ** 2)           // slabs beside it
+    + 8 * c * (Math.PI * c * c * r * r / 2 + 4 * c * r ** 3 / 3
+               + Math.PI * r ** 4 / 8)                                   // edges along the axis
+    + 8 * ((2 * c ** 3 / 3) * (Math.PI * r * r / 4)
+           + 2 * c * (c * c * (Math.PI * r * r / 4) + 2 * c * r ** 3 / 3
+                      + Math.PI * r ** 4 / 16))                          // edges across it
+    + 16 * (c * c * octant + c * Math.PI * r ** 4 / 8
+            + Math.PI * r ** 5 / 30);                                    // corners
+
+  return moment / volume;                            // per unit mass
+}
+
 const DIE_MASS = 1;
 const INV_MASS = 1 / DIE_MASS;
-const INV_INERTIA = 6 / (DIE_MASS * DIE_SIZE * DIE_SIZE);
+const INV_INERTIA = 1 / (DIE_MASS * roundedCubeInertia(DIE_SIZE, DIE_RADIUS));
 
 // Restitution and Coulomb friction for the three things a die can hit.
 // Polished resin dropped on a felted board keeps roughly a third of its
@@ -1316,10 +1348,22 @@ function addDieContact(dieA, dieB, point) {
 
 // Friction takes the die to a real stop, so this is a check for having
 // stopped rather than a decay that forces it.
+//
+// "Touching" is allowed to lapse for a moment. A die wedged against a rail on
+// top of a checker is put exactly back on both by the position pass, and a
+// substep that starts with it resting exactly on them finds nothing to report
+// — so the flag flickers off and the count of how long it has been still
+// starts again from nothing, over and over. Something it touched a fiftieth of
+// a second ago is still something it is sitting on. Anything genuinely in
+// flight is out of contact far longer than that, and moving.
+const CONTACT_GRACE = .02;
+
 function checkStopped(die, dt) {
   const s = die.userData.die;
   if (s.mode !== "throw") return;
-  if (s.touching && s.vel.length() < STILL_SPEED && s.spin.length() < STILL_SPIN) {
+  s.offContact = s.touching ? 0 : s.offContact + dt;
+  if (s.offContact < CONTACT_GRACE
+      && s.vel.length() < STILL_SPEED && s.spin.length() < STILL_SPIN) {
     s.still += dt;
     if (s.still > STILL_TIME) settleDie(die);
   } else {
