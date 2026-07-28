@@ -1,5 +1,5 @@
-import * as THREE from "https://unpkg.com/three@0.166.1/build/three.module.js";
-import { PointerLockControls } from "https://unpkg.com/three@0.166.1/examples/jsm/controls/PointerLockControls.js";
+import * as THREE from "../vendor/three/three.module.min.js";
+import { PointerLockControls } from "../vendor/three/examples/jsm/controls/PointerLockControls.js";
 
 const canvas = document.querySelector("#scene");
 const intro = document.querySelector("#intro");
