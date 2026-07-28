@@ -377,7 +377,7 @@ const pearl = new THREE.MeshStandardMaterial({ color: 0xe8e2d6, roughness: .4, m
 // Bone-coloured pieces are matte moulded plastic, not lacquer. The gloss was
 // blowing the whole face to one flat highlight and burying the relief.
 const ivory = new THREE.MeshPhysicalMaterial({
-  color: 0xe9dcbb,
+  color: 0xd4b471,
   roughness: .62,
   metalness: 0,
   clearcoat: .1,
@@ -497,18 +497,12 @@ function addBoard() {
   });
 }
 
-// The old board: a panel sitting on a frame, with the middle of the board a
-// strip laid on top of it rather than anything you could bounce a die off.
-const PANEL_W = FIELD_HALF_X * 2 + .5;
-const PANEL_D = FIELD_HALF * 2 + .5;
-
+// The old board: one tray rather than two, with the middle of the board a low
+// ridge you can throw a die over rather than a wall it stops at, and brass
+// pins where the cases carry hinges.
 function addPanelBoard() {
   const frame = new THREE.MeshPhysicalMaterial({
     color: 0x120d09, roughness: .45, metalness: .04, clearcoat: .3, clearcoatRoughness: .22,
-  });
-  const bevel = new THREE.MeshPhysicalMaterial({
-    map: woodPanelTexture(512, 512, "#33210f", "#120802"),
-    roughness: .42, metalness: .04, clearcoat: .3, clearcoatRoughness: .2,
   });
   const panel = new THREE.MeshPhysicalMaterial({
     map: woodPanelTexture(1024, 640, BOARD.veneer.base, BOARD.veneer.grain,
@@ -516,29 +510,21 @@ function addPanelBoard() {
     metalness: .03, ...BOARD.gloss,
   });
 
-  box(PANEL_W + 2.2, .45, PANEL_D + 2.2, frame, 0, 0, 0, true);
-  box(PANEL_W + 1.2, .18, PANEL_D + 1.2, bevel, 0, .28, 0, true);
-  box(PANEL_W, .1, PANEL_D, panel, 0, .42, 0);
-  box(BAR_HALF * 2, .22, PANEL_D + .18, frame, 0, .5, 0);
-
-  // The edges stand up, the same thickness and height as the walls on the
-  // cases. They stand at the edge of the field, which is exactly where the
-  // dice have always stopped — so the wall that lived in the physics and
-  // nowhere else is now something you can see, and nothing new gets in the
-  // dice's way. The wide flat frame stays the frame it always was, out
-  // beyond them.
-  const railBase = .225;                        // top of the frame they grow out of
-  const railH = CASE_TOP - railBase;
-  const railY = railBase + railH / 2;
+  // One floor, one leaf of veneer laid across the whole of it, and walls the
+  // same thickness and height as the cases carry. The wide flat frame this
+  // board used to sit on is gone: its edge is the outside of the wall.
+  const wallH = CASE_TOP - CASE_BOTTOM;
+  const wallY = (CASE_BOTTOM + CASE_TOP) / 2;
+  box(CASE_HALF_X * 2, FLOOR_T, CASE_HALF_Z * 2, frame, 0, CASE_BOTTOM + FLOOR_T / 2, 0);
+  box(FIELD_HALF_X * 2, .1, FIELD_HALF * 2, panel, 0, FELT_Y - .05, 0);
+  box(BAR_HALF * 2, .22, FIELD_HALF * 2, frame, 0, .5, 0);
   [-1, 1].forEach(side => {
-    box(WALL_T, railH, (FIELD_HALF + WALL_T) * 2, frame,
-      side * (FIELD_HALF_X + WALL_T / 2), railY, 0);
-    box(FIELD_HALF_X * 2, railH, WALL_T, frame,
-      0, railY, side * (FIELD_HALF + WALL_T / 2));
+    box(WALL_T, wallH, CASE_HALF_Z * 2, frame, side * (FIELD_HALF_X + WALL_T / 2), wallY, 0);
+    box(FIELD_HALF_X * 2, wallH, WALL_T, frame, 0, wallY, side * (FIELD_HALF + WALL_T / 2));
   });
 
   // Brass hinge pins across the centre seam, as it had.
-  [-PANEL_D * .28, PANEL_D * .28].forEach(z => {
+  [-FIELD_HALF * .56, FIELD_HALF * .56].forEach(z => {
     const pin = new THREE.Mesh(new THREE.CylinderGeometry(.09, .09, .55, 16), brass);
     pin.rotation.z = Math.PI / 2;
     pin.position.set(0, .58, z);
@@ -546,7 +532,7 @@ function addPanelBoard() {
     scene.add(pin);
   });
 
-  // Pearl markers set into the long rails.
+  // Pearl markers set into the tops of the long walls.
   [-1, 1].forEach(side => {
     [-4, -1.4, 1.4, 4].forEach(z => {
       const dot = new THREE.Mesh(new THREE.SphereGeometry(.055, 12, 10), pearl);
@@ -1610,8 +1596,8 @@ starts.forEach((x, i) => {
 });
 // Checkers sent to the bar sit on the centre divider, in the gap the two
 // facing rows of points leave open.
-POINTS.barW = { x: 0, z: -TIP_Z * .5, baseZ: -TIP_Z * .45, dir: -1 };
-POINTS.barB = { x: 0, z: TIP_Z * .5, baseZ: TIP_Z * .45, dir: 1 };
+POINTS.barW = { x: 0, z: -TIP_Z * .5, baseZ: -TIP_Z * .45, dir: -1, onBar: true };
+POINTS.barB = { x: 0, z: TIP_Z * .5, baseZ: TIP_Z * .45, dir: 1, onBar: true };
 
 // Five checkers lie flat on a point. Past that they go on top — but set
 // across the join between two of the ones below rather than squarely on one,
@@ -1630,9 +1616,14 @@ function checkerSeat(key, index) {
   const p = POINTS[key];
   let layer = 0, slot = index, row = CHECKERS_FLAT;
   while (slot >= row && row > 1) { slot -= row; layer++; row--; }
+  // A checker sent to the bar sits on top of the divider, not down at the
+  // level of the playing surface. On the cases the divider is a wall two and
+  // a half centimetres tall, and a checker seated at felt height is inside
+  // it — nothing shows but a three millimetre crescent either side.
+  const floor = p.onBar ? BAR_TOP : FELT_Y;
   return {
     x: p.x,
-    y: .47 + layer * (CHECKER_H + .004),
+    y: floor + layer * (CHECKER_H + .004),
     z: p.baseZ + p.dir * (layer * CHECKER_GAP / 2 + slot * CHECKER_GAP),
   };
 }
