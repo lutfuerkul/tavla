@@ -847,13 +847,13 @@ function resetState() {
   // each other in matching runs.
   state[12] = { color: "black", count: 2 };   // far row, far left
   state[1] = { color: "black", count: 5 };    // far row, far right
-  state[17] = { color: "black", count: 5 };   // near row, left of the bar
-  state[19] = { color: "black", count: 3 };   // near row, right of the bar
+  state[18] = { color: "black", count: 5 };   // near row, against the bar on the left
+  state[20] = { color: "black", count: 3 };   // near row, one column right of the bar
 
   state[13] = { color: "ivory", count: 2 };   // opposite point 12
   state[24] = { color: "ivory", count: 5 };   // opposite point 1
-  state[8] = { color: "ivory", count: 5 };    // opposite point 17
-  state[6] = { color: "ivory", count: 3 };    // opposite point 19
+  state[7] = { color: "ivory", count: 5 };    // opposite point 18
+  state[5] = { color: "ivory", count: 3 };    // opposite point 20
 }
 
 const piecesGroup = new THREE.Group();
