@@ -7,8 +7,8 @@ const enter = document.querySelector("#enter");
 const hud = document.querySelector("#hud");
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0805);
-scene.fog = new THREE.FogExp2(0x0a0805, 0.042);
+scene.background = new THREE.Color(0x060402);
+scene.fog = new THREE.FogExp2(0x060402, 0.04);
 
 // Fixed, near-top-down seat at the table — the camera never moves once
 // seated, so the mouse is free to drag checkers instead of looking around.
@@ -22,7 +22,7 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.15;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 // Soft studio-style reflections for the lacquer and clearcoat surfaces
@@ -130,7 +130,7 @@ const panel = new THREE.MeshPhysicalMaterial({
   clearcoat: .65,
   clearcoatRoughness: .1,
 });
-const brass = new THREE.MeshStandardMaterial({ color: 0xd4b896, roughness: .25, metalness: .85 });
+const brass = new THREE.MeshStandardMaterial({ color: 0xe0c9a0, roughness: .22, metalness: .88 });
 const pearl = new THREE.MeshStandardMaterial({ color: 0xfcfaf6, roughness: .25, metalness: 0 });
 const ivory = new THREE.MeshPhysicalMaterial({
   color: 0xf9f5ed,
