@@ -2487,6 +2487,45 @@ showDiceValues();
 // for you to pick them up and throw them.
 updateHud();
 
+// The board is nearly square and the window is not. Rather than frame it for
+// one shape and cut it off in every other, the camera backs away along the
+// line it already looks down until the whole case is inside the frame. A
+// phone held upright ends up further back than a desktop window does, and the
+// board is small there, but all twenty-four points are on the screen and can
+// be played.
+const CAMERA_AIM = new THREE.Vector3(0, .4, 0);
+const CAMERA_HOME = camera.position.clone();
+
+function fitCamera() {
+  camera.aspect = innerWidth / innerHeight;
+  const direction = CAMERA_HOME.clone().sub(CAMERA_AIM);
+  const base = direction.length();
+  direction.normalize();
+
+  const corners = [];
+  for (const x of [-CASE_HALF_X, CASE_HALF_X]) {
+    for (const y of [CASE_BOTTOM, CASE_TOP]) {
+      for (const z of [-CASE_HALF_Z, CASE_HALF_Z]) corners.push(new THREE.Vector3(x, y, z));
+    }
+  }
+
+  for (let step = 0; step < 60; step++) {
+    camera.position.copy(CAMERA_AIM).addScaledVector(direction, base * (1 + step * .04));
+    camera.lookAt(CAMERA_AIM);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+    let widest = 0, tallest = 0;
+    for (const corner of corners) {
+      const seen = corner.clone().project(camera);
+      widest = Math.max(widest, Math.abs(seen.x));
+      tallest = Math.max(tallest, Math.abs(seen.y));
+    }
+    if (widest <= .94 && tallest <= .94) break;
+  }
+}
+
+fitCamera();
+
 const clock = new THREE.Clock();
 function animate() {
   const dt = Math.min(clock.getDelta(), .25);
@@ -2499,6 +2538,7 @@ function animate() {
 animate();
 
 addEventListener("resize", () => {
+  fitCamera();
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
