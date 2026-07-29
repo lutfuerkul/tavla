@@ -1723,6 +1723,13 @@ function diceInHand(colour) {
   return [colour === HUMAN ? diceMeshes[0] : diceMeshes[1]];
 }
 
+// Whose throw it is. In the opening that is whoever is being waited on rather
+// than whose turn it is — the turn has not been settled yet, and two people
+// sharing a screen both throw before it has been.
+function thrower() {
+  return game.phase === "opening" ? game.waitingOn : game.turn;
+}
+
 const pointKey = point => String(point);
 const barKey = colour => (colour === "ivory" ? "barW" : "barB");
 
@@ -2125,7 +2132,7 @@ function throwDice(towards) {
     vel: new THREE.Vector3(),
     swirl: 0,
     towards,
-    entries: diceInHand(game.waitingOn || COMPUTER).map((die, i) => {
+    entries: diceInHand(thrower() || COMPUTER).map((die, i) => {
       const st = die.userData.die;
       st.mode = "held";
       st.vel.set(0, 0, 0);
@@ -2195,9 +2202,10 @@ canvas.addEventListener("pointerdown", (e) => {
       lastT: performance.now(),
       startedAt: performance.now(),
       released: false,
+      byHand: true,
       vel: new THREE.Vector3(),
       swirl: 0,
-      entries: diceInHand(game.turn).map((die, i) => {
+      entries: diceInHand(thrower()).map((die, i) => {
         const s = die.userData.die;
         s.mode = "held";
         s.vel.set(0, 0, 0);
@@ -2260,6 +2268,11 @@ addEventListener("pointermove", (e) => {
     if (target) dragging.mesh.position.copy(target);
     return;
   }
+
+  // Only dice in a hand follow that hand. The computer picks its own up and
+  // shakes them where it is sitting, and moving the mouse over the table while
+  // it does that was dragging them around after the cursor.
+  if (!heldDice.byHand) return;
 
   const target = pointerOnPlane(liftPlane, new THREE.Vector3());
   if (!target) return;
