@@ -4,6 +4,12 @@ import { RoomEnvironment } from "../vendor/three/examples/jsm/environments/RoomE
 const canvas = document.querySelector("#scene");
 import * as Rules from "./rules.js";
 import { LANGS, language, setLanguage, t, isIdeographic } from "./i18n.js";
+import { localSession } from "./session.js";
+
+// Where the turns come from. Everything the board cannot decide by itself goes
+// through here, so a game against a server can be a different session rather
+// than a different board.
+const session = localSession();
 
 const intro = document.querySelector("#intro");
 const hud = document.querySelector("#hud");
@@ -1187,6 +1193,8 @@ function dice(x, z, face) {
     touching: false,
     offContact: 0,
     cocked: false,
+    // Set only when a search gave up: the face this die has to show.
+    forced: null,
   };
   scene.add(die);
   diceMeshes.push(die);
@@ -1204,6 +1212,7 @@ function resetDice() {
     die.quaternion.setFromEuler(FACE_UP[face]);
     Object.assign(die.userData.die, {
       mode: "rest", value: face, still: 0, touching: false, offContact: 0, cocked: false,
+      forced: null,
     });
     die.userData.die.vel.set(0, 0, 0);
     die.userData.die.spin.set(0, 0, 0);
@@ -1252,6 +1261,9 @@ function settleDie(die) {
   s.vel.set(0, 0, 0);
   s.spin.set(0, 0, 0);
   s.value = readDie(die);
+  // A search runs the same physics with nothing drawn and nobody told: it is
+  // asking where a throw would land, not throwing one.
+  if (simulating) return;
   showDiceValues();
   if (diceMeshes.every(d => d.userData.die.mode === "rest")) onDiceSettled();
 }
@@ -2105,8 +2117,11 @@ function tryMove(fromPlace, toPlace) {
   if (!moves.length) return false;
 
   // The whole drag is one entry in the history, so taking it back takes back
-  // what was dragged rather than half of it.
-  game.history.push({ pos: game.pos, remaining: game.remaining.slice(), played: game.played });
+  // what was dragged rather than half of it. The moves themselves are kept
+  // alongside the board they were played on: taking the turn back needs the
+  // board, and handing the turn over needs the moves.
+  game.history.push({ pos: game.pos, remaining: game.remaining.slice(),
+    played: game.played, moves });
   for (const move of moves) {
     game.pos = Rules.applyMove(game.pos, game.turn, move);
     game.remaining.splice(game.remaining.indexOf(move.die), 1);
@@ -2160,6 +2175,16 @@ function onDiceSettled() {
   // A die leaning on a wall or standing on a checker is not a roll. It goes
   // back in the hand and is thrown again by whoever threw it.
   const rolled = diceInHand(thrower() || game.turn);
+  // The numbers the session named are the numbers of this throw, whatever the
+  // dice happen to have come to rest on.
+  if (wanted && wanted.length === rolled.length) {
+    const got = rolled.map(d => d.userData.die.value).slice().sort();
+    const asked = wanted.slice().sort();
+    if (!got.every((face, i) => face === asked[i])) {
+      rolled.forEach((die, i) => { die.userData.die.value = wanted[i]; });
+    }
+  }
+  wanted = null;
   if (rolled.some(d => d.userData.die.cocked)) {
     game.cocked = true;
     updateHud();
@@ -2328,10 +2353,19 @@ function undoMove() {
   updateHud();
 }
 
+// The turn is handed over through the session rather than taken over directly.
+// Locally that is granted at once; against a server it is the moment the moves
+// are sent and the reply waited for, which is why the board is left alone until
+// the answer comes back.
 function endTurn() {
   if (!turnComplete() || game.over || !isHuman(game.turn)) return;
-  startTurn(Rules.other(game.turn));
-  updateHud();
+  const played = game.history.flatMap(step => step.moves ?? []);
+  const handingOver = game.turn;
+  session.commitTurn(played).then(reply => {
+    if (!reply?.ok || game.over || game.turn !== handingOver) return;
+    startTurn(Rules.other(handingOver));
+    updateHud();
+  });
 }
 
 // Back to the door. A game in progress is worth a question first, and the
@@ -2599,7 +2633,10 @@ function stepHeldDice(dt) {
     applySpin(die, entry.shakeSpin, dt);
   });
 
-  if (heldDice.released && elapsed >= MIN_SHAKE_MS) launchDice();
+  if (heldDice.released && elapsed >= MIN_SHAKE_MS && !heldDice.launching) {
+    heldDice.launching = true;
+    launchDice();
+  }
 }
 
 // The frame loop is the natural place to fire the throw, but on a machine
@@ -2610,7 +2647,10 @@ function armThrow() {
   const remaining = MIN_SHAKE_MS - (performance.now() - heldDice.startedAt);
   const token = heldDice;
   setTimeout(() => {
-    if (heldDice === token && heldDice.released) launchDice();
+    if (heldDice === token && heldDice.released && !heldDice.launching) {
+      heldDice.launching = true;
+      launchDice();
+    }
   }, Math.max(0, remaining));
 }
 
@@ -2673,6 +2713,153 @@ function throwDice(towards) {
   armThrow();
 }
 
+// A throw has to come out as the numbers the session named, and it has to get
+// there by rolling. Forcing a die round once it has stopped is the one thing
+// that would look wrong, so instead the tumble is chosen to suit the answer:
+// throws are simulated with different launches until one of them lands on the
+// pair, and that is the one the player sees.
+//
+// It costs about three milliseconds a try here and a pair comes up roughly one
+// try in twenty four, so the search is sliced across frames while the dice are
+// still being shaken — there are two seconds of that to hide it in — and the
+// state it searched from is put back the moment they leave the hand. The dice
+// are tumbling by then, so a frame's worth of jump in where they sit is not
+// something anybody sees.
+const SEARCH_TRIES = 400;
+// Five milliseconds of a sixty-a-second frame is a third of the search done
+// every second, which finishes a throw inside the shake. On a machine limping
+// along at a frame every second or two that same five would take the search
+// into the minutes, so it is given a share of whatever the frame is actually
+// costing instead — a quarter of it, capped, so a slow machine spends longer
+// per frame but does not spend the whole of one.
+const SEARCH_SHARE = .25, SEARCH_FLOOR_MS = 5, SEARCH_CEILING_MS = 250;
+// What the session asked for, kept from the moment the dice leave the hand
+// until they have stopped. The tumble that was chosen lands on it — but the
+// throw is replayed rather than the searched run itself being shown, and about
+// one throw in a hundred the replay comes out somewhere else. The numbers the
+// game plays with cannot be left to that, so what settles is checked against
+// what was asked and corrected if it has drifted.
+let wanted = null;
+let simulating = false;
+let pending = null;
+
+// Deterministic, so a launch can be set up twice and come out identical.
+function seeded(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function shakeSpinFrom(rand) {
+  return new THREE.Vector3(rand() - .5, rand() - .5, rand() - .5)
+    .normalize().multiplyScalar(20 + rand() * 16);
+}
+
+function diceSnapshot(dice) {
+  return dice.map(die => ({
+    die,
+    position: die.position.clone(),
+    quaternion: die.quaternion.clone(),
+  }));
+}
+
+function restoreDice(snapshot) {
+  for (const { die, position, quaternion } of snapshot) {
+    die.position.copy(position);
+    die.quaternion.copy(quaternion);
+  }
+}
+
+// Everything about the launch that is not the aim: how hard, how much scatter,
+// how high, how fast it tumbles.
+function armLaunch(dice, aim, seed) {
+  const rand = seeded(seed);
+  const shot = aim.clone().setLength(52 + rand() * 16);
+  for (const die of dice) {
+    // Which way up it leaves the hand is part of the throw. A die let go from
+    // one fixed pose does not land on all six faces equally often — searching
+    // from a single pose took fifteen tries to find a face that should take
+    // four — and a die being shaken is not in a fixed pose anyway.
+    die.quaternion.premultiply(new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(rand() * Math.PI * 2, rand() * Math.PI * 2, rand() * Math.PI * 2)));
+    const s = die.userData.die;
+    s.mode = "throw";
+    // Enough scatter that they do not fly in formation and land in a stack.
+    s.vel.copy(shot).add(new THREE.Vector3((rand() - .5) * 12, 0, (rand() - .5) * 12));
+    // Thrown up and out of the hand, not rolled off the fingertips.
+    s.vel.y = 7 + rand() * 7;
+    s.spin.copy(shakeSpinFrom(rand)).clampLength(30, 54);
+    s.still = 0;
+    s.cocked = false;
+    s.offContact = 0;
+    // Every field the stopping test reads, so a launch set up twice from the
+    // same pose comes out the same both times. Leaving this one behind was
+    // enough to make one throw in sixty replay differently from the search
+    // that chose it.
+    s.touching = false;
+  }
+}
+
+// One throw played out with nothing drawn, to see where it lands.
+function outcomeOf(dice, aim, seed) {
+  const debt = physicsDebt;
+  simulating = true;
+  physicsDebt = 0;
+  armLaunch(dice, aim, seed);
+  let t = 0;
+  while (t < 15 && dice.some(die => die.userData.die.mode !== "rest")) {
+    stepDicePhysics(1 / 60);
+    t += 1 / 60;
+  }
+  const faces = dice.map(die => die.userData.die.value);
+  const cocked = dice.some(die => die.userData.die.cocked);
+  simulating = false;
+  physicsDebt = debt;
+  return { faces, cocked };
+}
+
+// The numbers, in any order, and every die standing flat: a die leaning on a
+// wall is a broken roll, and a roll whose numbers were decided in advance
+// cannot be one.
+function lands(outcome, want) {
+  if (outcome.cocked) return false;
+  const got = outcome.faces.slice().sort();
+  const asked = want.slice().sort();
+  return got.length === asked.length && got.every((face, i) => face === asked[i]);
+}
+
+function stepSearch(frameDt = 1 / 60) {
+  if (!pending) return;
+  const budget = Math.min(SEARCH_CEILING_MS,
+    Math.max(SEARCH_FLOOR_MS, frameDt * 1000 * SEARCH_SHARE));
+  const until = performance.now() + budget;
+  while (pending.tried < SEARCH_TRIES && performance.now() < until) {
+    const seed = Math.imul(++pending.tried, 2654435761) ^ pending.salt;
+    restoreDice(pending.from);
+    if (lands(outcomeOf(pending.dice, pending.aim, seed), pending.want)) {
+      pending.seed = seed;
+      break;
+    }
+  }
+  restoreDice(pending.from);
+  for (const die of pending.dice) {
+    const s = die.userData.die;
+    s.mode = "held";
+    s.vel.set(0, 0, 0);
+    s.spin.set(0, 0, 0);
+  }
+  if (pending.seed === null && pending.tried < SEARCH_TRIES) return;
+  // Out of tries without a match is vanishingly unlikely — one throw in about
+  // eighty thousand — but it cannot be allowed to hand the player a roll the
+  // session did not name, so the last launch is used and the faces are set.
+  pending.exhausted = pending.seed === null;
+  pending.ready = true;
+}
+
 function launchDice() {
   const hand = heldDice.vel.clone();
   hand.y = 0;
@@ -2694,25 +2881,35 @@ function launchDice() {
   const sideways = Math.max(-CONE, Math.min(CONE, hand.x * .3));
   // Around 2 m/s, which is a firm throw rather than a nudge — hard enough to
   // reach the far rail, come back off it and keep tumbling.
-  const aim = new THREE.Vector3(sideways, 0, towards)
-    .normalize()
-    .multiplyScalar(52 + Math.random() * 16);
+  const aim = new THREE.Vector3(sideways, 0, towards).normalize();
+  const dice = heldDice.entries.map(entry => entry.die);
 
-  heldDice.entries.forEach(({ die }) => {
-    const s = die.userData.die;
-    s.mode = "throw";
-    // Enough scatter that they do not fly in formation and land in a stack.
-    s.vel.copy(aim).add(new THREE.Vector3(
-      (Math.random() - .5) * 12,
-      0,
-      (Math.random() - .5) * 12
-    ));
-    // Thrown up and out of the hand, not rolled off the fingertips.
-    s.vel.y = 7 + Math.random() * 7;
-    s.spin.copy(randomShakeSpin()).clampLength(30, 54);
-    s.still = 0;
+  // The numbers first, then a tumble that produces them. Asking for them takes
+  // no time locally and a round trip online, and either way the dice carry on
+  // being shaken until the answer and a matching throw are both in hand.
+  const token = heldDice;
+  session.roll(dice.length).then(want => {
+    if (heldDice !== token) return;
+    pending = {
+      dice, aim, want,
+      // Every die, not just the ones in the hand. A thrown die knocks the
+      // other one across the felt, and an attempt that starts from where the
+      // last attempt left it is not the throw that was searched for.
+      from: diceSnapshot(diceMeshes),
+      salt: (Math.random() * 0xffffffff) | 0,
+      tried: 0, seed: null, ready: false, exhausted: false,
+    };
   });
+}
 
+// The moment a matching throw is in hand, the dice leave it.
+function releasePending() {
+  if (!pending?.ready) return;
+  const { dice, aim, seed, want } = pending;
+  restoreDice(pending.from);
+  armLaunch(dice, aim, seed ?? Math.imul(pending.tried, 2654435761));
+  wanted = want;
+  pending = null;
   heldDice = null;
   thrown = true;
   canvas.style.cursor = "grab";
@@ -3076,6 +3273,10 @@ addEventListener("visibilitychange", () => { recent = []; measuredSince = 0; });
 const clock = new THREE.Clock();
 function animate(now) {
   const dt = Math.min(clock.getDelta(), .25);
+  // Before the shake, so what is drawn is the shake and not the last frame of
+  // whatever the search was trying.
+  stepSearch(dt);
+  releasePending();
   stepHeldDice(dt);
   stepSlide(dt);
   stepDicePhysics(dt);
