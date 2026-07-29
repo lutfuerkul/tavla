@@ -1971,9 +1971,9 @@ function onDiceSettled() {
   if (rolled.some(d => d.userData.die.cocked)) {
     game.cocked = true;
     updateHud();
-    if (!isHuman(thrower() || game.turn)) {
-      setTimeout(() => throwDice(isHuman(thrower() || game.turn) ? AWAY : -AWAY), 1400);
-    }
+    // Only the computer's re-throw is automatic — the people at the table pick
+    // the dice back up themselves — so it is always aimed from its chair.
+    if (!isHuman(thrower() || game.turn)) setTimeout(() => throwDice(-AWAY), 1400);
     return;
   }
   game.cocked = false;
@@ -2049,7 +2049,7 @@ function openingSettled() {
     // The other side still has to throw.
     const next = game.opening[HUMAN] === null ? HUMAN : COMPUTER;
     game.waitingOn = next;
-    if (!isHuman(next)) setTimeout(() => throwDice(next === HUMAN ? -1 : 1), 900);
+    if (!isHuman(next)) setTimeout(() => throwDice(next === HUMAN ? AWAY : -AWAY), 900);
     updateHud();
     return;
   }
@@ -2413,7 +2413,11 @@ canvas.addEventListener("pointerdown", (e) => {
       startedAt: performance.now(),
       released: false,
       byHand: true,
-      towards: AWAY,
+      // Away from whoever is throwing, not away from the seat. With two people
+      // round one tablet the second of them sits opposite, so their throw
+      // crosses the board towards the first — the same aim the computer uses,
+      // because it is sitting in that chair.
+      towards: thrower() === HUMAN ? AWAY : -AWAY,
       vel: new THREE.Vector3(),
       swirl: 0,
       entries: diceInHand(thrower()).map((die, i) => {
