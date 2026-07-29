@@ -1768,7 +1768,7 @@ function renderPieces() {
     const z = colour === HUMAN ? FIELD_HALF * .55 : -FIELD_HALF * .55;
     for (let i = 0; i < taken; i++) {
       const body = new THREE.Mesh(checkerGeometry, material);
-      body.position.set(CASE_HALF_X + .78, FELT_Y + i * (CHECKER_H + .004), z);
+      body.position.set(CASE_HALF_X + 1.75, FELT_Y + i * (CHECKER_H + .004), z);
       body.rotation.y = (Math.random() - .5) * .3;
       body.castShadow = true;
       body.receiveShadow = true;
