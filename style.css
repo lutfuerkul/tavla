@@ -22,12 +22,20 @@ button:hover { background: #edbb69; }
 @media (max-width: 600px) { #hud { top: .8rem; left: .8rem; gap: .5rem; } #hud div { min-width: 5.8rem; } }
 /* Two boards to choose from at the door. */
 #boards { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
-.board-pick { display: grid; gap: .35rem; padding: 1rem 1.4rem; min-width: 13rem; text-align: left;
-  background: rgba(20,15,10,.72); color: #e8dcc4; border: 1px solid rgba(229,173,84,.28);
-  border-radius: .5rem; cursor: pointer; transition: border-color .2s ease, background .2s ease; }
-.board-pick:hover { border-color: rgba(229,173,84,.75); background: rgba(34,25,15,.85); }
-.board-pick.chosen { border-color: #e5ad54; }
-.board-name { font-size: .95rem; letter-spacing: .04em; }
+/* The three rows of the door are the same kind of choice, so they are the same
+   button: dark until it is picked, gold once it is, with no doubt about which
+   of them has been. */
+.mode-pick, .board-pick, .colour-pick {
+  display: inline-flex; align-items: center; justify-content: center; gap: .55rem;
+  padding: .72rem 1.5rem; font: 500 .86rem/1 "DM Mono", monospace;
+  letter-spacing: .1em; text-transform: uppercase;
+  color: #d8ccb4; background: rgba(20,15,10,.78);
+  border: 1px solid rgba(229,173,84,.28); border-radius: .45rem; cursor: pointer;
+  transition: color .2s ease, background .2s ease, border-color .2s ease; }
+.mode-pick:hover, .board-pick:hover, .colour-pick:hover {
+  border-color: rgba(229,173,84,.75); color: #f6ecd6; background: rgba(36,26,16,.9); }
+.mode-pick.chosen, .board-pick.chosen, .colour-pick.chosen {
+  color: #0d0a06; background: #e5ad54; border-color: #e5ad54; }
 .board-note { font-size: .68rem; color: #9b907e; line-height: 1.5; }
 
 /* Ends the turn, and only lights up when the turn can actually be ended —
@@ -48,12 +56,8 @@ button:hover { background: #edbb69; }
 
 
 /* Who is playing, chosen before the table is. */
-#modes { display: flex; gap: .6rem; justify-content: center; flex-wrap: wrap; margin: 2.4rem 0 1.6rem; }
-.mode-pick { padding: .5rem 1.1rem; font: inherit; font-size: .74rem; letter-spacing: .1em;
-  color: #b9ac95; background: transparent; border: 1px solid rgba(229,173,84,.22);
-  border-radius: 2rem; cursor: pointer; transition: color .2s ease, border-color .2s ease; }
-.mode-pick:hover { border-color: rgba(229,173,84,.6); color: #e8dcc4; }
-.mode-pick.chosen { color: #0d0a06; background: #e5ad54; border-color: #e5ad54; }
+#modes { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin: 2.4rem 0 1.6rem; }
+
 
 /* Said rather than shown: a broken roll, and anything else that needs words. */
 #notice { position: fixed; z-index: 4; left: 50%; top: 12%; transform: translateX(-50%);
@@ -66,14 +70,9 @@ button:hover { background: #edbb69; }
 #intro:not(.hidden) ~ #controls, #intro:not(.hidden) ~ #notice { display: none; }
 
 /* Which checkers are yours, and the door handle. */
-#colours { display: flex; gap: .6rem; justify-content: center; flex-wrap: wrap; margin: 1.1rem 0 0; }
-.colour-pick { display: inline-flex; align-items: center; gap: .5rem; padding: .5rem 1.2rem;
-  font: inherit; font-size: .74rem; letter-spacing: .1em; color: #b9ac95; background: transparent;
-  border: 1px solid rgba(229,173,84,.22); border-radius: 2rem; cursor: pointer;
-  transition: color .2s ease, border-color .2s ease, background .2s ease; }
-.colour-pick:hover { border-color: rgba(229,173,84,.6); color: #e8dcc4; }
-.colour-pick.chosen { color: #0d0a06; background: #e5ad54; border-color: #e5ad54; }
-.chip { width: .78rem; height: .78rem; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.45); }
+#colours { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin: 1.1rem 0 0; }
+
+.chip { width: .82rem; height: .82rem; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.5), 0 0 0 1px rgba(0,0,0,.35); }
 .chip-black { background: radial-gradient(circle at 35% 30%, #4a4a4e, #131316 70%); }
 .chip-ivory { background: radial-gradient(circle at 35% 30%, #f2e4bd, #cbb079 70%); }
 
