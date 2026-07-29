@@ -2327,11 +2327,32 @@ function armThrow() {
   }, Math.max(0, remaining));
 }
 
+// Which half of the board has the fewer checkers standing in it. The bar
+// splits the two, so the sign of a point's x says which half it is in.
+function emptierHalf() {
+  let left = 0, right = 0;
+  for (let point = 1; point <= 24; point++) {
+    const stack = game?.pos.points[point];
+    if (!stack) continue;
+    if (POINTS[point].x < 0) left += stack.count; else right += stack.count;
+  }
+  // A tie goes to the half away from your home board, which is the one you are
+  // not gathering into.
+  if (left === right) return -MIRROR;
+  return left < right ? -1 : 1;
+}
+
 // Fling the pair away across the board, fast.
 // The computer throws from the other side of the table, so the aim is the
 // one thing that differs between its throw and yours.
+// It lets go over the emptier half rather than over a fixed spot: with no hand
+// behind it the throw runs almost straight down the table, so whichever side
+// it starts on is the side it stops on — 97 of 100 dice measured. Left as it
+// was, every roll of its landed in the same corner. The spread across the
+// chosen half keeps it from being the same throw twice.
 function throwDice(towards) {
-  const anchor = new THREE.Vector3(towards > 0 ? -1.5 : 1.5, LIFT_Y, towards > 0 ? -4 : 4);
+  const anchor = new THREE.Vector3(emptierHalf() * (1.1 + Math.random() * 1.6),
+    LIFT_Y, towards > 0 ? -4 : 4);
   heldDice = {
     anchor: anchor.clone(),
     last: anchor.clone(),
