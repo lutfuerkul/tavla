@@ -66,11 +66,18 @@ const NAMES = { ivory: "KEMİK", black: "SİYAH" };
 // Away from your own seat: the direction a throw is aimed.
 const AWAY = HUMAN === "black" ? -1 : 1;
 
-// Your home board is the bottom left of the screen whichever colour you play.
-// The camera sitting on your side of the table gets the near row under your
-// hands; this gets the six points you bear off from under your left one, by
-// laying the numbering out along x one way for black and the other for ivory.
-const MIRROR = HUMAN === "black" ? -1 : 1;
+// Which hand you gather your checkers with, also chosen at the door. Left is
+// where most people want them, so it is what an unanswered door means.
+const SIDE_KEY = "tavla.side";
+const SIDE = localStorage.getItem(SIDE_KEY) === "sag" ? -1 : 1;
+
+// Your home board is on your chosen side of the screen whichever colour you
+// play. The camera sitting on your side of the table gets the near row under
+// your hands; this gets the six points you bear off from under the hand you
+// asked for, by laying the numbering out along x one way or the other. The
+// two factors multiply: the colour decides which way is "your left", and the
+// side flips it if you would rather gather right.
+const MIRROR = (HUMAN === "black" ? -1 : 1) * SIDE;
 
 // Two ways to play: against the computer, or two people sharing one screen and
 // taking the table in turns. Both are settled at the door, before anything is
@@ -127,6 +134,7 @@ function sitDown() {
 // being asked.
 let pickedBoard = null;
 let pickedColour = null;
+let pickedSide = null;
 const startButton = document.querySelector("#start");
 
 function markChosen(attribute, value) {
@@ -135,7 +143,7 @@ function markChosen(attribute, value) {
 }
 
 function refreshStart() {
-  if (startButton) startButton.disabled = !(pickedBoard && pickedColour);
+  if (startButton) startButton.disabled = !(pickedBoard && pickedColour && pickedSide);
 }
 
 document.querySelectorAll("[data-mode]").forEach(button => {
@@ -163,15 +171,25 @@ document.querySelectorAll("[data-colour]").forEach(button => {
   });
 });
 
-// Both the table and the colour are settled before the scene is built — one
-// lays out the points, the other decides which side of the table the camera
-// sits on — so picking something other than what is already standing there
-// means starting the page again.
+document.querySelectorAll("[data-side]").forEach(button => {
+  button.addEventListener("click", () => {
+    pickedSide = button.dataset.side;
+    markChosen("side", pickedSide);
+    refreshStart();
+  });
+});
+
+// The table, the colour and the side are all settled before the scene is built
+// — the first lays out the points, the other two decide where the camera sits
+// and which way round the numbering runs — so picking something other than
+// what is already standing there means starting the page again.
+const sideName = SIDE === -1 ? "sag" : "sol";
 startButton?.addEventListener("click", () => {
-  if (!pickedBoard || !pickedColour) return;
-  if (pickedBoard === boardName && pickedColour === HUMAN) return sitDown();
+  if (!pickedBoard || !pickedColour || !pickedSide) return;
+  if (pickedBoard === boardName && pickedColour === HUMAN && pickedSide === sideName) return sitDown();
   localStorage.setItem(BOARD_KEY, pickedBoard);
   localStorage.setItem(COLOUR_KEY, pickedColour);
+  localStorage.setItem(SIDE_KEY, pickedSide);
   sessionStorage.setItem("tavla.sitOnLoad", "1");
   location.reload();
 });
@@ -1953,9 +1971,9 @@ function onDiceSettled() {
   if (rolled.some(d => d.userData.die.cocked)) {
     game.cocked = true;
     updateHud();
-    if (!isHuman(thrower() || game.turn)) {
-      setTimeout(() => throwDice(isHuman(thrower() || game.turn) ? AWAY : -AWAY), 1400);
-    }
+    // Only the computer's re-throw is automatic — the people at the table pick
+    // the dice back up themselves — so it is always aimed from its chair.
+    if (!isHuman(thrower() || game.turn)) setTimeout(() => throwDice(-AWAY), 1400);
     return;
   }
   game.cocked = false;
@@ -2031,7 +2049,7 @@ function openingSettled() {
     // The other side still has to throw.
     const next = game.opening[HUMAN] === null ? HUMAN : COMPUTER;
     game.waitingOn = next;
-    if (!isHuman(next)) setTimeout(() => throwDice(next === HUMAN ? -1 : 1), 900);
+    if (!isHuman(next)) setTimeout(() => throwDice(next === HUMAN ? AWAY : -AWAY), 900);
     updateHud();
     return;
   }
@@ -2309,11 +2327,32 @@ function armThrow() {
   }, Math.max(0, remaining));
 }
 
+// Which half of the board has the fewer checkers standing in it. The bar
+// splits the two, so the sign of a point's x says which half it is in.
+function emptierHalf() {
+  let left = 0, right = 0;
+  for (let point = 1; point <= 24; point++) {
+    const stack = game?.pos.points[point];
+    if (!stack) continue;
+    if (POINTS[point].x < 0) left += stack.count; else right += stack.count;
+  }
+  // A tie goes to the half away from your home board, which is the one you are
+  // not gathering into.
+  if (left === right) return -MIRROR;
+  return left < right ? -1 : 1;
+}
+
 // Fling the pair away across the board, fast.
 // The computer throws from the other side of the table, so the aim is the
 // one thing that differs between its throw and yours.
+// It lets go over the emptier half rather than over a fixed spot: with no hand
+// behind it the throw runs almost straight down the table, so whichever side
+// it starts on is the side it stops on — 97 of 100 dice measured. Left as it
+// was, every roll of its landed in the same corner. The spread across the
+// chosen half keeps it from being the same throw twice.
 function throwDice(towards) {
-  const anchor = new THREE.Vector3(towards > 0 ? -1.5 : 1.5, LIFT_Y, towards > 0 ? -4 : 4);
+  const anchor = new THREE.Vector3(emptierHalf() * (1.1 + Math.random() * 1.6),
+    LIFT_Y, towards > 0 ? -4 : 4);
   heldDice = {
     anchor: anchor.clone(),
     last: anchor.clone(),
@@ -2395,7 +2434,11 @@ canvas.addEventListener("pointerdown", (e) => {
       startedAt: performance.now(),
       released: false,
       byHand: true,
-      towards: AWAY,
+      // Away from whoever is throwing, not away from the seat. With two people
+      // round one tablet the second of them sits opposite, so their throw
+      // crosses the board towards the first — the same aim the computer uses,
+      // because it is sitting in that chair.
+      towards: thrower() === HUMAN ? AWAY : -AWAY,
       vel: new THREE.Vector3(),
       swirl: 0,
       entries: diceInHand(thrower()).map((die, i) => {
