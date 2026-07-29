@@ -23,13 +23,29 @@ button:hover { background: #edbb69; }
    the board is centred too. */
 #hud { position: fixed; z-index: 1; top: 1.5rem; left: 50%; transform: translateX(-50%);
   display: flex; gap: 1.25rem; opacity: 0; transition: opacity .35s ease; }
-#hud.visible { opacity: 1; }
+/* Invisible is not the same as absent: without this the camera button under a
+   hidden panel is still there to be pressed. */
+#hud { pointer-events: none; }
+#hud.visible { opacity: 1; pointer-events: auto; }
+
+/* The second camera, alongside the score it sits next to. Shaped like the
+   panels rather than like the gold buttons, because it belongs to the readout
+   and not to the game. */
+#view { align-self: center; padding: .55rem .9rem;
+  font: 500 .62rem/1.2 "DM Mono", monospace; letter-spacing: .12em;
+  text-transform: uppercase; color: #b3a791; background: rgba(12,9,6,.5);
+  border: 1px solid rgba(229,173,84,.28); border-radius: .4rem; box-shadow: none;
+  cursor: pointer; transition: color .2s ease, border-color .2s ease, background .2s ease; }
+#view:hover { color: #f6ecd6; border-color: rgba(229,173,84,.75); background: rgba(36,26,16,.9); }
 #hud div { min-width: 7.2rem; padding: .7rem .8rem; border-left: 1px solid rgba(231,182,102,.75); background: linear-gradient(90deg, rgba(8,6,4,.7), transparent); }
 #hud span { display: block; color: #ad9470; font-size: .55rem; letter-spacing: .15em; margin-bottom: .3rem; }
 #hud strong { color: #eee3ce; font-size: .72rem; letter-spacing: .06em; }
 #crosshair { position: fixed; z-index: 1; top: 50%; left: 50%; width: 8px; height: 8px; margin: -4px; border: 1px solid rgba(247,235,207,.8); border-radius: 50%; opacity: 0; transition: opacity .35s; }
 #crosshair.visible { opacity: .8; }
-@media (max-width: 600px) { #hud { top: .8rem; gap: .5rem; } #hud div { min-width: 5.8rem; } }
+@media (max-width: 600px) {
+  #hud { top: .8rem; gap: .5rem; }
+  #hud div { min-width: 5.8rem; }
+}
 /* The languages, up the right-hand side of the board where there is nothing
    else. Each is written in its own language, because somebody looking for
    their own language is not reading the one they have landed in. The flags
@@ -191,3 +207,20 @@ body.ideographic #hud span, body.ideographic #hud strong {
 #confirm-no:hover { border-color: #e5ad54; color: #f6ecd6; }
 #confirm-yes { color: #0d0a06; background: #e5ad54; border: 0; }
 #confirm-yes:hover { background: #f0bd68; }
+
+/* Either side short is a handheld, whichever way up it is held — a phone lying
+   on its side is nearly nine hundred points wide and still has no corner to
+   spare. Both the camera and the way out are moved into the row along the
+   bottom there (see placeButtons), so the one that was pinned to a corner has
+   to stop being pinned, and the row has to be allowed to wrap when four
+   buttons will not sit on one line. */
+@media (max-width: 600px), (max-height: 600px) {
+  #menu { position: static; top: auto; right: auto; }
+  /* Centred by a half-width shift, the row has no width of its own to wrap
+     inside — the buttons pile up and sit on each other. Given the window to
+     lay out in, it wraps into tidy centred lines. */
+  #controls { left: 0; right: 0; transform: none; width: 100%;
+    flex-wrap: wrap; justify-content: center; padding: 0 .4rem; gap: .4rem; }
+  #view, #menu { padding: .5rem .7rem; font-size: .6rem; letter-spacing: .08em; }
+  #undo, #done { padding: .55rem 1rem; font-size: .72rem; }
+}
