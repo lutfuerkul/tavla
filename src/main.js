@@ -53,9 +53,14 @@ const BOARDS = {
     room: { env: .5, fill: .3, hemi: .85, ambient: .22 },
   },
 };
-// You are the bone checkers; the computer plays the black ones.
-const HUMAN = "ivory";
-const COMPUTER = "black";
+// You play the black checkers and the computer the bone ones, because of
+// where the two home boards are. Black runs 1 to 24 and comes home to 19-24,
+// which is the near row — the side of the table you are sitting at. Ivory
+// comes home to 1-6, on the far row, which is where the player opposite you
+// is. Handing you the bone checkers would have you bearing off across the
+// table from yourself.
+const HUMAN = "black";
+const COMPUTER = "ivory";
 const NAMES = { ivory: "KEMİK", black: "SİYAH" };
 
 // Two ways to play: against the computer, or two people sharing one screen and
@@ -1687,6 +1692,11 @@ let game;
 function resetState() {
   game = {
     pos: Rules.startingPosition(),
+    // The game opens with one die each rather than a turn: the higher of the
+    // two starts, and then throws their own pair. A tie is thrown again.
+    phase: "opening",
+    opening: { [HUMAN]: null, [COMPUTER]: null },
+    waitingOn: HUMAN,
     turn: HUMAN,
     dice: null,          // the pair as thrown, once they have settled
     remaining: [],       // pips still to play this turn
@@ -1703,6 +1713,13 @@ function resetState() {
 function movesNow() {
   if (!game.dice || game.over || !isHuman(game.turn) || game.thinking) return [];
   return Rules.movesAvailable(game.pos, game.turn, game.remaining, game.played, game.required);
+}
+
+// One die each in the opening, the pair once the game is under way. Yours is
+// the first, the opponent's the second, so the two never share a die.
+function diceInHand(colour) {
+  if (game.phase !== "opening") return diceMeshes;
+  return [colour === HUMAN ? diceMeshes[0] : diceMeshes[1]];
 }
 
 const pointKey = point => String(point);
@@ -1791,7 +1808,9 @@ function finishIfWon() {
 // number; what the rules oblige is worked out once, here, because "how many
 // dice can be played" is a property of the whole turn.
 function onDiceSettled() {
-  if (!game || game.over || game.dice) return;
+  if (!game || game.over) return;
+  if (game.phase === "opening") return openingSettled();
+  if (game.dice) return;
   const values = diceMeshes.map(d => d.userData.die.value);
   if (values.length < 2 || values.some(v => !v)) return;
   game.dice = values;
@@ -1847,6 +1866,40 @@ function seatOfMove(colour, move) {
   const target = game.pos.points[move.to];
   const seated = target && target.colour === colour ? target.count : 0;
   return { fromKey, from, to: checkerSeat(pointKey(move.to), seated) };
+}
+
+// The opening: each side throws one die and the higher of the two starts.
+function openingSettled() {
+  const who = game.waitingOn;
+  if (!who) return;
+  const die = diceInHand(who)[0].userData.die;
+  if (die.mode !== "rest" || !die.value) return;
+  game.opening[who] = die.value;
+  game.waitingOn = null;
+
+  if (game.opening[HUMAN] === null || game.opening[COMPUTER] === null) {
+    // The other side still has to throw.
+    const next = game.opening[HUMAN] === null ? HUMAN : COMPUTER;
+    game.waitingOn = next;
+    if (!isHuman(next)) setTimeout(() => throwDice(next === HUMAN ? -1 : 1), 900);
+    updateHud();
+    return;
+  }
+
+  const mine = game.opening[HUMAN], theirs = game.opening[COMPUTER];
+  if (mine === theirs) {
+    // Thrown again, from the top.
+    game.opening = { [HUMAN]: null, [COMPUTER]: null };
+    game.waitingOn = HUMAN;
+    updateHud();
+    return;
+  }
+
+  // The opening die only settles who goes first. Whoever it is throws their
+  // own pair for the turn rather than playing the two opening dice as they lie.
+  game.phase = "play";
+  startTurn(mine > theirs ? HUMAN : COMPUTER);
+  updateHud();
 }
 
 // The computer plays its whole turn as a sequence, one visible move at a time,
@@ -1908,6 +1961,18 @@ function updateHud() {
   const [side, roll] = hud.querySelectorAll("strong");
   if (side) {
     const mars = game.over && game.over.value === 2 ? " · MARS" : "";
+    if (!game.over && game.phase === "opening") {
+      side.textContent = game.waitingOn === null ? "…"
+        : isHuman(game.waitingOn)
+          ? (mode === "hotseat" ? NAMES[game.waitingOn] + " · AÇILIŞ ZARI" : "AÇILIŞ · ZAR AT")
+          : "RAKİP AÇILIŞ ZARINI ATIYOR";
+      if (roll) {
+        const a = game.opening[HUMAN], b = game.opening[COMPUTER];
+        roll.textContent = a || b ? `${a ?? "—"} · ${b ?? "—"}` : "—";
+      }
+      if (doneButton) doneButton.disabled = true;
+      return;
+    }
     side.textContent = game.over
       ? (mode === "hotseat"
           ? NAMES[game.over.winner] + " KAZANDI"
@@ -2038,7 +2103,7 @@ function throwDice(towards) {
     vel: new THREE.Vector3(),
     swirl: 0,
     towards,
-    entries: diceMeshes.map((die, i) => {
+    entries: diceInHand(game.waitingOn || COMPUTER).map((die, i) => {
       const st = die.userData.die;
       st.mode = "held";
       st.vel.set(0, 0, 0);
@@ -2096,7 +2161,10 @@ canvas.addEventListener("pointerdown", (e) => {
   // Dice sit on top of everything, so they get first claim on the pointer.
   // Grabbing either one scoops up the whole pair.
   const dieHit = raycaster.intersectObjects(diceMeshes, false);
-  if (dieHit.length && !heldDice && isHuman(game.turn) && !game.dice && !game.over) {
+  const canThrow = game.phase === "opening"
+    ? isHuman(game.waitingOn)
+    : isHuman(game.turn) && !game.dice;
+  if (dieHit.length && !heldDice && canThrow && !game.over) {
     const anchor = pointerOnPlane(liftPlane, new THREE.Vector3())
       || dieHit[0].object.position.clone().setY(LIFT_Y);
     heldDice = {
@@ -2107,7 +2175,7 @@ canvas.addEventListener("pointerdown", (e) => {
       released: false,
       vel: new THREE.Vector3(),
       swirl: 0,
-      entries: diceMeshes.map((die, i) => {
+      entries: diceInHand(game.turn).map((die, i) => {
         const s = die.userData.die;
         s.mode = "held";
         s.vel.set(0, 0, 0);
