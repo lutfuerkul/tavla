@@ -127,11 +127,19 @@ button:hover { background: #edbb69; }
   color: #d8ccb4; background: rgba(20,15,10,.78); border: 1px solid rgba(229,173,84,.28);
   border-radius: .45rem; cursor: pointer; transition: color .2s ease, border-color .2s ease; }
 #menu:hover { border-color: rgba(229,173,84,.75); color: #f6ecd6; }
-#intro:not(.hidden) ~ #menu, #intro:not(.hidden) ~ #confirm { display: none; }
+#intro:not(.hidden) ~ #menu, #intro:not(.hidden) ~ #confirm,
+#intro:not(.hidden) ~ #result { display: none; }
 
-#confirm { position: fixed; z-index: 6; inset: 0; display: grid; place-content: center;
+#confirm, #result { position: fixed; z-index: 6; inset: 0; display: grid; place-content: center;
   padding: 2rem; background: rgba(4,3,2,.72); }
-#confirm[hidden] { display: none; }
+#confirm[hidden], #result[hidden] { display: none; }
+/* The game is over and the choice has to be made, so this one has no way out
+   but the two buttons — no backdrop click, no Escape. */
+#result-title { font: 600 1.15rem/1.4 "Playfair Display", serif; letter-spacing: .02em; }
+#result-quit { color: #d8ccb4; background: transparent; border: 1px solid rgba(229,173,84,.4); }
+#result-quit:hover { border-color: #e5ad54; color: #f6ecd6; }
+#result-next { color: #0d0a06; background: #e5ad54; border: 0; }
+#result-next:hover { background: #f0bd68; }
 .confirm-box { max-width: 26rem; padding: 1.8rem 2rem; text-align: center;
   background: #14100c; border: 1px solid rgba(229,173,84,.35); border-radius: .6rem; }
 .confirm-box p { margin: 0; color: #f3ead7; font-size: .92rem; line-height: 1.6; }

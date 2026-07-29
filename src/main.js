@@ -1040,6 +1040,26 @@ function dice(x, z, face) {
   return die;
 }
 
+// Where the pair sits before anybody has thrown: both in one half of the
+// board, the way they land after a throw. A new game puts them back here.
+const DICE_HOME = [[-4.1, .35, 5], [-3.0, -.5, 4]];
+
+function resetDice() {
+  diceMeshes.forEach((die, i) => {
+    const [x, z, face] = DICE_HOME[i] ?? DICE_HOME[0];
+    die.position.set(x, FELT_Y + DIE_SIZE / 2, z);
+    die.quaternion.setFromEuler(FACE_UP[face]);
+    Object.assign(die.userData.die, {
+      mode: "rest", value: face, still: 0, touching: false, offContact: 0, cocked: false,
+    });
+    die.userData.die.vel.set(0, 0, 0);
+    die.userData.die.spin.set(0, 0, 0);
+  });
+  heldDice = null;
+  thrown = false;
+  showDiceValues();
+}
+
 // Which value is facing up right now.
 function readDie(die) {
   let best = 2, bestDot = -Infinity;
@@ -1791,6 +1811,14 @@ function checkerSeat(key, index) {
 // here is the join between them and the table.
 
 
+// A match, not a single game: first to three points takes it. A plain win is
+// worth one and a mars two, which is how tavla is scored here — no doubling
+// cube and no backgammon.
+const MATCH_TARGET = 3;
+let match = { ivory: 0, black: 0 };
+const matchWinner = () =>
+  match.ivory >= MATCH_TARGET ? "ivory" : match.black >= MATCH_TARGET ? "black" : null;
+
 let game;
 function resetState() {
   game = {
@@ -1946,9 +1974,17 @@ function sameMove(move, fromPlace, toPlace) {
   return String(move.from) === String(fromPlace) && String(move.to) === String(toPlace);
 }
 
+// Called after every move, so it has to be certain it only pays out once.
 function finishIfWon() {
+  if (game.over) return;
   const won = Rules.winner(game.pos);
-  if (won) game.over = { winner: won, value: Rules.gameValue(game.pos) };
+  if (!won) return;
+  const value = Rules.gameValue(game.pos);
+  game.over = { winner: won, value };
+  match[won] += value;
+  // Long enough to watch the last checker come off before being asked what to
+  // do next.
+  setTimeout(showResult, 1100);
 }
 
 // A throw settles into the turn's dice. Doubles are four moves of the same
@@ -2162,6 +2198,55 @@ addEventListener("keydown", event => {
   if (event.key === "Escape") closeConfirm();
 });
 
+// The end of a game is not the end of the match, so it asks: another game, or
+// out. There is no third way out of this one — no backdrop click and no
+// Escape — because the board behind it is finished and has nothing to go back
+// to.
+const resultBox = document.querySelector("#result");
+const resultTitle = document.querySelector("#result-title");
+const resultScore = document.querySelector("#result-score");
+const resultNext = document.querySelector("#result-next");
+
+const scoreLine = () => mode === "hotseat"
+  ? `${NAMES[HUMAN]} ${match[HUMAN]} · ${NAMES[COMPUTER]} ${match[COMPUTER]}`
+  : `SEN ${match[HUMAN]} · RAKİP ${match[COMPUTER]}`;
+
+function showResult() {
+  if (!resultBox || !game.over) return;
+  const { winner, value } = game.over;
+  const took = matchWinner();
+  const said = mode === "hotseat"
+    ? `${NAMES[winner]} kazandı`
+    : winner === HUMAN ? "Kazandın" : "Kaybettin";
+  resultTitle.textContent = took
+    ? (mode === "hotseat" ? `${NAMES[took]} maçı kazandı`
+        : took === HUMAN ? "Maçı kazandın" : "Maçı kaybettin")
+    : said + (value === 2 ? " · MARS" : "");
+  resultScore.textContent = took
+    ? `Son skor ${scoreLine()}`
+    : `${value} sayı · skor ${scoreLine()} · maç ${MATCH_TARGET} sayıya`;
+  resultNext.textContent = took ? "Yeni maç" : "Oyuna devam et";
+  resultBox.removeAttribute("hidden");
+}
+
+// A new game on the same table: the board is laid out again and the dice go
+// back where they were sitting before the first throw. A match that has been
+// won starts over from nothing.
+function nextGame() {
+  resultBox?.setAttribute("hidden", "");
+  if (matchWinner()) match = { ivory: 0, black: 0 };
+  resetState();
+  resetDice();
+  renderPieces();
+  updateHud();
+}
+
+resultNext?.addEventListener("click", nextGame);
+document.querySelector("#result-quit")?.addEventListener("click", () => {
+  sessionStorage.removeItem("tavla.sitOnLoad");
+  location.reload();
+});
+
 const doneButton = document.querySelector("#done");
 const undoButton = document.querySelector("#undo");
 doneButton?.addEventListener("click", endTurn);
@@ -2179,7 +2264,10 @@ function notice(text) {
 }
 
 function updateHud() {
-  const [side, roll] = hud.querySelectorAll("strong");
+  const [side, roll, score] = hud.querySelectorAll("strong");
+  // The score stands whatever else the panel is saying, so it is written
+  // before any of the branches below get a chance to return.
+  if (score) score.textContent = scoreLine();
   if (side) {
     const mars = game.over && game.over.value === 2 ? " · MARS" : "";
     if (!game.over && game.cocked) {
@@ -2633,9 +2721,7 @@ addRoom();
 addBoard();
 resetState();
 renderPieces();
-// Both dice land in one half of the board, the way they do after a throw.
-dice(-4.1, .35, 5);
-dice(-3.0, -.5, 4);
+DICE_HOME.forEach(([x, z, face]) => dice(x, z, face));
 showDiceValues();
 // The dice on the table at the start are scenery, not a roll: the game waits
 // for you to pick them up and throw them.
