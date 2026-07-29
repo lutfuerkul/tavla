@@ -104,7 +104,16 @@ camera.position.set(0, 17.6, -5.7 * AWAY);
 camera.lookAt(0, 0.4, 0);
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+// The scene is drawn at more samples than the screen has pixels and the
+// browser shrinks it down. On a 1080p monitor, which reports a device ratio of
+// 1, the die comes out nineteen pixels across and each of its pips lands on
+// two — drawing larger is the only thing that sharpens both the silhouette and
+// what is printed on the faces, because multisampling only ever touches the
+// silhouette. A screen that already reports two or more is left where it was.
+const NATIVE_RATIO = Math.min(devicePixelRatio, 2);
+const SAMPLE_STEPS = [2, 1.5, 1].filter(step => step >= NATIVE_RATIO);
+let sampleStep = 0;
+renderer.setPixelRatio(SAMPLE_STEPS[sampleStep]);
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -2772,13 +2781,55 @@ function fitCamera() {
 
 fitCamera();
 
+// Four times the pixels is not free, and there is no knowing beforehand what
+// the machine can carry. So it starts at the top and gives a step back if the
+// frames are not arriving: a full second of them is timed, and if the middle
+// one took longer than a sixtieth of a second and a half, the next step down
+// is taken. It only ever steps down — a scale that has been given up is not
+// tried again, or a machine sitting right on the line would flicker between
+// two of them for as long as the game is open.
+const SLOW_FRAME = 1000 / 60 * 1.5;
+let recent = [], measuredSince = 0, warmed = false;
+
+function watchFrames(now) {
+  if (sampleStep >= SAMPLE_STEPS.length - 1) return;
+  if (!measuredSince) { measuredSince = now; return; }
+  recent.push(now);
+  const elapsed = now - measuredSince;
+  if (elapsed < 1000) return;
+  const gaps = [];
+  for (let i = 1; i < recent.length; i++) gaps.push(recent[i] - recent[i - 1]);
+  const frames = recent.length;
+  recent = [];
+  measuredSince = now;
+  // The first window is thrown away: the page has just finished drawing every
+  // texture it owns and the frames in that second say nothing about what the
+  // machine can hold.
+  if (!warmed) { warmed = true; return; }
+  // With frames to spare the middle gap is the honest number. With only a
+  // handful the window itself says it — a second that fitted three frames into
+  // it was a slow second however the gaps fell, and insisting on a full sample
+  // would throw away exactly the windows this is here to catch.
+  gaps.sort((a, b) => a - b);
+  const typical = gaps.length >= 8 ? gaps[gaps.length >> 1] : elapsed / Math.max(1, frames);
+  if (typical <= SLOW_FRAME) return;
+  sampleStep++;
+  renderer.setPixelRatio(SAMPLE_STEPS[sampleStep]);
+  renderer.setSize(innerWidth, innerHeight);
+}
+
+// Frames stop arriving while the tab is in the background, and the gap either
+// side of that is not the machine struggling. The window starts again.
+addEventListener("visibilitychange", () => { recent = []; measuredSince = 0; });
+
 const clock = new THREE.Clock();
-function animate() {
+function animate(now) {
   const dt = Math.min(clock.getDelta(), .25);
   stepHeldDice(dt);
   stepSlide(dt);
   stepDicePhysics(dt);
   renderer.render(scene, camera);
+  watchFrames(now ?? performance.now());
   requestAnimationFrame(animate);
 }
 animate();
