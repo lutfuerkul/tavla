@@ -2415,31 +2415,37 @@ function armThrow() {
   }, Math.max(0, remaining));
 }
 
-// Which half of the board has the fewer checkers standing in it. The bar
-// splits the two, so the sign of a point's x says which half it is in.
-function emptierHalf() {
-  let left = 0, right = 0;
+// The board is twelve columns of felt, each shared by a point in the near row
+// and one in the far row, and a throw runs the length of a column. So the open
+// ground is a column with nothing standing in it, and there is usually more
+// than one — the throw takes any of the emptiest at random, which is what
+// keeps it from being the same throw twice.
+function openLane() {
+  const load = new Map();
   for (let point = 1; point <= 24; point++) {
     const stack = game?.pos.points[point];
-    if (!stack) continue;
-    if (POINTS[point].x < 0) left += stack.count; else right += stack.count;
+    const x = POINTS[point].x;
+    load.set(x, (load.get(x) ?? 0) + (stack ? stack.count : 0));
   }
-  // A tie goes to the half away from your home board, which is the one you are
-  // not gathering into.
-  if (left === right) return -MIRROR;
-  return left < right ? -1 : 1;
+  let least = Infinity, open = [];
+  for (const [x, standing] of load) {
+    if (standing < least) { least = standing; open = [x]; }
+    else if (standing === least) open.push(x);
+  }
+  if (!open.length) return -MIRROR * 2;
+  return open[Math.floor(Math.random() * open.length)];
 }
 
 // Fling the pair away across the board, fast.
 // The computer throws from the other side of the table, so the aim is the
 // one thing that differs between its throw and yours.
-// It lets go over the emptier half rather than over a fixed spot: with no hand
-// behind it the throw runs almost straight down the table, so whichever side
-// it starts on is the side it stops on — 97 of 100 dice measured. Left as it
-// was, every roll of its landed in the same corner. The spread across the
-// chosen half keeps it from being the same throw twice.
+// It lets go over an empty column rather than over a fixed spot: with no hand
+// behind it the throw runs almost straight down the table, so whichever lane
+// it starts in is roughly the lane it stops in — 97 of 100 dice measured
+// stopped on the side they started from. Left as it was, every roll of its
+// landed in the same corner, and on a full column at that.
 function throwDice(towards) {
-  const anchor = new THREE.Vector3(emptierHalf() * (1.1 + Math.random() * 1.6),
+  const anchor = new THREE.Vector3(openLane() + (Math.random() - .5) * .5,
     LIFT_Y, towards > 0 ? -4 : 4);
   heldDice = {
     anchor: anchor.clone(),
