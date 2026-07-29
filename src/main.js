@@ -2013,8 +2013,14 @@ function startTurn(colour) {
 
 // The turn is over when there is nothing left that may be played — which is
 // also the case when the dice could not be played at all.
+//
+// It has to be your turn for it to be your turn to end. Without that, the
+// moment the computer's dice came to rest the button lit up: its roll was in,
+// it had not started moving yet, and movesNow is empty for anybody who is not
+// the player. Pressing it there took the turn off the computer before it had
+// played a single checker.
 function turnComplete() {
-  return !!game.dice && !game.thinking && movesNow().length === 0;
+  return !!game.dice && isHuman(game.turn) && !game.thinking && movesNow().length === 0;
 }
 
 // Until the turn is handed over, a move can be taken back — the board and the
@@ -2030,7 +2036,7 @@ function undoMove() {
 }
 
 function endTurn() {
-  if (!turnComplete() || game.over) return;
+  if (!turnComplete() || game.over || !isHuman(game.turn)) return;
   startTurn(Rules.other(game.turn));
   updateHud();
 }
