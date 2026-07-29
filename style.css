@@ -12,14 +12,17 @@ h1 { font: 700 clamp(2.5rem, 6.6vw, 5.8rem)/.95 "Playfair Display", serif; margi
 #intro > p:not(.eyebrow) { max-width: 34rem; margin: 1.4rem auto 2rem; color: #d2c8b4; line-height: 1.7; }
 button { justify-self: center; padding: .9rem 1.5rem; border: 1px solid #e6b45e; border-radius: 2px; background: #c78735; color: #211508; cursor: pointer; font: 500 .78rem "DM Mono", monospace; letter-spacing: .12em; text-transform: uppercase; box-shadow: 0 5px 30px rgba(203,132,41,.22); }
 button:hover { background: #edbb69; }
-#hud { position: fixed; z-index: 1; top: 1.5rem; left: 1.5rem; display: flex; gap: 1.25rem; opacity: 0; transition: opacity .35s ease; }
+/* Over the board, not off in the corner: centred on the window, which is where
+   the board is centred too. */
+#hud { position: fixed; z-index: 1; top: 1.5rem; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 1.25rem; opacity: 0; transition: opacity .35s ease; }
 #hud.visible { opacity: 1; }
 #hud div { min-width: 7.2rem; padding: .7rem .8rem; border-left: 1px solid rgba(231,182,102,.75); background: linear-gradient(90deg, rgba(8,6,4,.7), transparent); }
 #hud span { display: block; color: #ad9470; font-size: .55rem; letter-spacing: .15em; margin-bottom: .3rem; }
 #hud strong { color: #eee3ce; font-size: .72rem; letter-spacing: .06em; }
 #crosshair { position: fixed; z-index: 1; top: 50%; left: 50%; width: 8px; height: 8px; margin: -4px; border: 1px solid rgba(247,235,207,.8); border-radius: 50%; opacity: 0; transition: opacity .35s; }
 #crosshair.visible { opacity: .8; }
-@media (max-width: 600px) { #hud { top: .8rem; left: .8rem; gap: .5rem; } #hud div { min-width: 5.8rem; } }
+@media (max-width: 600px) { #hud { top: .8rem; gap: .5rem; } #hud div { min-width: 5.8rem; } }
 /* Two boards to choose from at the door. */
 #boards { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
 /* The three rows of the door are the same kind of choice, so they are the same
@@ -98,3 +101,28 @@ button:hover { background: #edbb69; }
   #start { margin-top: .8rem; padding: .6rem 2rem; }
   .board-pick { padding: .55rem 1rem; }
 }
+
+/* Back to the door, by way of a question — a game in progress is not
+   something to lose to a stray click. */
+#menu { position: fixed; z-index: 3; top: 1.4rem; right: 1.4rem; padding: .6rem 1.3rem;
+  font: 500 .74rem/1 "DM Mono", monospace; letter-spacing: .12em; text-transform: uppercase;
+  color: #d8ccb4; background: rgba(20,15,10,.78); border: 1px solid rgba(229,173,84,.28);
+  border-radius: .45rem; cursor: pointer; transition: color .2s ease, border-color .2s ease; }
+#menu:hover { border-color: rgba(229,173,84,.75); color: #f6ecd6; }
+#intro:not(.hidden) ~ #menu, #intro:not(.hidden) ~ #confirm { display: none; }
+
+#confirm { position: fixed; z-index: 6; inset: 0; display: grid; place-content: center;
+  padding: 2rem; background: rgba(4,3,2,.72); }
+#confirm[hidden] { display: none; }
+.confirm-box { max-width: 26rem; padding: 1.8rem 2rem; text-align: center;
+  background: #14100c; border: 1px solid rgba(229,173,84,.35); border-radius: .6rem; }
+.confirm-box p { margin: 0; color: #f3ead7; font-size: .92rem; line-height: 1.6; }
+.confirm-note { margin-top: .5rem !important; color: #9b907e; font-size: .72rem !important; }
+.confirm-actions { display: flex; gap: .8rem; justify-content: center; margin-top: 1.6rem; }
+.confirm-actions button { padding: .65rem 1.6rem; font: 500 .78rem/1 "DM Mono", monospace;
+  letter-spacing: .12em; text-transform: uppercase; border-radius: .45rem; cursor: pointer;
+  transition: background .2s ease, border-color .2s ease, color .2s ease; }
+#confirm-no { color: #d8ccb4; background: transparent; border: 1px solid rgba(229,173,84,.4); }
+#confirm-no:hover { border-color: #e5ad54; color: #f6ecd6; }
+#confirm-yes { color: #0d0a06; background: #e5ad54; border: 0; }
+#confirm-yes:hover { background: #f0bd68; }
