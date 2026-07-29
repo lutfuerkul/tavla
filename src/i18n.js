@@ -46,6 +46,8 @@ export const LANGS = [
 
 const TEXT = {
   tr: {
+    "view.top": "Tepe kamerası",
+    "view.seat": "Normal kamera",
     "aria.langs": "Dil",
     "title": "Tavla — 3B Masa",
     "eyebrow": "3B TAVLA",
@@ -106,6 +108,8 @@ const TEXT = {
     "result.quit": "Çık",
   },
   en: {
+    "view.top": "Top view",
+    "view.seat": "Table view",
     "aria.langs": "Language",
     "title": "Backgammon — 3D Board",
     "eyebrow": "3D BACKGAMMON",
@@ -166,6 +170,8 @@ const TEXT = {
     "result.quit": "Leave",
   },
   it: {
+    "view.top": "Vista dall'alto",
+    "view.seat": "Vista dal tavolo",
     "aria.langs": "Lingua",
     "title": "Backgammon — Tavoliere 3D",
     "eyebrow": "BACKGAMMON 3D",
@@ -226,6 +232,8 @@ const TEXT = {
     "result.quit": "Esci",
   },
   de: {
+    "view.top": "Draufsicht",
+    "view.seat": "Tischansicht",
     "aria.langs": "Sprache",
     "title": "Backgammon — 3D-Brett",
     "eyebrow": "3D BACKGAMMON",
@@ -286,6 +294,8 @@ const TEXT = {
     "result.quit": "Verlassen",
   },
   es: {
+    "view.top": "Vista cenital",
+    "view.seat": "Vista de mesa",
     "aria.langs": "Idioma",
     "title": "Backgammon — Tablero 3D",
     "eyebrow": "BACKGAMMON 3D",
@@ -346,6 +356,8 @@ const TEXT = {
     "result.quit": "Salir",
   },
   ru: {
+    "view.top": "Вид сверху",
+    "view.seat": "Вид от стола",
     "aria.langs": "Язык",
     "title": "Нарды — 3D доска",
     "eyebrow": "НАРДЫ 3D",
@@ -406,6 +418,8 @@ const TEXT = {
     "result.quit": "Выйти",
   },
   zh: {
+    "view.top": "俯视视角",
+    "view.seat": "桌面视角",
     "aria.langs": "语言",
     "title": "双陆棋 — 3D 棋盘",
     "eyebrow": "3D 双陆棋",
@@ -466,6 +480,8 @@ const TEXT = {
     "result.quit": "退出",
   },
   ja: {
+    "view.top": "真上から",
+    "view.seat": "テーブル視点",
     "aria.langs": "言語",
     "title": "バックギャモン — 3Dボード",
     "eyebrow": "3D バックギャモン",

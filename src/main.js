@@ -112,7 +112,14 @@ scene.fog = new THREE.FogExp2(0x060402, 0.015);
 // leaves room to.
 const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.1, 100);
 const CAMERA_AIM = new THREE.Vector3(0, .4, 0);
-const overhead = () => mode === "hotseat";
+
+// Which of the two the game opens with follows the mode, and either can be
+// asked for from the board. An answer given is remembered and outranks the
+// mode's own preference; until one is given, changing the mode at the door
+// changes the view with it.
+const VIEW_KEY = "tavla.kamera";
+let chosenView = localStorage.getItem(VIEW_KEY);
+const overhead = () => (chosenView ?? (mode === "hotseat" ? "tepe" : "koltuk")) === "tepe";
 
 function takeSeat() {
   if (overhead()) {
@@ -2399,6 +2406,44 @@ document.querySelector("#result-quit")?.addEventListener("click", () => {
   location.reload();
 });
 
+// The second camera, from the board rather than from the door. Its label is
+// what pressing it does, not where you are.
+const viewButton = document.querySelector("#view");
+
+// On a wide window these two sit where they belong: the camera beside the
+// score it reads with, the way out in the far corner away from everything. A
+// phone has no far corner — the panel already runs the width of it, and both
+// of them land on top of the score. So they come down and join the row that is
+// already there, either side of Geri al and Tamam.
+const controls = document.querySelector("#controls");
+const app = document.querySelector("#app");
+let stacked = null;
+
+function placeButtons() {
+  // The short side, not the width: a phone on its side is nearly nine hundred
+  // points wide and still has no corner to spare.
+  const narrow = Math.min(innerWidth, innerHeight) <= 600;
+  if (narrow === stacked) return;
+  stacked = narrow;
+  if (narrow) {
+    controls?.prepend(viewButton);
+    controls?.append(menuButton);
+  } else {
+    hud?.append(viewButton);
+    app?.append(menuButton);
+  }
+}
+
+placeButtons();
+addEventListener("resize", placeButtons);
+
+viewButton?.addEventListener("click", () => {
+  chosenView = overhead() ? "koltuk" : "tepe";
+  localStorage.setItem(VIEW_KEY, chosenView);
+  fitCamera();
+  updateHud();
+});
+
 const doneButton = document.querySelector("#done");
 const undoButton = document.querySelector("#undo");
 doneButton?.addEventListener("click", endTurn);
@@ -2417,9 +2462,10 @@ function notice(text) {
 
 function updateHud() {
   const [side, roll, score] = hud.querySelectorAll("strong");
-  // The score stands whatever else the panel is saying, so it is written
-  // before any of the branches below get a chance to return.
+  // The score and the camera stand whatever else the panel is saying, so they
+  // are written before any of the branches below get a chance to return.
   if (score) score.textContent = scoreLine();
+  if (viewButton) viewButton.textContent = t(overhead() ? "view.seat" : "view.top");
   if (side) {
     const mars = game.over && game.over.value === 2 ? t("mars") : "";
     if (!game.over && game.cocked) {
