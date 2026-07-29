@@ -54,13 +54,20 @@ button:hover { background: #edbb69; }
 
 /* Ends the turn, and only lights up when the turn can actually be ended —
    which is when every die that could be played has been. */
-#done { position: fixed; z-index: 3; left: 50%; bottom: 2.2rem; transform: translateX(-50%);
-  padding: .7rem 2.1rem; font: inherit; font-size: .82rem; letter-spacing: .16em;
+#controls { position: fixed; z-index: 3; left: 50%; bottom: 2.2rem; transform: translateX(-50%);
+  display: flex; gap: .7rem; align-items: center; }
+#undo { padding: .7rem 1.4rem; font: inherit; font-size: .78rem; letter-spacing: .14em;
+  text-transform: uppercase; color: #d8ccb4; background: transparent;
+  border: 1px solid rgba(229,173,84,.45); border-radius: .4rem; cursor: pointer;
+  transition: opacity .2s ease, border-color .2s ease; }
+#undo:disabled { color: #5c5449; border-color: rgba(229,173,84,.12); cursor: default; }
+#undo:not(:disabled):hover { border-color: #e5ad54; color: #f2e6cc; }
+#done { padding: .7rem 2.1rem; font: inherit; font-size: .82rem; letter-spacing: .16em;
   text-transform: uppercase; color: #0d0a06; background: #e5ad54; border: 0;
   border-radius: .4rem; cursor: pointer; transition: opacity .2s ease, background .2s ease; }
 #done:disabled { background: #2a241c; color: #6b6154; cursor: default; }
 #done:not(:disabled):hover { background: #f0bd68; }
-@media (max-width: 900px) and (orientation: portrait) { #done { display: none; } }
+@media (max-width: 900px) and (orientation: portrait) { #controls { display: none; } }
 
 /* Who is playing, chosen before the table is. */
 #modes { display: flex; gap: .6rem; justify-content: center; flex-wrap: wrap; margin-bottom: 1.1rem; }
