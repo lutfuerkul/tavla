@@ -833,7 +833,12 @@ const checkerGeometry = new THREE.LatheGeometry([
 // --- Dice ------------------------------------------------------------
 // A real die: every face carries its own pips, opposite faces sum to 7,
 // and the cube is rounded off at the corners the way a moulded die is.
-const PIP_GRID = { lo: 74, mid: 128, hi: 182 };
+// The three rows of a six are a pip's width apart and the pips are a pip's
+// width across, which on a real die is fine and at nineteen pixels is not:
+// they touched, and the column read as one bar. Four units of daylight either
+// side separates them without moving them off the flat of the face, which ends
+// where the moulded corner starts at 85% of it.
+const PIP_GRID = { lo: 70, mid: 128, hi: 186 };
 const PIP_LAYOUT = {
   1: [["mid", "mid"]],
   2: [["lo", "lo"], ["hi", "hi"]],
@@ -893,7 +898,7 @@ function dieFaceMaps(value) {
     const x = PIP_GRID[gx] * k;
     const y = PIP_GRID[gy] * k;
 
-    ctx.fillStyle = red ? "#c8161b" : "#2b211c";
+    ctx.fillStyle = red ? "#c8161b" : "#1e1613";
     ctx.beginPath();
     ctx.arc(x, y, R, 0, Math.PI * 2);
     ctx.fill();
@@ -906,10 +911,14 @@ function dieFaceMaps(value) {
     // Ambient occlusion in the well: paint sitting in a drilled hollow is
     // darkest where the wall turns over, whichever way the light happens to
     // be. The shape of the lighting is left to the depth map.
+    // Held back from what a close look would want. A pip lands on two pixels,
+    // and at that size a shaded rim is not shape — it is the pip's own edge
+    // being greyed into the white around it, which is the whole reason the
+    // numbers were hard to read.
     const inWell = ctx.createRadialGradient(x, y, R * .15, x, y, R);
     inWell.addColorStop(0, "rgba(0,0,0,0)");
-    inWell.addColorStop(.72, red ? "rgba(90,6,10,.30)" : "rgba(0,0,0,.26)");
-    inWell.addColorStop(1, red ? "rgba(70,4,8,.55)" : "rgba(0,0,0,.5)");
+    inWell.addColorStop(.72, red ? "rgba(90,6,10,.16)" : "rgba(0,0,0,.13)");
+    inWell.addColorStop(1, red ? "rgba(70,4,8,.30)" : "rgba(0,0,0,.26)");
     ctx.fillStyle = inWell;
     ctx.beginPath();
     ctx.arc(x, y, R, 0, Math.PI * 2);
@@ -998,6 +1007,12 @@ const dieMaterials = DIE_FACES.map(value => new THREE.MeshPhysicalMaterial({
   metalness: 0,
   clearcoat: .85,
   clearcoatRoughness: .07,
+  // The drilled wall is a third of a millimetre of relief on a die that is
+  // never more than a few dozen pixels wide. At full strength it does not read
+  // as a hollow, it reads as a light rim inside every pip, and that rim is
+  // what was eating the pip. Kept as a hint of depth rather than a claim.
+  normalScale: new THREE.Vector2(.4, .4),
+  clearcoatNormalScale: new THREE.Vector2(.4, .4),
 }));
 
 // Rotation that brings a given value onto the top (+y) face.
