@@ -494,7 +494,13 @@ for (let k = 0; k <= 5; k++) starts.push(BAR_HALF + POINT_HALF + PITCH * k);
 const NEAR_Z = -(FIELD_HALF - POINT_LEN / 2);
 const FAR_Z = FIELD_HALF - POINT_LEN / 2;
 
-const FIELD_HALF_X = starts[starts.length - 1] + POINT_HALF;
+// Half the width of the playing field. The points would set this on their own,
+// but on the boards whose points are a checker wide that puts the wall exactly
+// on the edge of the checkers standing on the outermost column, with nothing
+// between them. Whichever is wider — the point or the checker and a strip of
+// felt to stand it on — decides.
+const EDGE_GAP = .06;                          // 2mm of felt outside the last checker
+const FIELD_HALF_X = starts[starts.length - 1] + Math.max(POINT_HALF, CHECKER_D / 2 + EDGE_GAP);
 
 // The reference board is a folding case, not a flat panel: two trays hinged
 // down the middle, each a floor with the playing surface laid into it and four
@@ -559,19 +565,25 @@ function addPanelBoard() {
   box(CASE_HALF_X * 2, floorTop - CASE_BOTTOM, CASE_HALF_Z * 2, frame,
     0, (CASE_BOTTOM + floorTop) / 2, 0);
   box(PANEL_W, .1, PANEL_D, panel, 0, .42, 0);
+  // Each half carries its own walls, the middle one included, so the seam runs
+  // from one end of the board to the other. An end wall drawn in one piece
+  // across the middle closes the seam off at the ends, and the board stops
+  // reading as two halves that fold. The veneer runs underneath, untouched.
+  const endSpan = FIELD_HALF_X - (BAR_HALF - WALL_T);
+  const endMid = (FIELD_HALF_X + BAR_HALF - WALL_T) / 2;
   [-1, 1].forEach(side => {
     box(WALL_T, wallH, CASE_HALF_Z * 2, frame, side * (FIELD_HALF_X + WALL_T / 2), wallY, 0);
-    box(FIELD_HALF_X * 2, wallH, WALL_T, frame, 0, wallY, side * (FIELD_HALF + WALL_T / 2));
-    // The middle stands as high and as thick as the edges do, and folds on the
-    // same seam the cases fold on. The veneer runs underneath it, untouched.
     box(WALL_T, wallH, CASE_HALF_Z * 2, frame, side * (BAR_HALF - WALL_T / 2), wallY, 0);
+    [-1, 1].forEach(end => {
+      box(endSpan, wallH, WALL_T, frame, side * endMid, wallY, end * (FIELD_HALF + WALL_T / 2));
+    });
   });
 
   addHinges();
 
   // Pearl markers set into the tops of the long walls.
   [-1, 1].forEach(side => {
-    [-4, -1.4, 1.4, 4].forEach(z => {
+    [-3.6, 3.6].forEach(z => {
       const dot = new THREE.Mesh(new THREE.SphereGeometry(.055, 12, 10), pearl);
       dot.position.set(side * (FIELD_HALF_X + WALL_T / 2), CASE_TOP - .012, z);
       scene.add(dot);

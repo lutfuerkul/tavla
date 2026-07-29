@@ -35,7 +35,7 @@ button:hover { background: #edbb69; }
 
 /* Ends the turn, and only lights up when the turn can actually be ended —
    which is when every die that could be played has been. */
-#controls { position: fixed; z-index: 3; left: 50%; bottom: 2.2rem; transform: translateX(-50%);
+#controls { position: fixed; z-index: 3; left: 50%; bottom: 1.05rem; transform: translateX(-50%);
   display: flex; gap: .7rem; align-items: center; }
 #undo { padding: .7rem 1.4rem; font: inherit; font-size: .78rem; letter-spacing: .14em;
   text-transform: uppercase; color: #d8ccb4; background: transparent;
