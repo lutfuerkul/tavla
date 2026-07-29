@@ -28,16 +28,16 @@ button:hover { background: #edbb69; }
 /* The three rows of the door are the same kind of choice, so they are the same
    button: dark until it is picked, gold once it is, with no doubt about which
    of them has been. */
-.mode-pick, .board-pick, .colour-pick {
+.mode-pick, .board-pick, .colour-pick, .side-pick {
   display: inline-flex; align-items: center; justify-content: center; gap: .55rem;
   padding: .72rem 1.5rem; font: 500 .86rem/1 "DM Mono", monospace;
   letter-spacing: .1em; text-transform: uppercase;
   color: #d8ccb4; background: rgba(20,15,10,.78);
   border: 1px solid rgba(229,173,84,.28); border-radius: .45rem; cursor: pointer;
   transition: color .2s ease, background .2s ease, border-color .2s ease; }
-.mode-pick:hover, .board-pick:hover, .colour-pick:hover {
+.mode-pick:hover, .board-pick:hover, .colour-pick:hover, .side-pick:hover {
   border-color: rgba(229,173,84,.75); color: #f6ecd6; background: rgba(36,26,16,.9); }
-.mode-pick.chosen, .board-pick.chosen, .colour-pick.chosen {
+.mode-pick.chosen, .board-pick.chosen, .colour-pick.chosen, .side-pick.chosen {
   color: #0d0a06; background: #e5ad54; border-color: #e5ad54; }
 .board-note { font-size: .68rem; color: #9b907e; line-height: 1.5; }
 
@@ -75,6 +75,9 @@ button:hover { background: #edbb69; }
 /* Which checkers are yours, and the door handle. */
 #colours { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin: 1.1rem 0 0; }
 
+/* Which hand you bear off with. Same button, one row further down. */
+#sides { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin: 1.1rem 0 0; }
+
 .chip { width: .82rem; height: .82rem; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.5), 0 0 0 1px rgba(0,0,0,.35); }
 .chip-black { background: radial-gradient(circle at 35% 30%, #4a4a4e, #131316 70%); }
 .chip-ivory { background: radial-gradient(circle at 35% 30%, #f2e4bd, #cbb079 70%); }
@@ -84,6 +87,21 @@ button:hover { background: #edbb69; }
   border: 0; border-radius: .4rem; cursor: pointer; transition: background .2s ease; }
 #start:disabled { background: #3a3229; color: #8b8073; cursor: default; }
 #start:not(:disabled):hover { background: #f0bd68; }
+
+/* On a phone the door is five rows tall and the window is narrow enough that
+   the tables wrap onto their own lines, so hanging it off the middle of the
+   screen pushes "Oyuna başla" past the bottom — it did even before the side
+   row was added. There the whole door is centred as one block and the rows
+   are tightened instead. Wide windows keep the heading on the middle of the
+   board, which is where it was asked to sit. */
+@media (max-width: 600px) {
+  #intro { place-content: center; padding: 1.2rem; }
+  #modes { margin: 1.1rem 0 .9rem; }
+  #boards, #colours, #sides { gap: .55rem; }
+  #colours, #sides { margin-top: .8rem; }
+  .mode-pick, .board-pick, .colour-pick, .side-pick { padding: .62rem 1.05rem; font-size: .78rem; }
+  #start { margin-top: 1.3rem; padding: .78rem 2.2rem; }
+}
 
 /* A window too short to hold the door from its middle down starts it at the
    top instead, rather than pushing the button off the bottom. */
@@ -97,7 +115,7 @@ button:hover { background: #edbb69; }
   h1 { font-size: clamp(1.8rem, 4.4vw, 2.6rem); }
   .eyebrow { margin-bottom: .5rem; }
   #modes { margin: .7rem 0 0; }
-  #colours { margin-top: .6rem; }
+  #colours, #sides { margin-top: .6rem; }
   #start { margin-top: .8rem; padding: .6rem 2rem; }
   .board-pick { padding: .55rem 1rem; }
 }

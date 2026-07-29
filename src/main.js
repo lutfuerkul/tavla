@@ -66,11 +66,18 @@ const NAMES = { ivory: "KEMİK", black: "SİYAH" };
 // Away from your own seat: the direction a throw is aimed.
 const AWAY = HUMAN === "black" ? -1 : 1;
 
-// Your home board is the bottom left of the screen whichever colour you play.
-// The camera sitting on your side of the table gets the near row under your
-// hands; this gets the six points you bear off from under your left one, by
-// laying the numbering out along x one way for black and the other for ivory.
-const MIRROR = HUMAN === "black" ? -1 : 1;
+// Which hand you gather your checkers with, also chosen at the door. Left is
+// where most people want them, so it is what an unanswered door means.
+const SIDE_KEY = "tavla.side";
+const SIDE = localStorage.getItem(SIDE_KEY) === "sag" ? -1 : 1;
+
+// Your home board is on your chosen side of the screen whichever colour you
+// play. The camera sitting on your side of the table gets the near row under
+// your hands; this gets the six points you bear off from under the hand you
+// asked for, by laying the numbering out along x one way or the other. The
+// two factors multiply: the colour decides which way is "your left", and the
+// side flips it if you would rather gather right.
+const MIRROR = (HUMAN === "black" ? -1 : 1) * SIDE;
 
 // Two ways to play: against the computer, or two people sharing one screen and
 // taking the table in turns. Both are settled at the door, before anything is
@@ -127,6 +134,7 @@ function sitDown() {
 // being asked.
 let pickedBoard = null;
 let pickedColour = null;
+let pickedSide = null;
 const startButton = document.querySelector("#start");
 
 function markChosen(attribute, value) {
@@ -135,7 +143,7 @@ function markChosen(attribute, value) {
 }
 
 function refreshStart() {
-  if (startButton) startButton.disabled = !(pickedBoard && pickedColour);
+  if (startButton) startButton.disabled = !(pickedBoard && pickedColour && pickedSide);
 }
 
 document.querySelectorAll("[data-mode]").forEach(button => {
@@ -163,15 +171,25 @@ document.querySelectorAll("[data-colour]").forEach(button => {
   });
 });
 
-// Both the table and the colour are settled before the scene is built — one
-// lays out the points, the other decides which side of the table the camera
-// sits on — so picking something other than what is already standing there
-// means starting the page again.
+document.querySelectorAll("[data-side]").forEach(button => {
+  button.addEventListener("click", () => {
+    pickedSide = button.dataset.side;
+    markChosen("side", pickedSide);
+    refreshStart();
+  });
+});
+
+// The table, the colour and the side are all settled before the scene is built
+// — the first lays out the points, the other two decide where the camera sits
+// and which way round the numbering runs — so picking something other than
+// what is already standing there means starting the page again.
+const sideName = SIDE === -1 ? "sag" : "sol";
 startButton?.addEventListener("click", () => {
-  if (!pickedBoard || !pickedColour) return;
-  if (pickedBoard === boardName && pickedColour === HUMAN) return sitDown();
+  if (!pickedBoard || !pickedColour || !pickedSide) return;
+  if (pickedBoard === boardName && pickedColour === HUMAN && pickedSide === sideName) return sitDown();
   localStorage.setItem(BOARD_KEY, pickedBoard);
   localStorage.setItem(COLOUR_KEY, pickedColour);
+  localStorage.setItem(SIDE_KEY, pickedSide);
   sessionStorage.setItem("tavla.sitOnLoad", "1");
   location.reload();
 });
