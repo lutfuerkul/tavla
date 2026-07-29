@@ -113,8 +113,28 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 const NATIVE_RATIO = Math.min(devicePixelRatio, 2);
 const SAMPLE_STEPS = [2, 1.5, 1].filter(step => step >= NATIVE_RATIO);
 let sampleStep = 0;
-renderer.setPixelRatio(SAMPLE_STEPS[sampleStep]);
-renderer.setSize(innerWidth, innerHeight);
+
+// A ceiling on the drawing buffer itself, whatever the ladder would like. Two
+// samples across a 4K window is 7680x4320 — thirty-three megapixels of colour
+// and of depth, with four multisamples behind every one of them, which is over
+// a gigabyte asked for before a single frame is drawn, and sixteen times the
+// fragment work of 1080p. The frame timer further down would give a step back
+// a second later, but the memory is asked for first. And it buys nothing: a 4K
+// window already draws the die thirty-eight pixels across, which is exactly
+// what a 1080p window gets out of drawing at two samples. Fifteen million
+// leaves 1080p and 1440p on the top step and sends 4K straight to its own
+// resolution.
+const PIXEL_BUDGET = 15e6;
+
+function applySampleRatio() {
+  const room = PIXEL_BUDGET / (innerWidth * innerHeight);
+  let step = sampleStep;
+  while (step < SAMPLE_STEPS.length - 1 && SAMPLE_STEPS[step] ** 2 > room) step++;
+  renderer.setPixelRatio(SAMPLE_STEPS[step]);
+  renderer.setSize(innerWidth, innerHeight);
+}
+
+applySampleRatio();
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -2838,8 +2858,7 @@ function watchFrames(now) {
   const typical = gaps.length >= 8 ? gaps[gaps.length >> 1] : elapsed / Math.max(1, frames);
   if (typical <= SLOW_FRAME) return;
   sampleStep++;
-  renderer.setPixelRatio(SAMPLE_STEPS[sampleStep]);
-  renderer.setSize(innerWidth, innerHeight);
+  applySampleRatio();
 }
 
 // Frames stop arriving while the tab is in the background, and the gap either
@@ -2862,6 +2881,8 @@ addEventListener("resize", () => {
   fitCamera();
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
+  // A window dragged onto a bigger screen has to be weighed against the budget
+  // again, so this goes through the same choice the first frame did.
+  applySampleRatio();
 });
 
