@@ -511,11 +511,11 @@ const CASE_BOTTOM = FELT_Y - FLOOR_T;
 const CASE_HALF_X = FIELD_HALF_X + WALL_T;
 const CASE_HALF_Z = FIELD_HALF + WALL_T;
 
-// What a die meets in the middle of the board: two full walls on the trays,
-// where a die thrown into one half stays in that half, and a five millimetre
-// ridge on the old panel, which a die rides straight over.
-const BAR_RISE = BOARD.shape === "panel" ? .11 : WALL_H / 2;
-const BAR_TOP = BOARD.shape === "panel" ? .61 : CASE_TOP;
+// What a die meets in the middle of the board: two walls, the same height as
+// the ones round the edge, on every board. A die thrown into one half stays in
+// that half.
+const BAR_RISE = WALL_H / 2;
+const BAR_TOP = CASE_TOP;
 
 function addBoard() {
   if (BOARD.shape === "panel") addPanelBoard(); else addTrayBoard();
@@ -559,20 +559,15 @@ function addPanelBoard() {
   box(CASE_HALF_X * 2, floorTop - CASE_BOTTOM, CASE_HALF_Z * 2, frame,
     0, (CASE_BOTTOM + floorTop) / 2, 0);
   box(PANEL_W, .1, PANEL_D, panel, 0, .42, 0);
-  box(BAR_HALF * 2, .22, PANEL_D + .18, frame, 0, .5, 0);
   [-1, 1].forEach(side => {
     box(WALL_T, wallH, CASE_HALF_Z * 2, frame, side * (FIELD_HALF_X + WALL_T / 2), wallY, 0);
     box(FIELD_HALF_X * 2, wallH, WALL_T, frame, 0, wallY, side * (FIELD_HALF + WALL_T / 2));
+    // The middle stands as high and as thick as the edges do, and folds on the
+    // same seam the cases fold on. The veneer runs underneath it, untouched.
+    box(WALL_T, wallH, CASE_HALF_Z * 2, frame, side * (BAR_HALF - WALL_T / 2), wallY, 0);
   });
 
-  // Brass hinge pins across the centre seam, as it had.
-  [-PANEL_D * .28, PANEL_D * .28].forEach(z => {
-    const pin = new THREE.Mesh(new THREE.CylinderGeometry(.09, .09, .55, 16), brass);
-    pin.rotation.z = Math.PI / 2;
-    pin.position.set(0, .58, z);
-    pin.castShadow = true;
-    scene.add(pin);
-  });
+  addHinges();
 
   // Pearl markers set into the tops of the long walls.
   [-1, 1].forEach(side => {
@@ -667,15 +662,22 @@ function addHinges() {
       });
     });
 
-    // The knuckle, lying in the seam along the fold. It has to stand proud of
-    // the leaves or the seam swallows it and the hinge reads as two loose
-    // plates with a gap between them.
-    const knuckle = new THREE.Mesh(
-      new THREE.CylinderGeometry(.075, .075, HINGE_LEN * .94, 20), brass);
-    knuckle.rotation.x = Math.PI / 2;
-    knuckle.position.set(0, CASE_TOP + HINGE_PLATE, z);
-    knuckle.castShadow = true;
-    scene.add(knuckle);
+    // The barrel, lying in the seam along the fold. It stands proud of the
+    // leaves — buried in the seam the hinge reads as two loose plates — and it
+    // is cut into five knuckles rather than one tube, because the interleaving
+    // of the two leaves' fingers is what makes a butt hinge look like one.
+    const KNUCKLES = 5;
+    const barrel = HINGE_LEN * .94;
+    const finger = barrel / KNUCKLES;
+    for (let i = 0; i < KNUCKLES; i++) {
+      const knuckle = new THREE.Mesh(
+        new THREE.CylinderGeometry(.075, .075, finger * .88, 20), brass);
+      knuckle.rotation.x = Math.PI / 2;
+      knuckle.position.set(0, CASE_TOP + HINGE_PLATE,
+        z - barrel / 2 + finger * (i + .5));
+      knuckle.castShadow = true;
+      scene.add(knuckle);
+    }
   });
 }
 
@@ -1756,6 +1758,24 @@ function renderPieces() {
     if (game.pos.bar[colour]) stacks.push([barKey(colour), colour, game.pos.bar[colour]]);
   }
 
+  // Checkers that have been borne off are piled outside the right-hand wall,
+  // each colour off the end of its own home board, so the race can be read at
+  // a glance.
+  for (const colour of Rules.COLOURS) {
+    const taken = game.pos.off[colour];
+    if (!taken) continue;
+    const material = colour === "ivory" ? ivory : black;
+    const z = colour === HUMAN ? FIELD_HALF * .55 : -FIELD_HALF * .55;
+    for (let i = 0; i < taken; i++) {
+      const body = new THREE.Mesh(checkerGeometry, material);
+      body.position.set(CASE_HALF_X + 1.75, FELT_Y + i * (CHECKER_H + .004), z);
+      body.rotation.y = (Math.random() - .5) * .3;
+      body.castShadow = true;
+      body.receiveShadow = true;
+      piecesGroup.add(body);
+    }
+  }
+
   for (const [key, colour, count] of stacks) {
     const material = colour === "ivory" ? ivory : black;
     // The checker currently in the player's hand is drawn separately, so its
@@ -1792,16 +1812,33 @@ function dropUnsupportedDice() {
 // still playable this turn, not just against the board: a move that is legal
 // on its own but would strand a die is not one of the moves offered.
 function tryMove(fromPlace, toPlace) {
-  const move = movesNow().find(m => sameMove(m, fromPlace, toPlace));
-  if (!move) return false;
-  game.history.push({ pos: game.pos, remaining: game.remaining.slice() });
-  game.pos = Rules.applyMove(game.pos, game.turn, move);
-  game.remaining.splice(game.remaining.indexOf(move.die), 1);
-  game.played++;
+  const single = movesNow().find(m => sameMove(m, fromPlace, toPlace));
+  // Dropping a checker eight points away on a 5-3 is one move to the player,
+  // so it is one move here: if no single die reaches, look for a way of
+  // walking that checker there through several.
+  const moves = single ? [single] : chainTo(fromPlace, toPlace);
+  if (!moves.length) return false;
+
+  // The whole drag is one entry in the history, so taking it back takes back
+  // what was dragged rather than half of it.
+  game.history.push({ pos: game.pos, remaining: game.remaining.slice(), played: game.played });
+  for (const move of moves) {
+    game.pos = Rules.applyMove(game.pos, game.turn, move);
+    game.remaining.splice(game.remaining.indexOf(move.die), 1);
+    game.played++;
+  }
   finishIfWon();
   renderPieces();
   updateHud();
   return true;
+}
+
+function chainTo(fromPlace, toPlace) {
+  if (!game.dice || game.over || !isHuman(game.turn) || game.thinking) return [];
+  const chain = Rules.chainMoves(game.pos, game.turn, game.remaining)
+    .filter(c => String(c.from) === String(fromPlace) && String(c.to) === String(toPlace))
+    .sort((a, b) => b.moves.length - a.moves.length)[0];
+  return chain ? chain.moves : [];
 }
 
 function sameMove(move, fromPlace, toPlace) {
@@ -1826,6 +1863,19 @@ let thrown = false;
 function onDiceSettled() {
   if (!game || game.over || !thrown) return;
   thrown = false;
+
+  // A die leaning on a wall or standing on a checker is not a roll. It goes
+  // back in the hand and is thrown again by whoever threw it.
+  const rolled = diceInHand(thrower() || game.turn);
+  if (rolled.some(d => d.userData.die.cocked)) {
+    game.cocked = true;
+    updateHud();
+    if (!isHuman(thrower() || game.turn)) {
+      setTimeout(() => throwDice(game.phase === "opening" || game.turn === COMPUTER ? 1 : -1), 1400);
+    }
+    return;
+  }
+  game.cocked = false;
   if (game.phase === "opening") return openingSettled();
   if (game.dice) return;
   const values = diceMeshes.map(d => d.userData.die.value);
@@ -1974,7 +2024,7 @@ function undoMove() {
   const last = game.history.pop();
   game.pos = last.pos;
   game.remaining = last.remaining;
-  game.played--;
+  game.played = last.played;
   renderPieces();
   updateHud();
 }
@@ -1990,10 +2040,32 @@ const undoButton = document.querySelector("#undo");
 doneButton?.addEventListener("click", endTurn);
 undoButton?.addEventListener("click", undoMove);
 
+// A line across the middle of the table for things that need saying rather
+// than showing — a broken roll, mostly.
+const noticeBox = document.querySelector("#notice");
+let noticeText = "";
+function notice(text) {
+  if (!noticeBox || text === noticeText) return;
+  noticeText = text;
+  noticeBox.textContent = text;
+  noticeBox.classList.toggle("visible", !!text);
+}
+
 function updateHud() {
   const [side, roll] = hud.querySelectorAll("strong");
   if (side) {
     const mars = game.over && game.over.value === 2 ? " · MARS" : "";
+    if (!game.over && game.cocked) {
+      const who = thrower() || game.turn;
+      side.textContent = isHuman(who)
+        ? (mode === "hotseat" ? NAMES[who] + " · ZAR KIRIK, TEKRAR AT" : "ZAR KIRIK · TEKRAR AT")
+        : "ZAR KIRIK · RAKİP TEKRAR ATIYOR";
+      if (roll) roll.textContent = "—";
+      if (doneButton) doneButton.disabled = true;
+      if (undoButton) undoButton.disabled = true;
+      notice(isHuman(who) ? "Zar kırık geldi — tekrar at" : "Zar kırık geldi — rakip tekrar atıyor");
+      return;
+    }
     if (!game.over && game.phase === "opening") {
       side.textContent = game.waitingOn === null ? "…"
         : isHuman(game.waitingOn)
@@ -2017,6 +2089,7 @@ function updateHud() {
         ? NAMES[game.turn] + (game.dice ? "" : " · ZAR AT")
         : (game.dice ? "SEN" : "SEN · ZAR AT");
   }
+  notice("");
   if (roll && !game.dice) roll.textContent = "—";
   if (undoButton) {
     undoButton.disabled = !game.history.length || !!game.over ||
