@@ -53,15 +53,24 @@ const BOARDS = {
     room: { env: .5, fill: .3, hemi: .85, ambient: .22 },
   },
 };
-// You play the black checkers and the computer the bone ones, because of
-// where the two home boards are. Black runs 1 to 24 and comes home to 19-24,
-// which is the near row — the side of the table you are sitting at. Ivory
-// comes home to 1-6, on the far row, which is where the player opposite you
-// is. Handing you the bone checkers would have you bearing off across the
-// table from yourself.
-const HUMAN = "black";
-const COMPUTER = "ivory";
+// Which checkers are yours is chosen at the door and settled here, before
+// anything is built, because the seat follows it: black comes home to 19-24
+// on the near row and ivory to 1-6 on the far one, so whoever you play, the
+// camera has to sit on that side of the table or you bear off away from
+// yourself across the board.
+const COLOUR_KEY = "tavla.colour";
+const HUMAN = localStorage.getItem(COLOUR_KEY) === "ivory" ? "ivory" : "black";
+const COMPUTER = HUMAN === "ivory" ? "black" : "ivory";
 const NAMES = { ivory: "KEMİK", black: "SİYAH" };
+
+// Away from your own seat: the direction a throw is aimed.
+const AWAY = HUMAN === "black" ? -1 : 1;
+
+// Your home board is the bottom left of the screen whichever colour you play.
+// The camera sitting on your side of the table gets the near row under your
+// hands; this gets the six points you bear off from under your left one, by
+// laying the numbering out along x one way for black and the other for ivory.
+const MIRROR = HUMAN === "black" ? -1 : 1;
 
 // Two ways to play: against the computer, or two people sharing one screen and
 // taking the table in turns. Both are settled at the door, before anything is
@@ -84,7 +93,7 @@ scene.fog = new THREE.FogExp2(0x060402, 0.015);
 // Fixed, near-top-down seat at the table — the camera never moves once
 // seated, so the mouse is free to drag checkers instead of looking around.
 const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.1, 100);
-camera.position.set(0, 17.6, 5.7);
+camera.position.set(0, 17.6, -5.7 * AWAY);
 camera.lookAt(0, 0.4, 0);
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -112,25 +121,61 @@ function sitDown() {
 // Picking the board that is already on the table just opens the door. Picking
 // the other one has to reload, because the two differ in the geometry of the
 // points and that is settled before the scene is built.
+// The door. A mode, a table and a colour, and then it opens — and it stays
+// shut until the table and the checkers have both been picked, because those
+// two are what get built and there is no sensible default to build without
+// being asked.
+let pickedBoard = null;
+let pickedColour = null;
+const startButton = document.querySelector("#start");
+
+function markChosen(attribute, value) {
+  document.querySelectorAll(`[data-${attribute}]`).forEach(button =>
+    button.classList.toggle("chosen", button.dataset[attribute] === value));
+}
+
+function refreshStart() {
+  if (startButton) startButton.disabled = !(pickedBoard && pickedColour);
+}
+
 document.querySelectorAll("[data-mode]").forEach(button => {
-  button.classList.toggle("chosen", button.dataset.mode === mode);
   button.addEventListener("click", () => {
     mode = button.dataset.mode;
     localStorage.setItem(MODE_KEY, mode);
-    document.querySelectorAll("[data-mode]").forEach(b =>
-      b.classList.toggle("chosen", b.dataset.mode === mode));
+    markChosen("mode", mode);
+  });
+});
+markChosen("mode", mode);
+
+document.querySelectorAll("[data-board]").forEach(button => {
+  button.addEventListener("click", () => {
+    pickedBoard = button.dataset.board;
+    markChosen("board", pickedBoard);
+    refreshStart();
   });
 });
 
-document.querySelectorAll("[data-board]").forEach(button => {
-  button.classList.toggle("chosen", button.dataset.board === boardName);
+document.querySelectorAll("[data-colour]").forEach(button => {
   button.addEventListener("click", () => {
-    if (button.dataset.board === boardName) return sitDown();
-    localStorage.setItem(BOARD_KEY, button.dataset.board);
-    sessionStorage.setItem("tavla.sitOnLoad", "1");
-    location.reload();
+    pickedColour = button.dataset.colour;
+    markChosen("colour", pickedColour);
+    refreshStart();
   });
 });
+
+// Both the table and the colour are settled before the scene is built — one
+// lays out the points, the other decides which side of the table the camera
+// sits on — so picking something other than what is already standing there
+// means starting the page again.
+startButton?.addEventListener("click", () => {
+  if (!pickedBoard || !pickedColour) return;
+  if (pickedBoard === boardName && pickedColour === HUMAN) return sitDown();
+  localStorage.setItem(BOARD_KEY, pickedBoard);
+  localStorage.setItem(COLOUR_KEY, pickedColour);
+  sessionStorage.setItem("tavla.sitOnLoad", "1");
+  location.reload();
+});
+
 if (sessionStorage.getItem("tavla.sitOnLoad")) {
   sessionStorage.removeItem("tavla.sitOnLoad");
   sitDown();
@@ -543,7 +588,8 @@ const BAR_TOP = CASE_TOP;
 function addBoard() {
   if (BOARD.shape === "panel") addPanelBoard(); else addTrayBoard();
 
-  starts.forEach((x, i) => {
+  starts.forEach((start, i) => {
+    const x = MIRROR * start;
     point(x - POINT_HALF, x + POINT_HALF, -FIELD_HALF, -TIP_Z, i % 2 ? marquetryB : marquetryA);
     point(x - POINT_HALF, x + POINT_HALF, FIELD_HALF, TIP_Z, i % 2 ? marquetryA : marquetryB);
   });
@@ -1679,8 +1725,8 @@ function checkStopped(die, dt) {
 const CHECKER_GAP = CHECKER_D;
 const POINTS = {};
 starts.forEach((x, i) => {
-  POINTS[12 - i] = { x, z: NEAR_Z, baseZ: -FIELD_HALF + CHECKER_R, dir: 1 };
-  POINTS[13 + i] = { x, z: FAR_Z, baseZ: FIELD_HALF - CHECKER_R, dir: -1 };
+  POINTS[12 - i] = { x: MIRROR * x, z: NEAR_Z, baseZ: -FIELD_HALF + CHECKER_R, dir: 1 };
+  POINTS[13 + i] = { x: MIRROR * x, z: FAR_Z, baseZ: FIELD_HALF - CHECKER_R, dir: -1 };
 });
 // Checkers sent to the bar sit on the centre divider, in the gap the two
 // facing rows of points leave open.
@@ -1802,10 +1848,10 @@ function renderPieces() {
     const taken = game.pos.off[colour];
     if (!taken) continue;
     const material = colour === "ivory" ? ivory : black;
-    const z = colour === HUMAN ? FIELD_HALF * .55 : -FIELD_HALF * .55;
+    const z = colour === "black" ? FIELD_HALF * .55 : -FIELD_HALF * .55;
     for (let i = 0; i < taken; i++) {
       const body = new THREE.Mesh(checkerGeometry, material);
-      body.position.set(CASE_HALF_X + 1.75, FELT_Y + i * (CHECKER_H + .004), z);
+      body.position.set(MIRROR * (CASE_HALF_X + 1.75), FELT_Y + i * (CHECKER_H + .004), z);
       body.rotation.y = (Math.random() - .5) * .3;
       body.castShadow = true;
       body.receiveShadow = true;
@@ -1908,7 +1954,7 @@ function onDiceSettled() {
     game.cocked = true;
     updateHud();
     if (!isHuman(thrower() || game.turn)) {
-      setTimeout(() => throwDice(game.phase === "opening" || game.turn === COMPUTER ? 1 : -1), 1400);
+      setTimeout(() => throwDice(isHuman(thrower() || game.turn) ? AWAY : -AWAY), 1400);
     }
     return;
   }
@@ -1965,7 +2011,7 @@ function seatOfMove(colour, move) {
     : game.pos.points[move.from].count;
   const from = checkerSeat(fromKey, standing - 1);
   if (move.to === "off") {
-    return { fromKey, from, to: { x: (FIELD_HALF_X + 1.4) * 1, y: CASE_TOP, z: from.z } };
+    return { fromKey, from, to: { x: MIRROR * (FIELD_HALF_X + 1.4), y: CASE_TOP, z: from.z } };
   }
   const target = game.pos.points[move.to];
   const seated = target && target.colour === colour ? target.count : 0;
@@ -2045,7 +2091,7 @@ function startTurn(colour) {
   game.required = 0;
   game.played = 0;
   game.history = [];
-  if (!isHuman(colour)) setTimeout(() => throwDice(1), 550);
+  if (!isHuman(colour)) setTimeout(() => throwDice(-AWAY), 550);
 }
 
 // The turn is over when there is nothing left that may be played — which is
@@ -2278,7 +2324,7 @@ function throwDice(towards) {
 function launchDice() {
   const hand = heldDice.vel.clone();
   hand.y = 0;
-  const towards = heldDice.towards || -1;
+  const towards = heldDice.towards || AWAY;
   // Away from the player's side of the table, with whatever aim the hand had.
   // Around 2 m/s, which is a firm throw rather than a nudge — hard enough to
   // reach the far rail, come back off it and keep tumbling.
@@ -2329,6 +2375,7 @@ canvas.addEventListener("pointerdown", (e) => {
       startedAt: performance.now(),
       released: false,
       byHand: true,
+      towards: AWAY,
       vel: new THREE.Vector3(),
       swirl: 0,
       entries: diceInHand(thrower()).map((die, i) => {
@@ -2425,9 +2472,10 @@ addEventListener("pointerup", (e) => {
   raycaster.setFromCamera(pointer, camera);
   const hit = new THREE.Vector3();
   if (raycaster.ray.intersectPlane(dragPlane, hit)) {
-    // Carried past the right-hand wall is an attempt to bear off — both home
-    // boards are on that side of the table.
-    if (hit.x > FIELD_HALF_X) {
+    // Carried past the wall on the home side is an attempt to bear off. Both
+    // home boards are on the same side of the board as each other, and which
+    // side of the screen that is depends on which colour is being played.
+    if (hit.x * MIRROR > FIELD_HALF_X) {
       game.lifted = null;
       tryMove(dragging.from, "off");
       scene.remove(dragging.mesh);

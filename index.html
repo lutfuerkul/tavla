@@ -11,7 +11,7 @@
       <canvas id="scene"></canvas>
       <section id="intro" aria-label="Oyun başlangıcı">
         <p class="eyebrow">3B TAVLA</p>
-        <h1>Masayı seç.</h1>
+        <h1>Masa ve taş seçimi</h1>
         <div id="modes">
           <button class="mode-pick" data-mode="solo">Bilgisayara karşı</button>
           <button class="mode-pick" data-mode="hotseat">İki kişi · aynı cihaz</button>
@@ -27,6 +27,15 @@
             <span class="board-name">Ceviz kaplama masa</span>
           </button>
         </div>
+        <div id="colours">
+          <button class="colour-pick" data-colour="black">
+            <span class="chip chip-black" aria-hidden="true"></span>Siyah
+          </button>
+          <button class="colour-pick" data-colour="ivory">
+            <span class="chip chip-ivory" aria-hidden="true"></span>Kemik
+          </button>
+        </div>
+        <button id="start" disabled>Oyuna başla</button>
       </section>
       <aside id="hud" aria-live="polite">
         <div><span>SIRA</span><strong>KEMİK</strong></div>
