@@ -38,7 +38,7 @@ const BOARDS = {
     pale: ["#e4d6a6", "#c9b884"],
     dark: ["#432a13", "#2c1a09"],
     gloss: { roughness: .4, clearcoat: .34, clearcoatRoughness: .18 },
-    room: { env: .5, fill: .3, hemi: .85, ambient: .22 },
+    room: { env: .22, fill: .16, hemi: .42, ambient: .1 },
   },
   star: {
     shape: "tray",
@@ -50,7 +50,7 @@ const BOARDS = {
     pale: ["#e4d6a6", "#c9b884"],
     dark: ["#6d4c2a", "#2a1608"],
     gloss: { roughness: .3, clearcoat: .95, clearcoatRoughness: .04 },
-    room: { env: .5, fill: .3, hemi: .85, ambient: .22 },
+    room: { env: .22, fill: .16, hemi: .42, ambient: .1 },
   },
 };
 // Which checkers are yours is chosen at the door and settled here, before
