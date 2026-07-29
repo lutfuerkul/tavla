@@ -487,20 +487,25 @@ const POINT_LEN = CHECKER_D * BOARD.pointLen;
 const FIELD_HALF = CHECKER_D * 6;    // twelve checkers of depth, halved
 const TIP_Z = FIELD_HALF - POINT_LEN;
 
+// A strip of felt wide enough that a checker standing on the outermost seat
+// of a point clears the wall beside it. A checker is eight millimetres tall
+// and leans outwards with the view, so a gap that only just clears on the
+// floor plan does not clear on the screen.
+const EDGE_GAP = .12;
+const COLUMN_OFF = Math.max(POINT_HALF, CHECKER_D / 2 + EDGE_GAP);
+
 // Six columns either side of the bar, mirrored front to back for 24 points.
+// The first column stands off the middle by the same strip that the last one
+// stands off the outer wall — the checkers on it are as close to the wall of
+// the middle as the outer ones are to theirs.
 const starts = [];
-for (let k = 5; k >= 0; k--) starts.push(-(BAR_HALF + POINT_HALF + PITCH * k));
-for (let k = 0; k <= 5; k++) starts.push(BAR_HALF + POINT_HALF + PITCH * k);
+for (let k = 5; k >= 0; k--) starts.push(-(BAR_HALF + COLUMN_OFF + PITCH * k));
+for (let k = 0; k <= 5; k++) starts.push(BAR_HALF + COLUMN_OFF + PITCH * k);
 const NEAR_Z = -(FIELD_HALF - POINT_LEN / 2);
 const FAR_Z = FIELD_HALF - POINT_LEN / 2;
 
-// Half the width of the playing field. The points would set this on their own,
-// but on the boards whose points are a checker wide that puts the wall exactly
-// on the edge of the checkers standing on the outermost column, with nothing
-// between them. Whichever is wider — the point or the checker and a strip of
-// felt to stand it on — decides.
-const EDGE_GAP = .12;                          // 4mm, enough that the lean of an 8mm checker still clears
-const FIELD_HALF_X = starts[starts.length - 1] + Math.max(POINT_HALF, CHECKER_D / 2 + EDGE_GAP);
+// Half the width of the playing field: the last column plus the same strip.
+const FIELD_HALF_X = starts[starts.length - 1] + COLUMN_OFF;
 
 // The reference board is a folding case, not a flat panel: two trays hinged
 // down the middle, each a floor with the playing surface laid into it and four
@@ -519,6 +524,14 @@ const CASE_HALF_X = FIELD_HALF_X + WALL_T;
 // the first seat of a point reaches the very end of it, so a wall set on the
 // end of the points is a wall set on the checkers.
 const FIELD_HALF_Z = FIELD_HALF + EDGE_GAP;
+
+// The dice stop where the checkers end, not at the wall. Between the two is a
+// strip of felt four millimetres wide — narrower than a die, so a die that
+// could get into it would have to lean, and a die that leans is a broken roll.
+// Better it never gets in: the strip is a border to look at, and the dice play
+// the board inside it.
+const WALL_X = starts[starts.length - 1] + CHECKER_D / 2;
+const WALL_Z = FIELD_HALF;
 const CASE_HALF_Z = FIELD_HALF_Z + WALL_T;
 
 // What a die meets in the middle of the board: two walls, the same height as
@@ -584,10 +597,13 @@ function addPanelBoard() {
   });
 
   // The seam is a groove in one continuous tray here, not a gap between two,
-  // so the veneer lies across the bottom of it and shows through. Filling the
-  // groove up to the height of the playing surface leaves it reading as the
-  // dark line it is on the cases, without touching the veneer itself.
-  box(BAR_HALF * 2 - WALL_T * 2, FELT_Y + .02 - CASE_BOTTOM, CASE_HALF_Z * 2, frame,
+  // so the veneer lies across the bottom of it and shows through. The groove
+  // is floored just above the veneer — which is left alone — in something
+  // darker than the walls either side of it, because a floor the same colour
+  // as those walls makes the whole middle read as one slab. On the cases the
+  // seam is black against lit wall tops, and that is the line it wants to be.
+  const seamFloor = new THREE.MeshStandardMaterial({ color: 0x030202, roughness: .95 });
+  box(BAR_HALF * 2 - WALL_T * 2, FELT_Y + .02 - CASE_BOTTOM, CASE_HALF_Z * 2, seamFloor,
     0, (CASE_BOTTOM + FELT_Y + .02) / 2, 0);
 
   addHinges();
@@ -1118,8 +1134,6 @@ const FLAT_ENOUGH = Math.cos(6 * Math.PI / 180);
 // laid-out board, which is also where the outermost checkers stand. Moving it
 // out to the felt leaves a nine millimetre trough between those checkers and
 // the wall that a ten millimetre die cannot lie flat in, so it stays here.
-const WALL_X = FIELD_HALF_X;
-const WALL_Z = FIELD_HALF_Z;
 
 // Physics runs on a fixed timestep and catches up across however many frames
 // the machine manages, so a throw takes the same real time to settle whether
@@ -1441,7 +1455,7 @@ const CONTACT_SKIN = DIE_SIZE * .15;
 const DIE_HALVES = new THREE.Vector3(DIE_INNER, DIE_INNER, DIE_INNER);
 // The bar down the middle of the board stands proud of the felt, and the
 // checkers stand proud of that. Both are in the dice's way.
-const BAR_HALVES = new THREE.Vector3(BAR_HALF, BAR_RISE, CASE_HALF_Z);
+const BAR_HALVES = new THREE.Vector3(BAR_HALF + EDGE_GAP, BAR_RISE, CASE_HALF_Z);
 const BAR_CENTRE = new THREE.Vector3(0, BAR_TOP - BAR_RISE, 0);
 const CHECKER_HALVES = new THREE.Vector3(CHECKER_R, CHECKER_H / 2, CHECKER_R);
 // Nothing further away than this can be touching, whatever the angles.
