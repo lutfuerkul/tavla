@@ -2631,10 +2631,24 @@ function launchDice() {
   const hand = heldDice.vel.clone();
   hand.y = 0;
   const towards = heldDice.towards || AWAY;
-  // Away from the player's side of the table, with whatever aim the hand had.
+  // Away from the player's side of the table, with whatever aim the hand had —
+  // but only so far. The hand's sideways speed is clamped at 26, and a third
+  // of that against a forward component of one aimed the throw up to eighty
+  // three degrees off the length of the board, so a sideways flick sent the
+  // dice at the rail rather than down the table.
+  //
+  // Ten degrees, not the twenty that looked like the obvious answer. The board
+  // is thirteen units long, so a throw twenty degrees off it walks nearly five
+  // units sideways on the way down and arrives at the far end already against
+  // the rail — measured over five hundred throws it left more dice resting out
+  // there than no clamp at all did, because an unclamped throw at least hits
+  // the near wall early and rattles back towards the middle. Ten degrees is
+  // short enough that the drift never adds up.
+  const CONE = Math.tan(10 * Math.PI / 180);
+  const sideways = Math.max(-CONE, Math.min(CONE, hand.x * .3));
   // Around 2 m/s, which is a firm throw rather than a nudge — hard enough to
   // reach the far rail, come back off it and keep tumbling.
-  const aim = new THREE.Vector3(hand.x * .3, 0, towards)
+  const aim = new THREE.Vector3(sideways, 0, towards)
     .normalize()
     .multiplyScalar(52 + Math.random() * 16);
 
