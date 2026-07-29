@@ -44,6 +44,7 @@
       <aside id="hud" aria-live="polite">
         <div><span>SIRA</span><strong>KEMİK</strong></div>
         <div><span>ZARLAR</span><strong>4 · 2</strong></div>
+        <div><span>SKOR · 3</span><strong>0 · 0</strong></div>
       </aside>
       <button id="menu">Menü</button>
       <div id="confirm" hidden>
@@ -53,6 +54,16 @@
           <div class="confirm-actions">
             <button id="confirm-no">Vazgeç</button>
             <button id="confirm-yes">Çık</button>
+          </div>
+        </div>
+      </div>
+      <div id="result" hidden>
+        <div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="result-title">
+          <p id="result-title">Kazandın</p>
+          <p class="confirm-note" id="result-score">Skor 1 · 0</p>
+          <div class="confirm-actions">
+            <button id="result-quit">Çık</button>
+            <button id="result-next">Oyuna devam et</button>
           </div>
         </div>
       </div>
