@@ -130,7 +130,18 @@ function takeSeat() {
 
 takeSeat();
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+// A phone or a tablet has two screen pixels to every one the page asks for,
+// which does most of the work multisampling is there to do: an edge already
+// lands on two pixels and the screen averages them. Paying for four samples
+// per pixel on top of that costs a tablet four megapixels' worth of bandwidth
+// a frame and buys an edge nobody can see, and it was the reason the board had
+// to be drawn below its own resolution to keep moving — which is visible.
+const DENSE_SCREEN = devicePixelRatio >= 2;
+// Fingers rather than a mouse: a phone or a tablet, where the frame budget is
+// tight and the board is small enough to hide the difference.
+const HANDHELD = matchMedia?.("(pointer: coarse)").matches ?? false;
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !DENSE_SCREEN });
 // The scene is drawn at more samples than the screen has pixels and the
 // browser shrinks it down. On a 1080p monitor, which reports a device ratio of
 // 1, the die comes out nineteen pixels across and each of its pips lands on
@@ -932,7 +943,10 @@ const checkerGeometry = new THREE.LatheGeometry([
   new THREE.Vector2(.20, .208),
   new THREE.Vector2(.13, .219),
   new THREE.Vector2(0, .2225),          // dome crown, level with the rim
-], 96);
+  // Ninety-six segments turn a checker that is an inch across on a desktop.
+  // On a handheld it is four millimetres and forty-eight are past telling
+  // apart, so half the triangles on the board go away for nothing.
+], HANDHELD ? 48 : 96);
 
 // --- Dice ------------------------------------------------------------
 // A real die: every face carries its own pips, opposite faces sum to 7,
@@ -2871,7 +2885,11 @@ function addRoom() {
   const key = new THREE.DirectionalLight(0xfff4e2, 2.5);
   key.position.set(6 * AWAY, 10, -6 * AWAY);
   key.castShadow = true;
-  key.shadow.mapSize.set(2048, 2048);
+  // Half the map on a handheld: a texel is 0.9 mm across the board instead of
+  // 0.46, which is under the width of the softening already applied to the
+  // edge, and the second pass costs a quarter of what it did.
+  const shadowPixels = HANDHELD ? 1024 : 2048;
+  key.shadow.mapSize.set(shadowPixels, shadowPixels);
   key.shadow.bias = -0.0004;
   key.shadow.normalBias = .02;
   key.shadow.radius = 3;
@@ -2954,7 +2972,11 @@ fitCamera();
 // is taken. It only ever steps down — a scale that has been given up is not
 // tried again, or a machine sitting right on the line would flicker between
 // two of them for as long as the game is open.
-const SLOW_FRAME = 1000 / 60 * 1.5;
+// Thirty frames a second, not forty. A board that sits still between turns
+// does not need sixty, and every step down the ladder is paid for in
+// sharpness — so it is worth waiting until the frames are genuinely late
+// before giving any of it up.
+const SLOW_FRAME = 1000 / 30;
 let recent = [], measuredSince = 0, warmed = false;
 
 function watchFrames(now) {
