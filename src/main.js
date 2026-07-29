@@ -499,7 +499,7 @@ const FAR_Z = FIELD_HALF - POINT_LEN / 2;
 // on the edge of the checkers standing on the outermost column, with nothing
 // between them. Whichever is wider — the point or the checker and a strip of
 // felt to stand it on — decides.
-const EDGE_GAP = .06;                          // 2mm of felt outside the last checker
+const EDGE_GAP = .12;                          // 4mm, enough that the lean of an 8mm checker still clears
 const FIELD_HALF_X = starts[starts.length - 1] + Math.max(POINT_HALF, CHECKER_D / 2 + EDGE_GAP);
 
 // The reference board is a folding case, not a flat panel: two trays hinged
@@ -515,7 +515,11 @@ const FLOOR_T = .26;                      // 9mm of case floor under it
 const CASE_TOP = FELT_Y + WALL_H;
 const CASE_BOTTOM = FELT_Y - FLOOR_T;
 const CASE_HALF_X = FIELD_HALF_X + WALL_T;
-const CASE_HALF_Z = FIELD_HALF + WALL_T;
+// The same strip of felt at the ends as there is at the sides: the checker on
+// the first seat of a point reaches the very end of it, so a wall set on the
+// end of the points is a wall set on the checkers.
+const FIELD_HALF_Z = FIELD_HALF + EDGE_GAP;
+const CASE_HALF_Z = FIELD_HALF_Z + WALL_T;
 
 // What a die meets in the middle of the board: two walls, the same height as
 // the ones round the edge, on every board. A die thrown into one half stays in
@@ -575,9 +579,16 @@ function addPanelBoard() {
     box(WALL_T, wallH, CASE_HALF_Z * 2, frame, side * (FIELD_HALF_X + WALL_T / 2), wallY, 0);
     box(WALL_T, wallH, CASE_HALF_Z * 2, frame, side * (BAR_HALF - WALL_T / 2), wallY, 0);
     [-1, 1].forEach(end => {
-      box(endSpan, wallH, WALL_T, frame, side * endMid, wallY, end * (FIELD_HALF + WALL_T / 2));
+      box(endSpan, wallH, WALL_T, frame, side * endMid, wallY, end * (FIELD_HALF_Z + WALL_T / 2));
     });
   });
+
+  // The seam is a groove in one continuous tray here, not a gap between two,
+  // so the veneer lies across the bottom of it and shows through. Filling the
+  // groove up to the height of the playing surface leaves it reading as the
+  // dark line it is on the cases, without touching the veneer itself.
+  box(BAR_HALF * 2 - WALL_T * 2, FELT_Y + .02 - CASE_BOTTOM, CASE_HALF_Z * 2, frame,
+    0, (CASE_BOTTOM + FELT_Y + .02) / 2, 0);
 
   addHinges();
 
@@ -608,14 +619,14 @@ function addTrayBoard() {
     box(WALL_T, wallH, CASE_HALF_Z * 2, shell, side * (BAR_HALF - WALL_T / 2), wallY, 0);
     box(WALL_T, wallH, CASE_HALF_Z * 2, shell, side * (FIELD_HALF_X + WALL_T / 2), wallY, 0);
     [-1, 1].forEach(end => {
-      box(spanX, wallH, WALL_T, shell, midX, wallY, end * (FIELD_HALF + WALL_T / 2));
+      box(spanX, wallH, WALL_T, shell, midX, wallY, end * (FIELD_HALF_Z + WALL_T / 2));
     });
 
     // The playing surface, laid into the tray between the walls. Each half is
     // a mirror of the other, the way a board is veneered from one leaf split
     // and opened out — which is what puts the figure at the centre of both.
     const face = new THREE.Mesh(
-      new THREE.BoxGeometry(FIELD_HALF_X - BAR_HALF, .04, FIELD_HALF * 2),
+      new THREE.BoxGeometry(FIELD_HALF_X - BAR_HALF, .04, FIELD_HALF_Z * 2),
       side < 0 ? veneerL : veneerR
     );
     face.position.set(side * (BAR_HALF + FIELD_HALF_X) / 2, FELT_Y - .02, 0);
@@ -1108,7 +1119,7 @@ const FLAT_ENOUGH = Math.cos(6 * Math.PI / 180);
 // out to the felt leaves a nine millimetre trough between those checkers and
 // the wall that a ten millimetre die cannot lie flat in, so it stays here.
 const WALL_X = FIELD_HALF_X;
-const WALL_Z = FIELD_HALF;
+const WALL_Z = FIELD_HALF_Z;
 
 // Physics runs on a fixed timestep and catches up across however many frames
 // the machine manages, so a throw takes the same real time to settle whether
