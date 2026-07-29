@@ -2307,9 +2307,12 @@ function showResult() {
     ? (mode === "hotseat" ? t("result.matchWonHot", { name: nameOf(took) })
         : t(took === HUMAN ? "result.matchWon" : "result.matchLost"))
     : said + (value === 2 ? t("mars") : "");
+  // A game is worth one point or two, so the singular is a real case and has
+  // its own line in the languages that inflect it.
   resultScore.textContent = took
     ? t("result.final", { score: scoreLine() })
-    : t("result.line", { points: value, score: scoreLine(), target: MATCH_TARGET });
+    : t(value === 1 ? "result.line1" : "result.line",
+        { points: value, score: scoreLine(), target: MATCH_TARGET });
   resultNext.textContent = t(took ? "result.newMatch" : "result.next");
   resultBox.removeAttribute("hidden");
 }
