@@ -31,22 +31,20 @@ button:hover { background: #edbb69; }
 .board-name { font-size: .95rem; letter-spacing: .04em; }
 .board-note { font-size: .68rem; color: #9b907e; line-height: 1.5; }
 
-}
-
 /* Ends the turn, and only lights up when the turn can actually be ended —
    which is when every die that could be played has been. */
-#controls { position: fixed; z-index: 3; left: 50%; bottom: 1.05rem; transform: translateX(-50%);
+#controls { position: fixed; z-index: 3; left: 50%; bottom: 1.5rem; transform: translateX(-50%);
   display: flex; gap: .7rem; align-items: center; }
 #undo { padding: .7rem 1.4rem; font: inherit; font-size: .78rem; letter-spacing: .14em;
   text-transform: uppercase; color: #d8ccb4; background: transparent;
   border: 1px solid rgba(229,173,84,.45); border-radius: .4rem; cursor: pointer;
   transition: opacity .2s ease, border-color .2s ease; }
-#undo:disabled { color: #5c5449; border-color: rgba(229,173,84,.12); cursor: default; }
+#undo:disabled { color: #857a69; border-color: rgba(229,173,84,.3); cursor: default; }
 #undo:not(:disabled):hover { border-color: #e5ad54; color: #f2e6cc; }
 #done { padding: .7rem 2.1rem; font: inherit; font-size: .82rem; letter-spacing: .16em;
   text-transform: uppercase; color: #0d0a06; background: #e5ad54; border: 0;
   border-radius: .4rem; cursor: pointer; transition: opacity .2s ease, background .2s ease; }
-#done:disabled { background: #2a241c; color: #6b6154; cursor: default; }
+#done:disabled { background: #4a4034; color: #a2977f; cursor: default; }
 #done:not(:disabled):hover { background: #f0bd68; }
 
 
