@@ -3,6 +3,7 @@ import { RoomEnvironment } from "../vendor/three/examples/jsm/environments/RoomE
 
 const canvas = document.querySelector("#scene");
 import * as Rules from "./rules.js";
+import { LANGS, language, setLanguage, t, isIdeographic } from "./i18n.js";
 
 const intro = document.querySelector("#intro");
 const hud = document.querySelector("#hud");
@@ -61,7 +62,9 @@ const BOARDS = {
 const COLOUR_KEY = "tavla.colour";
 const HUMAN = localStorage.getItem(COLOUR_KEY) === "ivory" ? "ivory" : "black";
 const COMPUTER = HUMAN === "ivory" ? "black" : "ivory";
-const NAMES = { ivory: "KEMİK", black: "SİYAH" };
+// Looked up rather than stored, so a line written after the language changes
+// is written in the new one.
+const nameOf = colour => t("name." + colour);
 
 // Away from your own seat: the direction a throw is aimed.
 const AWAY = HUMAN === "black" ? -1 : 1;
@@ -199,6 +202,44 @@ document.querySelectorAll("[data-colour]").forEach(button => {
     refreshStart();
   });
 });
+
+// The languages. Every line the game says is looked up at the moment it is
+// written, so choosing one here rewrites the door and the board on the spot —
+// no reload, and nothing else about the game is touched.
+const langBar = document.querySelector("#langs");
+for (const { code, name, flag } of LANGS) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "lang-pick";
+  button.dataset.lang = code;
+  button.lang = code;
+  button.innerHTML =
+    `<svg viewBox="0 0 24 16" aria-hidden="true">${flag}</svg><span>${name}</span>`;
+  button.addEventListener("click", () => {
+    setLanguage(code);
+    applyStaticText();
+    updateHud();
+    if (resultBox && !resultBox.hasAttribute("hidden")) showResult();
+  });
+  langBar?.append(button);
+}
+
+// Everything written into the page once and left there. The lines the game
+// writes as it goes are looked up where they are written instead.
+function applyStaticText() {
+  document.documentElement.lang = language();
+  document.title = t("title");
+  document.body.classList.toggle("ideographic", isIdeographic());
+  document.querySelectorAll("[data-i18n]").forEach(node => {
+    node.textContent = t(node.dataset.i18n);
+  });
+  // Two labels nobody sees and a screen reader does.
+  intro?.setAttribute("aria-label", t("door.title"));
+  langBar?.setAttribute("aria-label", t("aria.langs"));
+  markChosen("lang", language());
+}
+
+applyStaticText();
 
 document.querySelectorAll("[data-side]").forEach(button => {
   button.addEventListener("click", () => {
@@ -2252,24 +2293,24 @@ const resultScore = document.querySelector("#result-score");
 const resultNext = document.querySelector("#result-next");
 
 const scoreLine = () => mode === "hotseat"
-  ? `${NAMES[HUMAN]} ${match[HUMAN]} · ${NAMES[COMPUTER]} ${match[COMPUTER]}`
-  : `SEN ${match[HUMAN]} · RAKİP ${match[COMPUTER]}`;
+  ? `${nameOf(HUMAN)} ${match[HUMAN]} · ${nameOf(COMPUTER)} ${match[COMPUTER]}`
+  : `${t("you")} ${match[HUMAN]} · ${t("opponent")} ${match[COMPUTER]}`;
 
 function showResult() {
   if (!resultBox || !game.over) return;
   const { winner, value } = game.over;
   const took = matchWinner();
   const said = mode === "hotseat"
-    ? `${NAMES[winner]} kazandı`
-    : winner === HUMAN ? "Kazandın" : "Kaybettin";
+    ? t("result.wonHot", { name: nameOf(winner) })
+    : t(winner === HUMAN ? "result.won" : "result.lost");
   resultTitle.textContent = took
-    ? (mode === "hotseat" ? `${NAMES[took]} maçı kazandı`
-        : took === HUMAN ? "Maçı kazandın" : "Maçı kaybettin")
-    : said + (value === 2 ? " · MARS" : "");
+    ? (mode === "hotseat" ? t("result.matchWonHot", { name: nameOf(took) })
+        : t(took === HUMAN ? "result.matchWon" : "result.matchLost"))
+    : said + (value === 2 ? t("mars") : "");
   resultScore.textContent = took
-    ? `Son skor ${scoreLine()}`
-    : `${value} sayı · skor ${scoreLine()} · maç ${MATCH_TARGET} sayıya`;
-  resultNext.textContent = took ? "Yeni maç" : "Oyuna devam et";
+    ? t("result.final", { score: scoreLine() })
+    : t("result.line", { points: value, score: scoreLine(), target: MATCH_TARGET });
+  resultNext.textContent = t(took ? "result.newMatch" : "result.next");
   resultBox.removeAttribute("hidden");
 }
 
@@ -2313,23 +2354,24 @@ function updateHud() {
   // before any of the branches below get a chance to return.
   if (score) score.textContent = scoreLine();
   if (side) {
-    const mars = game.over && game.over.value === 2 ? " · MARS" : "";
+    const mars = game.over && game.over.value === 2 ? t("mars") : "";
     if (!game.over && game.cocked) {
       const who = thrower() || game.turn;
       side.textContent = isHuman(who)
-        ? (mode === "hotseat" ? NAMES[who] + " · ZAR KIRIK, TEKRAR AT" : "ZAR KIRIK · TEKRAR AT")
-        : "ZAR KIRIK · RAKİP TEKRAR ATIYOR";
+        ? (mode === "hotseat" ? t("turn.cockedHot", { name: nameOf(who) }) : t("turn.cocked"))
+        : t("turn.cockedWait");
       if (roll) roll.textContent = "—";
       if (doneButton) doneButton.disabled = true;
       if (undoButton) undoButton.disabled = true;
-      notice(isHuman(who) ? "Zar kırık geldi — tekrar at" : "Zar kırık geldi — rakip tekrar atıyor");
+      notice(t(isHuman(who) ? "notice.cocked" : "notice.cockedWait"));
       return;
     }
     if (!game.over && game.phase === "opening") {
       side.textContent = game.waitingOn === null ? "…"
         : isHuman(game.waitingOn)
-          ? (mode === "hotseat" ? NAMES[game.waitingOn] + " · AÇILIŞ ZARI" : "AÇILIŞ · ZAR AT")
-          : "RAKİP AÇILIŞ ZARINI ATIYOR";
+          ? (mode === "hotseat"
+              ? t("turn.openHot", { name: nameOf(game.waitingOn) }) : t("turn.openThrow"))
+          : t("turn.openWait");
       if (roll) {
         const a = game.opening[HUMAN], b = game.opening[COMPUTER];
         roll.textContent = a || b ? `${a ?? "—"} · ${b ?? "—"}` : "—";
@@ -2340,13 +2382,13 @@ function updateHud() {
     }
     side.textContent = game.over
       ? (mode === "hotseat"
-          ? NAMES[game.over.winner] + " KAZANDI"
-          : game.over.winner === HUMAN ? "KAZANDIN" : "KAYBETTİN") + mars
-      : game.thinking ? "RAKİP OYNUYOR"
-      : !isHuman(game.turn) ? "RAKİP"
+          ? t("turn.wonHot", { name: nameOf(game.over.winner) })
+          : t(game.over.winner === HUMAN ? "turn.won" : "turn.lost")) + mars
+      : game.thinking ? t("turn.thinking")
+      : !isHuman(game.turn) ? t("turn.opponent")
       : mode === "hotseat"
-        ? NAMES[game.turn] + (game.dice ? "" : " · ZAR AT")
-        : (game.dice ? "SEN" : "SEN · ZAR AT");
+        ? (game.dice ? nameOf(game.turn) : t("turn.hotThrow", { name: nameOf(game.turn) }))
+        : t(game.dice ? "turn.you" : "turn.youThrow");
   }
   notice("");
   if (roll && !game.dice) roll.textContent = "—";
@@ -2356,7 +2398,7 @@ function updateHud() {
   }
   if (doneButton) {
     doneButton.disabled = !turnComplete() || !!game.over;
-    doneButton.textContent = game.dice && game.required === 0 ? "Oynanacak hamle yok — Tamam" : "Tamam";
+    doneButton.textContent = t(game.dice && game.required === 0 ? "done.none" : "done");
   }
 }
 

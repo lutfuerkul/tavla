@@ -30,6 +30,33 @@ button:hover { background: #edbb69; }
 #crosshair { position: fixed; z-index: 1; top: 50%; left: 50%; width: 8px; height: 8px; margin: -4px; border: 1px solid rgba(247,235,207,.8); border-radius: 50%; opacity: 0; transition: opacity .35s; }
 #crosshair.visible { opacity: .8; }
 @media (max-width: 600px) { #hud { top: .8rem; gap: .5rem; } #hud div { min-width: 5.8rem; } }
+/* The languages, up the right-hand side of the board where there is nothing
+   else. Each is written in its own language, because somebody looking for
+   their own language is not reading the one they have landed in. The flags
+   are drawn, not typed — see i18n.js. */
+#langs { position: absolute; z-index: 1; top: 2.2rem; right: 2.4rem;
+  display: flex; flex-direction: column; gap: .28rem; }
+.lang-pick { display: flex; align-items: center; gap: .55rem; width: 100%;
+  justify-self: stretch; padding: .34rem .62rem; text-align: left;
+  font: 500 .72rem/1.2 "DM Mono", monospace; letter-spacing: .03em;
+  text-transform: none; color: #b3a791; background: rgba(12,9,6,.5);
+  border: 1px solid transparent; border-radius: .35rem; box-shadow: none;
+  cursor: pointer; transition: color .2s ease, background .2s ease, border-color .2s ease; }
+.lang-pick:hover { color: #f6ecd6; background: rgba(34,25,15,.85);
+  border-color: rgba(229,173,84,.5); }
+.lang-pick.chosen { color: #0d0a06; background: #e5ad54; border-color: #e5ad54; }
+.lang-pick svg { flex: none; width: 18px; height: 12px; display: block;
+  border-radius: 1px; box-shadow: 0 0 0 1px rgba(0,0,0,.45); }
+
+/* Chinese and Japanese have no case to change, and spacing the characters out
+   the way the Latin labels space their capitals only breaks the words up. */
+body.ideographic .eyebrow, body.ideographic .mode-pick, body.ideographic .board-pick,
+body.ideographic .colour-pick, body.ideographic .side-pick, body.ideographic #start,
+body.ideographic #undo, body.ideographic #done, body.ideographic #menu,
+body.ideographic .confirm-actions button, body.ideographic #notice,
+body.ideographic #hud span, body.ideographic #hud strong {
+  text-transform: none; letter-spacing: .02em; }
+
 /* Two boards to choose from at the door. */
 #boards { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
 /* The three rows of the door are the same kind of choice, so they are the same
@@ -103,6 +130,11 @@ button:hover { background: #edbb69; }
    board, which is where it was asked to sit. */
 @media (max-width: 600px) {
   #intro { place-content: center; padding: 1.2rem; }
+  /* No room up the side of a phone, so the languages become a row of their
+     own at the top of the door instead. */
+  #langs { position: static; flex-direction: row; flex-wrap: wrap;
+    justify-content: center; gap: .3rem; margin-bottom: 1rem; }
+  .lang-pick { width: auto; font-size: .66rem; padding: .3rem .5rem; }
   #modes { margin: 1.1rem 0 .9rem; }
   #boards, #colours, #sides { gap: .55rem; }
   #colours, #sides { margin-top: .8rem; }

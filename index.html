@@ -10,50 +10,51 @@
     <main id="app">
       <canvas id="scene"></canvas>
       <section id="intro" aria-label="Oyun başlangıcı">
-        <p class="eyebrow">3B TAVLA</p>
-        <h1>Masa ve taş seçimi</h1>
+        <nav id="langs" aria-label="Dil"></nav>
+        <p class="eyebrow" data-i18n="eyebrow">3B TAVLA</p>
+        <h1 data-i18n="door.title">Masa ve taş seçimi</h1>
         <div id="modes">
-          <button class="mode-pick" data-mode="solo">Bilgisayara karşı</button>
-          <button class="mode-pick" data-mode="hotseat">İki kişi · aynı cihaz</button>
+          <button class="mode-pick" data-mode="solo" data-i18n="mode.solo">Bilgisayara karşı</button>
+          <button class="mode-pick" data-mode="hotseat" data-i18n="mode.hotseat">İki kişi · aynı cihaz</button>
         </div>
         <div id="boards">
           <button class="board-pick" data-board="eski">
-            <span class="board-name">Ahşap kaplama</span>
+            <span class="board-name" data-i18n="board.eski">Ahşap kaplama</span>
           </button>
           <button class="board-pick" data-board="klasik">
-            <span class="board-name">Klasik masa</span>
+            <span class="board-name" data-i18n="board.klasik">Klasik masa</span>
           </button>
           <button class="board-pick" data-board="star">
-            <span class="board-name">Ceviz kaplama masa</span>
+            <span class="board-name" data-i18n="board.star">Ceviz kaplama masa</span>
           </button>
         </div>
         <div id="colours">
           <button class="colour-pick" data-colour="black">
-            <span class="chip chip-black" aria-hidden="true"></span>Siyah
+            <span class="chip chip-black" aria-hidden="true"></span><span data-i18n="colour.black">Siyah</span>
           </button>
           <button class="colour-pick" data-colour="ivory">
-            <span class="chip chip-ivory" aria-hidden="true"></span>Kemik
+            <span class="chip chip-ivory" aria-hidden="true"></span><span data-i18n="colour.ivory">Kemik</span>
           </button>
         </div>
         <div id="sides">
-          <button class="side-pick" data-side="sol">Sol tarafa topla</button>
-          <button class="side-pick" data-side="sag">Sağ tarafa topla</button>
+          <button class="side-pick" data-side="sol" data-i18n="side.left">Sol tarafa topla</button>
+          <button class="side-pick" data-side="sag" data-i18n="side.right">Sağ tarafa topla</button>
         </div>
-        <button id="start" disabled>Oyuna başla</button>
+        <button id="start" data-i18n="start" disabled>Oyuna başla</button>
       </section>
       <aside id="hud" aria-live="polite">
-        <div><span>SIRA</span><strong>KEMİK</strong></div>
-        <div><span>ZARLAR</span><strong>4 · 2</strong></div>
-        <div><span>SKOR</span><strong>0 · 0</strong></div>
+        <div><span data-i18n="hud.turn">SIRA</span><strong>KEMİK</strong></div>
+        <div><span data-i18n="hud.dice">ZARLAR</span><strong>4 · 2</strong></div>
+        <div><span data-i18n="hud.score">SKOR</span><strong>0 · 0</strong></div>
       </aside>
-      <button id="menu">Menü</button>
+      <button id="menu" data-i18n="menu">Menü</button>
       <div id="confirm" hidden>
         <div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
-          <p id="confirm-title">Oyundan çıkmak istediğine emin misin?</p>
-          <p class="confirm-note">Sürmekte olan oyun kaybolur.</p>
+          <p id="confirm-title" data-i18n="confirm.title">Oyundan çıkmak istediğine emin misin?</p>
+          <p class="confirm-note" data-i18n="confirm.note">Sürmekte olan oyun kaybolur.</p>
           <div class="confirm-actions">
-            <button id="confirm-no">Vazgeç</button>
-            <button id="confirm-yes">Çık</button>
+            <button id="confirm-no" data-i18n="confirm.no">Vazgeç</button>
+            <button id="confirm-yes" data-i18n="confirm.yes">Çık</button>
           </div>
         </div>
       </div>
@@ -62,15 +63,15 @@
           <p id="result-title">Kazandın</p>
           <p class="confirm-note" id="result-score">Skor 1 · 0</p>
           <div class="confirm-actions">
-            <button id="result-quit">Çık</button>
-            <button id="result-next">Oyuna devam et</button>
+            <button id="result-quit" data-i18n="result.quit">Çık</button>
+            <button id="result-next" data-i18n="result.next">Oyuna devam et</button>
           </div>
         </div>
       </div>
       <div id="notice" role="status"></div>
       <div id="controls">
-        <button id="undo" disabled>Geri al</button>
-        <button id="done" disabled>Tamam</button>
+        <button id="undo" data-i18n="undo" disabled>Geri al</button>
+        <button id="done" data-i18n="done" disabled>Tamam</button>
       </div>
       <div id="crosshair" aria-hidden="true"></div>
     </main>
