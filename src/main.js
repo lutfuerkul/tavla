@@ -511,11 +511,11 @@ const CASE_BOTTOM = FELT_Y - FLOOR_T;
 const CASE_HALF_X = FIELD_HALF_X + WALL_T;
 const CASE_HALF_Z = FIELD_HALF + WALL_T;
 
-// What a die meets in the middle of the board: two full walls on the trays,
-// where a die thrown into one half stays in that half, and a five millimetre
-// ridge on the old panel, which a die rides straight over.
-const BAR_RISE = BOARD.shape === "panel" ? .11 : WALL_H / 2;
-const BAR_TOP = BOARD.shape === "panel" ? .61 : CASE_TOP;
+// What a die meets in the middle of the board: two walls, the same height as
+// the ones round the edge, on every board. A die thrown into one half stays in
+// that half.
+const BAR_RISE = WALL_H / 2;
+const BAR_TOP = CASE_TOP;
 
 function addBoard() {
   if (BOARD.shape === "panel") addPanelBoard(); else addTrayBoard();
@@ -559,20 +559,15 @@ function addPanelBoard() {
   box(CASE_HALF_X * 2, floorTop - CASE_BOTTOM, CASE_HALF_Z * 2, frame,
     0, (CASE_BOTTOM + floorTop) / 2, 0);
   box(PANEL_W, .1, PANEL_D, panel, 0, .42, 0);
-  box(BAR_HALF * 2, .22, PANEL_D + .18, frame, 0, .5, 0);
   [-1, 1].forEach(side => {
     box(WALL_T, wallH, CASE_HALF_Z * 2, frame, side * (FIELD_HALF_X + WALL_T / 2), wallY, 0);
     box(FIELD_HALF_X * 2, wallH, WALL_T, frame, 0, wallY, side * (FIELD_HALF + WALL_T / 2));
+    // The middle stands as high and as thick as the edges do, and folds on the
+    // same seam the cases fold on. The veneer runs underneath it, untouched.
+    box(WALL_T, wallH, CASE_HALF_Z * 2, frame, side * (BAR_HALF - WALL_T / 2), wallY, 0);
   });
 
-  // Brass hinge pins across the centre seam, as it had.
-  [-PANEL_D * .28, PANEL_D * .28].forEach(z => {
-    const pin = new THREE.Mesh(new THREE.CylinderGeometry(.09, .09, .55, 16), brass);
-    pin.rotation.z = Math.PI / 2;
-    pin.position.set(0, .58, z);
-    pin.castShadow = true;
-    scene.add(pin);
-  });
+  addHinges();
 
   // Pearl markers set into the tops of the long walls.
   [-1, 1].forEach(side => {
@@ -667,15 +662,22 @@ function addHinges() {
       });
     });
 
-    // The knuckle, lying in the seam along the fold. It has to stand proud of
-    // the leaves or the seam swallows it and the hinge reads as two loose
-    // plates with a gap between them.
-    const knuckle = new THREE.Mesh(
-      new THREE.CylinderGeometry(.075, .075, HINGE_LEN * .94, 20), brass);
-    knuckle.rotation.x = Math.PI / 2;
-    knuckle.position.set(0, CASE_TOP + HINGE_PLATE, z);
-    knuckle.castShadow = true;
-    scene.add(knuckle);
+    // The barrel, lying in the seam along the fold. It stands proud of the
+    // leaves — buried in the seam the hinge reads as two loose plates — and it
+    // is cut into five knuckles rather than one tube, because the interleaving
+    // of the two leaves' fingers is what makes a butt hinge look like one.
+    const KNUCKLES = 5;
+    const barrel = HINGE_LEN * .94;
+    const finger = barrel / KNUCKLES;
+    for (let i = 0; i < KNUCKLES; i++) {
+      const knuckle = new THREE.Mesh(
+        new THREE.CylinderGeometry(.075, .075, finger * .88, 20), brass);
+      knuckle.rotation.x = Math.PI / 2;
+      knuckle.position.set(0, CASE_TOP + HINGE_PLATE,
+        z - barrel / 2 + finger * (i + .5));
+      knuckle.castShadow = true;
+      scene.add(knuckle);
+    }
   });
 }
 
