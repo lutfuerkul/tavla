@@ -136,9 +136,16 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 // 1, the die comes out nineteen pixels across and each of its pips lands on
 // two — drawing larger is the only thing that sharpens both the silhouette and
 // what is printed on the faces, because multisampling only ever touches the
-// silhouette. A screen that already reports two or more is left where it was.
-const NATIVE_RATIO = Math.min(devicePixelRatio, 2);
-const SAMPLE_STEPS = [2, 1.5, 1].filter(step => step >= NATIVE_RATIO);
+// silhouette. Two samples is also the ceiling: a screen already reporting two
+// or more is drawn at its own resolution, not beyond it.
+//
+// The steps below it are the same for every screen. They used to be cut off at
+// whatever the screen reported, which left a tablet — every one of which
+// reports two — on a ladder with a single rung and nowhere to go when it could
+// not keep up. That is exactly the machine that needs the room: a tablet
+// painting five or six megapixels of clearcoat has no other way out, and a
+// softer board that answers the finger beats a sharp one that does not.
+const SAMPLE_STEPS = [2, 1.5, 1];
 let sampleStep = 0;
 
 // A ceiling on the drawing buffer itself, whatever the ladder would like. Two
@@ -164,6 +171,15 @@ function applySampleRatio() {
 applySampleRatio();
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// The shadows are drawn by rendering the whole board a second time from the
+// light's side, every frame. On a tavla board almost nothing moves for most of
+// the time — the player is looking at it, deciding — and drawing that second
+// pass again to produce the identical picture is the cheapest thing there is
+// to stop doing. So it is drawn on demand instead, and the demand is anything
+// that can move: a die that has not settled, a checker in the hand or sliding
+// across the board, or the board being laid out again.
+renderer.shadowMap.autoUpdate = false;
+let shadowsDirty = true;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -1989,6 +2005,9 @@ let pieceMeshes = [];
 function renderPieces() {
   piecesGroup.clear();
   pieceMeshes = [];
+  // Every checker on the board is a new mesh, so the shadows are stale until
+  // they have been drawn against these.
+  shadowsDirty = true;
 
   const stacks = [];
   for (let point = 1; point <= 24; point++) {
@@ -2945,6 +2964,9 @@ function animate(now) {
   stepHeldDice(dt);
   stepSlide(dt);
   stepDicePhysics(dt);
+  renderer.shadowMap.needsUpdate = shadowsDirty || !!dragging || !!sliding || !!heldDice
+    || diceMeshes.some(die => die.userData.die.mode !== "rest");
+  shadowsDirty = false;
   renderer.render(scene, camera);
   watchFrames(now ?? performance.now());
   requestAnimationFrame(animate);
