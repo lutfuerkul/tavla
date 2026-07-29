@@ -1758,6 +1758,24 @@ function renderPieces() {
     if (game.pos.bar[colour]) stacks.push([barKey(colour), colour, game.pos.bar[colour]]);
   }
 
+  // Checkers that have been borne off are piled outside the right-hand wall,
+  // each colour off the end of its own home board, so the race can be read at
+  // a glance.
+  for (const colour of Rules.COLOURS) {
+    const taken = game.pos.off[colour];
+    if (!taken) continue;
+    const material = colour === "ivory" ? ivory : black;
+    const z = colour === HUMAN ? FIELD_HALF * .55 : -FIELD_HALF * .55;
+    for (let i = 0; i < taken; i++) {
+      const body = new THREE.Mesh(checkerGeometry, material);
+      body.position.set(CASE_HALF_X + .78, FELT_Y + i * (CHECKER_H + .004), z);
+      body.rotation.y = (Math.random() - .5) * .3;
+      body.castShadow = true;
+      body.receiveShadow = true;
+      piecesGroup.add(body);
+    }
+  }
+
   for (const [key, colour, count] of stacks) {
     const material = colour === "ivory" ? ivory : black;
     // The checker currently in the player's hand is drawn separately, so its
