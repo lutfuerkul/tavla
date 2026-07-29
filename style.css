@@ -48,7 +48,7 @@ button:hover { background: #edbb69; }
 
 
 /* Who is playing, chosen before the table is. */
-#modes { display: flex; gap: .6rem; justify-content: center; flex-wrap: wrap; margin-bottom: 1.1rem; }
+#modes { display: flex; gap: .6rem; justify-content: center; flex-wrap: wrap; margin: 2.4rem 0 1.6rem; }
 .mode-pick { padding: .5rem 1.1rem; font: inherit; font-size: .74rem; letter-spacing: .1em;
   color: #b9ac95; background: transparent; border: 1px solid rgba(229,173,84,.22);
   border-radius: 2rem; cursor: pointer; transition: color .2s ease, border-color .2s ease; }
