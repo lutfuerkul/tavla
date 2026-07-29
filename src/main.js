@@ -1702,6 +1702,7 @@ function resetState() {
     remaining: [],       // pips still to play this turn
     required: 0,         // how many the rules oblige to be played
     played: 0,
+    history: [],         // one board per move played this turn, to take back
     lifted: null,        // { key } while a checker is in the hand
     over: null,
     thinking: false,
@@ -1712,7 +1713,7 @@ function resetState() {
 // turn is finished — either everything has been played or nothing could be.
 function movesNow() {
   if (!game.dice || game.over || !isHuman(game.turn) || game.thinking) return [];
-  return Rules.movesAvailable(game.pos, game.turn, game.remaining, game.played, game.required);
+  return Rules.movesAvailable(game.pos, game.turn, game.remaining);
 }
 
 // One die each in the opening, the pair once the game is under way. Yours is
@@ -1786,6 +1787,7 @@ function dropUnsupportedDice() {
 function tryMove(fromPlace, toPlace) {
   const move = movesNow().find(m => sameMove(m, fromPlace, toPlace));
   if (!move) return false;
+  game.history.push({ pos: game.pos, remaining: game.remaining.slice() });
   game.pos = Rules.applyMove(game.pos, game.turn, move);
   game.remaining.splice(game.remaining.indexOf(move.die), 1);
   game.played++;
@@ -1939,6 +1941,7 @@ function startTurn(colour) {
   game.remaining = [];
   game.required = 0;
   game.played = 0;
+  game.history = [];
   if (!isHuman(colour)) setTimeout(() => throwDice(1), 550);
 }
 
@@ -1948,6 +1951,18 @@ function turnComplete() {
   return !!game.dice && !game.thinking && movesNow().length === 0;
 }
 
+// Until the turn is handed over, a move can be taken back — the board and the
+// dice left to play are restored to what they were before it.
+function undoMove() {
+  if (!game.history.length || game.over || !isHuman(game.turn) || game.thinking) return;
+  const last = game.history.pop();
+  game.pos = last.pos;
+  game.remaining = last.remaining;
+  game.played--;
+  renderPieces();
+  updateHud();
+}
+
 function endTurn() {
   if (!turnComplete() || game.over) return;
   startTurn(Rules.other(game.turn));
@@ -1955,7 +1970,9 @@ function endTurn() {
 }
 
 const doneButton = document.querySelector("#done");
+const undoButton = document.querySelector("#undo");
 doneButton?.addEventListener("click", endTurn);
+undoButton?.addEventListener("click", undoMove);
 
 function updateHud() {
   const [side, roll] = hud.querySelectorAll("strong");
@@ -1971,6 +1988,7 @@ function updateHud() {
         roll.textContent = a || b ? `${a ?? "—"} · ${b ?? "—"}` : "—";
       }
       if (doneButton) doneButton.disabled = true;
+      if (undoButton) undoButton.disabled = true;
       return;
     }
     side.textContent = game.over
@@ -1984,6 +2002,10 @@ function updateHud() {
         : (game.dice ? "SEN" : "SEN · ZAR AT");
   }
   if (roll && !game.dice) roll.textContent = "—";
+  if (undoButton) {
+    undoButton.disabled = !game.history.length || !!game.over ||
+      !isHuman(game.turn) || game.thinking;
+  }
   if (doneButton) {
     doneButton.disabled = !turnComplete() || !!game.over;
     doneButton.textContent = game.dice && game.required === 0 ? "Oynanacak hamle yok — Tamam" : "Tamam";

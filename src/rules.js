@@ -201,22 +201,65 @@ export function legalSequences(pos, colour, dice) {
   return best;
 }
 
-// What the player may do right now, part way through a turn: the moves that
-// keep a legal sequence reachable. A move that is legal in isolation but
-// would leave a die unplayable is not offered.
-export function movesAvailable(pos, colour, remaining, played = 0, required = null) {
-  const sequences = legalSequences(pos, colour, remaining);
-  const need = required === null ? null : required - played;
+// How many dice can be played from here, at most. This is the number the
+// must-play rule is written in terms of, and it is worth having on its own
+// because asking it of the position after a move is what tells you whether
+// that move keeps the turn whole.
+const reach = new Map();
+export function maxPlayable(pos, colour, dice) {
+  if (!dice.length) return 0;
+  const memo = colour + "|" + key(pos, dice);
+  if (reach.has(memo)) return reach.get(memo);
+  if (reach.size > 40000) reach.clear();
+
+  let best = 0;
+  const triedDice = new Set();
+  for (let index = 0; index < dice.length && best < dice.length; index++) {
+    const die = dice[index];
+    if (triedDice.has(die)) continue;
+    triedDice.add(die);
+    const rest = dice.slice();
+    rest.splice(index, 1);
+    for (const move of movesWithDie(pos, colour, die)) {
+      best = Math.max(best, 1 + maxPlayable(applyMove(pos, colour, move), colour, rest));
+      if (best === dice.length) break;
+    }
+  }
+  reach.set(memo, best);
+  return best;
+}
+
+// What the player may do right now, part way through a turn: every move that
+// leaves the turn still able to play as many dice as it could before it.
+//
+// This is asked of the position rather than pulled out of a list of whole
+// sequences, because sequences that reach the same board by a different order
+// are the same sequence to a search and only one of them survives. Reading
+// the first moves off that list therefore offers one way of playing a turn
+// and hides the others — which is how a roll ended up insisting on a
+// particular checker for its first move when either would do.
+export function movesAvailable(pos, colour, remaining) {
+  const most = maxPlayable(pos, colour, remaining);
+  if (!most) return [];
+
   const moves = [];
-  const seen = new Set();
-  for (const seq of sequences) {
-    if (!seq.length) continue;
-    if (need !== null && seq.length < need) continue;
-    const move = seq[0];
-    const k = `${move.from}>${move.to}:${move.die}`;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    moves.push(move);
+  const triedDice = new Set();
+  remaining.forEach((die, index) => {
+    if (triedDice.has(die)) return;
+    triedDice.add(die);
+    const rest = remaining.slice();
+    rest.splice(index, 1);
+    for (const move of movesWithDie(pos, colour, die)) {
+      if (1 + maxPlayable(applyMove(pos, colour, move), colour, rest) === most) moves.push(move);
+    }
+  });
+
+  // With one die playable and either of them able to serve, it has to be the
+  // larger one.
+  if (most === 1 && remaining.length === 2 && remaining[0] !== remaining[1]) {
+    const larger = Math.max(remaining[0], remaining[1]);
+    const withLarger = moves.filter(move => move.die === larger);
+    if (withLarger.length) return withLarger;
   }
   return moves;
 }
