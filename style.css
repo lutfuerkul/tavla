@@ -9,10 +9,9 @@ body { background: #090807; color: #f3ead7; font-family: "DM Mono", monospace; }
 #intro.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
 .eyebrow { color: #e5ad54; letter-spacing: .22em; font-size: .72rem; margin: 0 0 1rem; }
 h1 { font: 700 clamp(3rem, 8vw, 7rem)/.95 "Playfair Display", serif; margin: 0; text-shadow: 0 8px 32px #000; }
-#intro > p:not(.eyebrow):not(.hint) { max-width: 34rem; margin: 1.4rem auto 2rem; color: #d2c8b4; line-height: 1.7; }
+#intro > p:not(.eyebrow) { max-width: 34rem; margin: 1.4rem auto 2rem; color: #d2c8b4; line-height: 1.7; }
 button { justify-self: center; padding: .9rem 1.5rem; border: 1px solid #e6b45e; border-radius: 2px; background: #c78735; color: #211508; cursor: pointer; font: 500 .78rem "DM Mono", monospace; letter-spacing: .12em; text-transform: uppercase; box-shadow: 0 5px 30px rgba(203,132,41,.22); }
 button:hover { background: #edbb69; }
-.hint { margin-top: 1.5rem; color: #9b907e; font-size: .67rem; }
 #hud { position: fixed; z-index: 1; top: 1.5rem; left: 1.5rem; display: flex; gap: 1.25rem; opacity: 0; transition: opacity .35s ease; }
 #hud.visible { opacity: 1; }
 #hud div { min-width: 7.2rem; padding: .7rem .8rem; border-left: 1px solid rgba(231,182,102,.75); background: linear-gradient(90deg, rgba(8,6,4,.7), transparent); }
@@ -62,3 +61,6 @@ button:hover { background: #edbb69; }
   color: #f0d9a8; background: rgba(24,16,8,.92); border: 1px solid rgba(229,173,84,.5);
   border-radius: .4rem; opacity: 0; visibility: hidden; transition: opacity .25s ease; }
 #notice.visible { opacity: 1; visibility: visible; }
+
+/* Nothing to end and nothing to take back until somebody has sat down. */
+#intro:not(.hidden) ~ #controls, #intro:not(.hidden) ~ #notice { display: none; }
