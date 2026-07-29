@@ -100,11 +100,35 @@ scene.background = new THREE.Color(0x060402);
 // which read as uneven lighting no matter how the lamps were arranged.
 scene.fog = new THREE.FogExp2(0x060402, 0.015);
 
-// Fixed, near-top-down seat at the table — the camera never moves once
-// seated, so the mouse is free to drag checkers instead of looking around.
+// Fixed seat at the table — the camera never moves once seated, so the mouse
+// is free to drag checkers instead of looking around.
+//
+// Where that seat is depends on who is playing. Against the computer you are
+// the only one at the table, so the camera takes your chair and looks across
+// the board from it. With two people round one tablet there is no such chair:
+// whichever side the camera leans from is the side the other player is looking
+// at edge-on. So it goes straight overhead, where neither of them is favoured,
+// and comes in a little closer — looking down the board rather than along it
+// leaves room to.
 const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.1, 100);
-camera.position.set(0, 17.6, -5.7 * AWAY);
-camera.lookAt(0, 0.4, 0);
+const CAMERA_AIM = new THREE.Vector3(0, .4, 0);
+const overhead = () => mode === "hotseat";
+
+function takeSeat() {
+  if (overhead()) {
+    camera.position.set(0, 17.6, 0);
+    // Straight down is the one direction the default up vector cannot resolve,
+    // so it is given one: away from the near row, which keeps the board the
+    // same way round as the seated view had it.
+    camera.up.set(0, 0, AWAY);
+  } else {
+    camera.position.set(0, 17.6, -5.7 * AWAY);
+    camera.up.set(0, 1, 0);
+  }
+  camera.lookAt(CAMERA_AIM);
+}
+
+takeSeat();
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 // The scene is drawn at more samples than the screen has pixels and the
@@ -183,6 +207,9 @@ document.querySelectorAll("[data-mode]").forEach(button => {
     mode = button.dataset.mode;
     localStorage.setItem(MODE_KEY, mode);
     markChosen("mode", mode);
+    // Changing this does not reload the page, and it decides where the camera
+    // sits, so the seat is taken again here rather than only at startup.
+    fitCamera();
   });
 });
 markChosen("mode", mode);
@@ -2837,14 +2864,16 @@ updateHud();
 // phone held upright ends up further back than a desktop window does, and the
 // board is small there, but all twenty-four points are on the screen and can
 // be played.
-const CAMERA_AIM = new THREE.Vector3(0, .4, 0);
-const CAMERA_HOME = camera.position.clone();
-
 function fitCamera() {
   camera.aspect = innerWidth / innerHeight;
-  const direction = CAMERA_HOME.clone().sub(CAMERA_AIM);
+  takeSeat();
+  const direction = camera.position.clone().sub(CAMERA_AIM);
   const base = direction.length();
   direction.normalize();
+  // How much of the frame the case is allowed to fill. From overhead the board
+  // is looked at rather than along, so it needs no room for its own depth and
+  // can sit closer to the edges.
+  const fill = overhead() ? .99 : .94;
 
   const corners = [];
   for (const x of [-CASE_HALF_X, CASE_HALF_X]) {
@@ -2864,7 +2893,7 @@ function fitCamera() {
       widest = Math.max(widest, Math.abs(seen.x));
       tallest = Math.max(tallest, Math.abs(seen.y));
     }
-    if (widest <= .94 && tallest <= .94) break;
+    if (widest <= fill && tallest <= fill) break;
   }
 }
 
