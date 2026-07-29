@@ -2124,6 +2124,26 @@ function endTurn() {
   updateHud();
 }
 
+// Back to the door. A game in progress is worth a question first, and the
+// cleanest way back is to load the page again — the door then asks for a
+// table and a colour from scratch rather than reopening on stale choices.
+const menuButton = document.querySelector("#menu");
+const confirmBox = document.querySelector("#confirm");
+const closeConfirm = () => confirmBox?.setAttribute("hidden", "");
+
+menuButton?.addEventListener("click", () => confirmBox?.removeAttribute("hidden"));
+document.querySelector("#confirm-no")?.addEventListener("click", closeConfirm);
+document.querySelector("#confirm-yes")?.addEventListener("click", () => {
+  sessionStorage.removeItem("tavla.sitOnLoad");
+  location.reload();
+});
+confirmBox?.addEventListener("click", event => {
+  if (event.target === confirmBox) closeConfirm();
+});
+addEventListener("keydown", event => {
+  if (event.key === "Escape") closeConfirm();
+});
+
 const doneButton = document.querySelector("#done");
 const undoButton = document.querySelector("#undo");
 doneButton?.addEventListener("click", endTurn);
