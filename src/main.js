@@ -494,7 +494,13 @@ for (let k = 0; k <= 5; k++) starts.push(BAR_HALF + POINT_HALF + PITCH * k);
 const NEAR_Z = -(FIELD_HALF - POINT_LEN / 2);
 const FAR_Z = FIELD_HALF - POINT_LEN / 2;
 
-const FIELD_HALF_X = starts[starts.length - 1] + POINT_HALF;
+// Half the width of the playing field. The points would set this on their own,
+// but on the boards whose points are a checker wide that puts the wall exactly
+// on the edge of the checkers standing on the outermost column, with nothing
+// between them. Whichever is wider — the point or the checker and a strip of
+// felt to stand it on — decides.
+const EDGE_GAP = .06;                          // 2mm of felt outside the last checker
+const FIELD_HALF_X = starts[starts.length - 1] + Math.max(POINT_HALF, CHECKER_D / 2 + EDGE_GAP);
 
 // The reference board is a folding case, not a flat panel: two trays hinged
 // down the middle, each a floor with the playing surface laid into it and four
@@ -559,19 +565,25 @@ function addPanelBoard() {
   box(CASE_HALF_X * 2, floorTop - CASE_BOTTOM, CASE_HALF_Z * 2, frame,
     0, (CASE_BOTTOM + floorTop) / 2, 0);
   box(PANEL_W, .1, PANEL_D, panel, 0, .42, 0);
+  // Each half carries its own walls, the middle one included, so the seam runs
+  // from one end of the board to the other. An end wall drawn in one piece
+  // across the middle closes the seam off at the ends, and the board stops
+  // reading as two halves that fold. The veneer runs underneath, untouched.
+  const endSpan = FIELD_HALF_X - (BAR_HALF - WALL_T);
+  const endMid = (FIELD_HALF_X + BAR_HALF - WALL_T) / 2;
   [-1, 1].forEach(side => {
     box(WALL_T, wallH, CASE_HALF_Z * 2, frame, side * (FIELD_HALF_X + WALL_T / 2), wallY, 0);
-    box(FIELD_HALF_X * 2, wallH, WALL_T, frame, 0, wallY, side * (FIELD_HALF + WALL_T / 2));
-    // The middle stands as high and as thick as the edges do, and folds on the
-    // same seam the cases fold on. The veneer runs underneath it, untouched.
     box(WALL_T, wallH, CASE_HALF_Z * 2, frame, side * (BAR_HALF - WALL_T / 2), wallY, 0);
+    [-1, 1].forEach(end => {
+      box(endSpan, wallH, WALL_T, frame, side * endMid, wallY, end * (FIELD_HALF + WALL_T / 2));
+    });
   });
 
   addHinges();
 
   // Pearl markers set into the tops of the long walls.
   [-1, 1].forEach(side => {
-    [-4, -1.4, 1.4, 4].forEach(z => {
+    [-3.6, 3.6].forEach(z => {
       const dot = new THREE.Mesh(new THREE.SphereGeometry(.055, 12, 10), pearl);
       dot.position.set(side * (FIELD_HALF_X + WALL_T / 2), CASE_TOP - .012, z);
       scene.add(dot);
@@ -2013,8 +2025,14 @@ function startTurn(colour) {
 
 // The turn is over when there is nothing left that may be played — which is
 // also the case when the dice could not be played at all.
+//
+// It has to be your turn for it to be your turn to end. Without that, the
+// moment the computer's dice came to rest the button lit up: its roll was in,
+// it had not started moving yet, and movesNow is empty for anybody who is not
+// the player. Pressing it there took the turn off the computer before it had
+// played a single checker.
 function turnComplete() {
-  return !!game.dice && !game.thinking && movesNow().length === 0;
+  return !!game.dice && isHuman(game.turn) && !game.thinking && movesNow().length === 0;
 }
 
 // Until the turn is handed over, a move can be taken back — the board and the
@@ -2030,7 +2048,7 @@ function undoMove() {
 }
 
 function endTurn() {
-  if (!turnComplete() || game.over) return;
+  if (!turnComplete() || game.over || !isHuman(game.turn)) return;
   startTurn(Rules.other(game.turn));
   updateHud();
 }
@@ -2487,6 +2505,45 @@ showDiceValues();
 // for you to pick them up and throw them.
 updateHud();
 
+// The board is nearly square and the window is not. Rather than frame it for
+// one shape and cut it off in every other, the camera backs away along the
+// line it already looks down until the whole case is inside the frame. A
+// phone held upright ends up further back than a desktop window does, and the
+// board is small there, but all twenty-four points are on the screen and can
+// be played.
+const CAMERA_AIM = new THREE.Vector3(0, .4, 0);
+const CAMERA_HOME = camera.position.clone();
+
+function fitCamera() {
+  camera.aspect = innerWidth / innerHeight;
+  const direction = CAMERA_HOME.clone().sub(CAMERA_AIM);
+  const base = direction.length();
+  direction.normalize();
+
+  const corners = [];
+  for (const x of [-CASE_HALF_X, CASE_HALF_X]) {
+    for (const y of [CASE_BOTTOM, CASE_TOP]) {
+      for (const z of [-CASE_HALF_Z, CASE_HALF_Z]) corners.push(new THREE.Vector3(x, y, z));
+    }
+  }
+
+  for (let step = 0; step < 60; step++) {
+    camera.position.copy(CAMERA_AIM).addScaledVector(direction, base * (1 + step * .04));
+    camera.lookAt(CAMERA_AIM);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+    let widest = 0, tallest = 0;
+    for (const corner of corners) {
+      const seen = corner.clone().project(camera);
+      widest = Math.max(widest, Math.abs(seen.x));
+      tallest = Math.max(tallest, Math.abs(seen.y));
+    }
+    if (widest <= .94 && tallest <= .94) break;
+  }
+}
+
+fitCamera();
+
 const clock = new THREE.Clock();
 function animate() {
   const dt = Math.min(clock.getDelta(), .25);
@@ -2499,6 +2556,7 @@ function animate() {
 animate();
 
 addEventListener("resize", () => {
+  fitCamera();
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);

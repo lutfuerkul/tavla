@@ -31,30 +31,11 @@ button:hover { background: #edbb69; }
 .board-name { font-size: .95rem; letter-spacing: .04em; }
 .board-note { font-size: .68rem; color: #9b907e; line-height: 1.5; }
 
-/* The board is as wide as it is deep and the camera frames it that way, so a
-   phone held upright cuts off the two outer columns of points. Rather than
-   reframe the table for a shape nobody plays on, ask for the phone to be
-   turned. Anything with room for the board keeps playing in either
-   orientation. */
-#rotate { display: none; }
-@media (max-width: 900px) and (orientation: portrait) {
-  #rotate { position: fixed; inset: 0; z-index: 5; display: grid; place-content: center;
-    justify-items: center; gap: .9rem; padding: 2rem; text-align: center;
-    background: #0a0705; color: #e8dcc4; }
-  #intro, #hud, #crosshair { display: none; }
-  #rotate p { margin: 0; font-size: 1.05rem; letter-spacing: .04em; }
-  .rotate-note { color: #9b907e; font-size: .74rem; letter-spacing: .02em; }
-  .rotate-icon { width: 2.6rem; height: 4.2rem; border: 2px solid #e5ad54; border-radius: .45rem;
-    animation: turnPhone 2.4s ease-in-out infinite; }
-}
-@keyframes turnPhone {
-  0%, 30% { transform: rotate(0deg); }
-  60%, 100% { transform: rotate(-90deg); }
 }
 
 /* Ends the turn, and only lights up when the turn can actually be ended —
    which is when every die that could be played has been. */
-#controls { position: fixed; z-index: 3; left: 50%; bottom: 2.2rem; transform: translateX(-50%);
+#controls { position: fixed; z-index: 3; left: 50%; bottom: 1.05rem; transform: translateX(-50%);
   display: flex; gap: .7rem; align-items: center; }
 #undo { padding: .7rem 1.4rem; font: inherit; font-size: .78rem; letter-spacing: .14em;
   text-transform: uppercase; color: #d8ccb4; background: transparent;
@@ -67,7 +48,7 @@ button:hover { background: #edbb69; }
   border-radius: .4rem; cursor: pointer; transition: opacity .2s ease, background .2s ease; }
 #done:disabled { background: #2a241c; color: #6b6154; cursor: default; }
 #done:not(:disabled):hover { background: #f0bd68; }
-@media (max-width: 900px) and (orientation: portrait) { #controls { display: none; } }
+
 
 /* Who is playing, chosen before the table is. */
 #modes { display: flex; gap: .6rem; justify-content: center; flex-wrap: wrap; margin-bottom: 1.1rem; }
