@@ -2641,6 +2641,34 @@ function launchDice() {
   showDiceValues();
 }
 
+// A ten millimetre die on a phone is under seven pixels across, and a
+// fingertip covers forty. Asking for a hit on the die itself is asking to be
+// lucky, so a throw may be started from near one instead — near enough that
+// the finger was plainly reaching for it.
+//
+// Nothing else on the board wants that tap: the dice can only be picked up
+// when it is your turn to throw, and until they have been thrown there is no
+// roll to play, so no checker will move either. The reach is generous for a
+// finger and tight for a mouse, which does not need the help.
+const GRAB_REACH = { touch: 44, pen: 30, mouse: 14 };
+
+function withinReach(event, allowed) {
+  if (!allowed) return null;
+  const rect = canvas.getBoundingClientRect();
+  const reach = GRAB_REACH[event.pointerType] ?? GRAB_REACH.mouse;
+  let nearest = null, closest = reach;
+  const seen = new THREE.Vector3();
+  for (const die of diceMeshes) {
+    if (die.userData.die.mode !== "rest") continue;
+    seen.copy(die.position).project(camera);
+    const away = Math.hypot(
+      (seen.x + 1) / 2 * rect.width + rect.left - event.clientX,
+      (1 - seen.y) / 2 * rect.height + rect.top - event.clientY);
+    if (away < closest) { closest = away; nearest = die; }
+  }
+  return nearest;
+}
+
 canvas.addEventListener("pointerdown", (e) => {
   // Left button only — the other buttons should not move anything.
   if (e.button !== 0) return;
@@ -2653,9 +2681,10 @@ canvas.addEventListener("pointerdown", (e) => {
   const canThrow = game.phase === "opening"
     ? isHuman(game.waitingOn)
     : isHuman(game.turn) && !game.dice;
-  if (dieHit.length && !heldDice && canThrow && !game.over) {
+  const reached = dieHit.length ? dieHit[0].object : withinReach(e, canThrow);
+  if (reached && !heldDice && canThrow && !game.over) {
     const anchor = pointerOnPlane(liftPlane, new THREE.Vector3())
-      || dieHit[0].object.position.clone().setY(LIFT_Y);
+      || reached.position.clone().setY(LIFT_Y);
     heldDice = {
       anchor: anchor.clone(),
       last: anchor.clone(),
