@@ -76,3 +76,10 @@ button:hover { background: #edbb69; }
   border-radius: 2rem; cursor: pointer; transition: color .2s ease, border-color .2s ease; }
 .mode-pick:hover { border-color: rgba(229,173,84,.6); color: #e8dcc4; }
 .mode-pick.chosen { color: #0d0a06; background: #e5ad54; border-color: #e5ad54; }
+
+/* Said rather than shown: a broken roll, and anything else that needs words. */
+#notice { position: fixed; z-index: 4; left: 50%; top: 12%; transform: translateX(-50%);
+  padding: .6rem 1.5rem; font-size: .8rem; letter-spacing: .1em; text-transform: uppercase;
+  color: #f0d9a8; background: rgba(24,16,8,.92); border: 1px solid rgba(229,173,84,.5);
+  border-radius: .4rem; opacity: 0; visibility: hidden; transition: opacity .25s ease; }
+#notice.visible { opacity: 1; visibility: visible; }

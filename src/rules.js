@@ -264,6 +264,42 @@ export function movesAvailable(pos, colour, remaining) {
   return moves;
 }
 
+// Both dice with the one checker, in a single move. Dropping it eight points
+// away on a 5-3 is a move a player thinks of as one thing, and there is no
+// reason to make them play it as two — so every way of walking a single
+// checker through several dice is offered as a move of its own, from where it
+// started to where it ends up.
+//
+// Each step still goes through movesAvailable, so an order that would strand
+// a die is not on the list, and neither is a landing on a point that is held.
+export function chainMoves(pos, colour, remaining) {
+  const chains = [];
+  const seen = new Set();
+
+  const walk = (board, rest, at, taken, start) => {
+    if (!rest.length) return;
+    for (const move of movesAvailable(board, colour, rest)) {
+      if (String(move.from) !== String(at)) continue;
+      const after = applyMove(board, colour, move);
+      const left = rest.slice();
+      left.splice(left.indexOf(move.die), 1);
+      const path = taken.concat([move]);
+      if (path.length > 1) {
+        const k = `${start}>${move.to}|${path.length}`;
+        if (!seen.has(k)) { seen.add(k); chains.push({ from: start, to: move.to, moves: path }); }
+      }
+      if (move.to !== "off") walk(after, left, move.to, path, start);
+    }
+  };
+
+  const starts = new Set(movesAvailable(pos, colour, remaining).map(m => String(m.from)));
+  for (const start of starts) {
+    walk(pos, remaining, start === "bar" ? "bar" : Number(start), [],
+      start === "bar" ? "bar" : Number(start));
+  }
+  return chains;
+}
+
 export function winner(pos) {
   for (const colour of COLOURS) if (pos.off[colour] === 15) return colour;
   return null;

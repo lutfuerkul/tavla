@@ -1812,16 +1812,33 @@ function dropUnsupportedDice() {
 // still playable this turn, not just against the board: a move that is legal
 // on its own but would strand a die is not one of the moves offered.
 function tryMove(fromPlace, toPlace) {
-  const move = movesNow().find(m => sameMove(m, fromPlace, toPlace));
-  if (!move) return false;
-  game.history.push({ pos: game.pos, remaining: game.remaining.slice() });
-  game.pos = Rules.applyMove(game.pos, game.turn, move);
-  game.remaining.splice(game.remaining.indexOf(move.die), 1);
-  game.played++;
+  const single = movesNow().find(m => sameMove(m, fromPlace, toPlace));
+  // Dropping a checker eight points away on a 5-3 is one move to the player,
+  // so it is one move here: if no single die reaches, look for a way of
+  // walking that checker there through several.
+  const moves = single ? [single] : chainTo(fromPlace, toPlace);
+  if (!moves.length) return false;
+
+  // The whole drag is one entry in the history, so taking it back takes back
+  // what was dragged rather than half of it.
+  game.history.push({ pos: game.pos, remaining: game.remaining.slice(), played: game.played });
+  for (const move of moves) {
+    game.pos = Rules.applyMove(game.pos, game.turn, move);
+    game.remaining.splice(game.remaining.indexOf(move.die), 1);
+    game.played++;
+  }
   finishIfWon();
   renderPieces();
   updateHud();
   return true;
+}
+
+function chainTo(fromPlace, toPlace) {
+  if (!game.dice || game.over || !isHuman(game.turn) || game.thinking) return [];
+  const chain = Rules.chainMoves(game.pos, game.turn, game.remaining)
+    .filter(c => String(c.from) === String(fromPlace) && String(c.to) === String(toPlace))
+    .sort((a, b) => b.moves.length - a.moves.length)[0];
+  return chain ? chain.moves : [];
 }
 
 function sameMove(move, fromPlace, toPlace) {
@@ -1846,6 +1863,19 @@ let thrown = false;
 function onDiceSettled() {
   if (!game || game.over || !thrown) return;
   thrown = false;
+
+  // A die leaning on a wall or standing on a checker is not a roll. It goes
+  // back in the hand and is thrown again by whoever threw it.
+  const rolled = diceInHand(thrower() || game.turn);
+  if (rolled.some(d => d.userData.die.cocked)) {
+    game.cocked = true;
+    updateHud();
+    if (!isHuman(thrower() || game.turn)) {
+      setTimeout(() => throwDice(game.phase === "opening" || game.turn === COMPUTER ? 1 : -1), 1400);
+    }
+    return;
+  }
+  game.cocked = false;
   if (game.phase === "opening") return openingSettled();
   if (game.dice) return;
   const values = diceMeshes.map(d => d.userData.die.value);
@@ -1994,7 +2024,7 @@ function undoMove() {
   const last = game.history.pop();
   game.pos = last.pos;
   game.remaining = last.remaining;
-  game.played--;
+  game.played = last.played;
   renderPieces();
   updateHud();
 }
@@ -2010,10 +2040,32 @@ const undoButton = document.querySelector("#undo");
 doneButton?.addEventListener("click", endTurn);
 undoButton?.addEventListener("click", undoMove);
 
+// A line across the middle of the table for things that need saying rather
+// than showing — a broken roll, mostly.
+const noticeBox = document.querySelector("#notice");
+let noticeText = "";
+function notice(text) {
+  if (!noticeBox || text === noticeText) return;
+  noticeText = text;
+  noticeBox.textContent = text;
+  noticeBox.classList.toggle("visible", !!text);
+}
+
 function updateHud() {
   const [side, roll] = hud.querySelectorAll("strong");
   if (side) {
     const mars = game.over && game.over.value === 2 ? " · MARS" : "";
+    if (!game.over && game.cocked) {
+      const who = thrower() || game.turn;
+      side.textContent = isHuman(who)
+        ? (mode === "hotseat" ? NAMES[who] + " · ZAR KIRIK, TEKRAR AT" : "ZAR KIRIK · TEKRAR AT")
+        : "ZAR KIRIK · RAKİP TEKRAR ATIYOR";
+      if (roll) roll.textContent = "—";
+      if (doneButton) doneButton.disabled = true;
+      if (undoButton) undoButton.disabled = true;
+      notice(isHuman(who) ? "Zar kırık geldi — tekrar at" : "Zar kırık geldi — rakip tekrar atıyor");
+      return;
+    }
     if (!game.over && game.phase === "opening") {
       side.textContent = game.waitingOn === null ? "…"
         : isHuman(game.waitingOn)
@@ -2037,6 +2089,7 @@ function updateHud() {
         ? NAMES[game.turn] + (game.dice ? "" : " · ZAR AT")
         : (game.dice ? "SEN" : "SEN · ZAR AT");
   }
+  notice("");
   if (roll && !game.dice) roll.textContent = "—";
   if (undoButton) {
     undoButton.disabled = !game.history.length || !!game.over ||
