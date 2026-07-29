@@ -1816,8 +1816,16 @@ function finishIfWon() {
 // A throw settles into the turn's dice. Doubles are four moves of the same
 // number; what the rules oblige is worked out once, here, because "how many
 // dice can be played" is a property of the whole turn.
+// A settled die only counts as a roll if it was thrown. Dice come to rest for
+// other reasons — one standing on a checker is dropped when that checker is
+// moved out from under it, and it settles again where it lands. Without this,
+// the board being redrawn after the computer's turn handed you the faces the
+// computer had just played.
+let thrown = false;
+
 function onDiceSettled() {
-  if (!game || game.over) return;
+  if (!game || game.over || !thrown) return;
+  thrown = false;
   if (game.phase === "opening") return openingSettled();
   if (game.dice) return;
   const values = diceMeshes.map(d => d.userData.die.value);
@@ -1945,6 +1953,7 @@ function playComputerTurn() {
 function startTurn(colour) {
   game.turn = colour;
   game.dice = null;
+  thrown = false;
   game.remaining = [];
   game.required = 0;
   game.played = 0;
@@ -2177,6 +2186,7 @@ function launchDice() {
   });
 
   heldDice = null;
+  thrown = true;
   canvas.style.cursor = "grab";
   showDiceValues();
 }
