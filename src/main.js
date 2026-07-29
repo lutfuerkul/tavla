@@ -2719,8 +2719,17 @@ function addRoom() {
   // as a shadow, and a shadow needs a dominant light direction. So the key
   // carries most of the level and comes in low enough to rake across the
   // relief; the fills only open the shadows.
+  // The key turns with the chair. It is the only light in the room with a
+  // direction anybody can feel — the four fills are a symmetric set and the
+  // hemisphere and the ambient have no direction at all — and it used to stand
+  // over one particular side of the table. Sitting down opposite put it across
+  // the board instead of over your shoulder: the shadows fell towards you
+  // rather than away, and the dish in the face of a checker read as a dome.
+  // Taking the seat to the other end is a half turn about the middle of the
+  // table, so the light takes the same half turn and arrives over the same
+  // shoulder whichever colour you play.
   const key = new THREE.DirectionalLight(0xfff4e2, 2.5);
-  key.position.set(-6, 10, 6);
+  key.position.set(6 * AWAY, 10, -6 * AWAY);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
   key.shadow.bias = -0.0004;
