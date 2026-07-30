@@ -2876,20 +2876,15 @@ const ROLL_SECONDS = 20, MOVE_SECONDS = 60;
 const clockBox = document.querySelector("#sayac");
 let clockUntil = 0;
 
-// How long whoever is being waited on has left — shown on both boards, not
-// just theirs. Two people playing across a network are each waiting on the
-// other, and a game where you can watch your own time run out but not your
-// opponent's is only half a clock. Whose it is needs no saying: the panel
-// above it is already the turn.
-//
-// Counted from the word arriving rather than from the timestamp on it: the two
-// agree closely enough, and a number that jumps backwards because two machines
-// disagree about the time is worse than one that is a moment late.
+// How long this board has left, and only this board. Each player keeps their
+// own time and plays to it; watching the other's run down is somebody else's
+// business, and a number on the panel that is not about you is a number to
+// misread.
 function runningClock(state) {
   if (mode !== "online" || !state || state.over) return 0;
   // The opening keeps no time, so there is nothing to count out.
   if (state.phase === "opening") return 0;
-  if (!state.turn) return 0;
+  if (state.turn !== HUMAN) return 0;
   return state.dice ? MOVE_SECONDS : ROLL_SECONDS;
 }
 
