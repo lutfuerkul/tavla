@@ -3014,8 +3014,15 @@ function applyServerState(state) {
   // had the winner watching their own winning moves played back at them in the
   // other colour, which is not a thing the rules allow and left the board
   // stuck half way through with no result ever shown.
-  const theirs = state.lastMoves?.length && state.lastBy && state.lastBy !== HUMAN;
-  if (theirs) playRemoteTurn(state.lastBy, state.lastMoves, settle);
+  // Moves worth watching are the ones this board did not make. Theirs always,
+  // and ours when the clock made them for us: we played nothing that turn, so
+  // there is nothing in hand and nothing was ever seen to move — the checkers
+  // simply arrived where the server said they were. Our own turn, played here
+  // by hand, has been watched already and wants no second showing, and it is
+  // told apart by what is in hand for it rather than by whose name is on it.
+  const unseen = state.lastMoves?.length && state.lastBy
+    && (state.lastBy !== HUMAN || !game.history.length);
+  if (unseen) playRemoteTurn(state.lastBy, state.lastMoves, settle);
   // The opening is decided by two dice and it is worth seeing them decide it.
   // The server settles both in one write, so without this the second die lands
   // and the board is swept in the same breath — the throw that chose who goes
