@@ -137,6 +137,23 @@ export async function sitAt(matchId, theirUid, watch) {
   };
 }
 
+// Is anybody sitting at that seat right now? Asked before going back to a
+// match: a table the other player has left as well is not one to sit down at.
+export async function seatTaken(matchId, uid) {
+  const live = await connect();
+  if (!live) return null;
+  const { database, db } = live;
+  try {
+    const found = await database.get(database.ref(db, `masalar/${matchId}/${uid}`));
+    return found.exists();
+  } catch (reason) {
+    // Not knowing is not the same as knowing they have gone, and a player is
+    // not kept from their own match by a question that failed to arrive.
+    console.info("tavla: koltuk sorulamadı —", reason?.message ?? reason);
+    return null;
+  }
+}
+
 // Says this browser is here for as long as it is, and takes it back the moment
 // it is not. The server does the taking back: onDisconnect is a standing
 // instruction left with it, so a closed tab, a dead battery or a tunnel are all

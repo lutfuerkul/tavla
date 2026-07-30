@@ -5,7 +5,7 @@ const canvas = document.querySelector("#scene");
 import * as Rules from "./rules.js";
 import { LANGS, language, setLanguage, t, isIdeographic } from "./i18n.js";
 import { localSession, onlineSession } from "./session.js";
-import { attend, ask, follow, sitAt } from "./firebase.js";
+import { attend, ask, follow, seatTaken, sitAt } from "./firebase.js";
 
 // Where the turns come from. Everything the board cannot decide by itself goes
 // through here, so a game against a server can be a different session rather
@@ -482,7 +482,36 @@ function say(key, code) {
 // player was stranded at the door with a game of theirs still on the table.
 const resumeButton = document.querySelector("#resume");
 
-resumeButton?.addEventListener("click", () => {
+// The match as it stands, read once and let go of.
+function matchOnce(id) {
+  return new Promise(async resolve => {
+    let stop = null, done = false;
+    const take = state => { if (done) return; done = true; resolve(state); stop?.(); };
+    stop = await follow("matches", id, take);
+    if (done) stop?.();
+  });
+}
+
+resumeButton?.addEventListener("click", async () => {
+  const id = localStorage.getItem(MATCH_KEY);
+  if (!id) return;
+  resumeButton.disabled = true;
+  // Nobody opposite is nobody to play, and sitting down at an abandoned table
+  // only puts you where the computer will play both sides. The seat is asked
+  // after rather than assumed: a match can be waiting for somebody who left
+  // and is not coming back.
+  const state = await matchOnce(id);
+  const theirs = state?.players?.[Rules.other(HUMAN)];
+  const there = theirs ? await seatTaken(id, theirs) : null;
+  // `null` is not knowing — the question failed to arrive — and that is no
+  // reason to keep somebody from their own match.
+  if (there === false) {
+    say("lobby.closed");
+    localStorage.removeItem(MATCH_KEY);
+    resumeButton.setAttribute("hidden", "");
+    resumeButton.disabled = false;
+    return;
+  }
   // The same door the lobby goes through when a room is matched.
   sessionStorage.setItem("tavla.sitOnLoad", "1");
   location.reload();
@@ -492,18 +521,10 @@ resumeButton?.addEventListener("click", () => {
 // read its own match, so it asks before offering the way in — and forgets the
 // match while it is there, since nothing will ever make it worth returning to.
 async function forgetIfFinished(id) {
-  let stop = null, done = false;
-  const decide = state => {
-    if (done) return;
-    done = true;
-    if (state.matchOver) {
-      localStorage.removeItem(MATCH_KEY);
-      resumeButton?.setAttribute("hidden", "");
-    }
-    stop?.();
-  };
-  stop = await follow("matches", id, decide);
-  if (done) stop?.();
+  const state = await matchOnce(id);
+  if (!state?.matchOver) return;
+  localStorage.removeItem(MATCH_KEY);
+  resumeButton?.setAttribute("hidden", "");
 }
 
 function showLobby() {
