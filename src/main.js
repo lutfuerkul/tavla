@@ -2653,6 +2653,11 @@ let handedOver = false;
 // been shown is remembered, because the same snapshot arrives more than once
 // and a tie wipes the opening and starts it again.
 let replayingFor = null;
+// Their throw is owed to this board but has not started yet — it waits while
+// anything of ours is in the air. The dice may not be picked up in that gap
+// either: it ends with two of them tumbling across the felt on somebody
+// else's behalf.
+let replayOwed = false;
 let shownOpening = null;
 // The other player's seat: whether anybody is in it, and whether the server
 // has given up on them coming back. Nothing here decides anything — it asks,
@@ -2787,12 +2792,14 @@ function showTheirOpening(state) {
 // is never thrown is a number that never appears, since the panel reads the
 // dice on the felt. It gives up if the board moves on while it is waiting.
 function replayThrow(colour, values, stale, tries = 0) {
-  if (stale()) return;
+  if (stale()) { replayOwed = false; return; }
   if (thrown || heldDice || pending) {
-    if (tries > 40) return;
+    if (tries > 40) { replayOwed = false; return; }
+    replayOwed = true;
     setTimeout(() => replayThrow(colour, values, stale, tries + 1), 400);
     return;
   }
+  replayOwed = false;
   replayingFor = colour;
   forcedRoll = values.slice();
   throwDice(-AWAY);
@@ -3591,9 +3598,14 @@ canvas.addEventListener("pointerdown", (e) => {
   // The die waiting off the board is not there to be picked up.
   const reachable = game.phase === "opening" ? [diceMeshes[0]] : diceMeshes;
   const dieHit = raycaster.intersectObjects(reachable, false);
-  const canThrow = game.phase === "opening"
+  // Not while the other player's throw is being shown. The opening ends and
+  // the first turn begins in the same write, so the moment their opening die
+  // is let go of across the felt it is already somebody's turn to throw — and
+  // taking the dice up then takes both of them, that one included, on a board
+  // that has been told it is holding a pair the server has never named.
+  const canThrow = !replayingFor && !replayOwed && (game.phase === "opening"
     ? isHuman(game.waitingOn)
-    : isHuman(game.turn) && !game.dice;
+    : isHuman(game.turn) && !game.dice);
   const reached = dieHit.length ? dieHit[0].object : withinReach(e, canThrow);
   if (reached && !heldDice && canThrow && !game.over) {
     const anchor = pointerOnPlane(liftPlane, new THREE.Vector3())
