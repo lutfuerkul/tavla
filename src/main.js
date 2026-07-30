@@ -2504,11 +2504,18 @@ function stepSlide(dt) {
   const k = Math.min(1, sliding.t / sliding.span);
   const ease = k < .5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
   const { from, to, mesh } = sliding;
-  mesh.position.set(
-    from.x + (to.x - from.x) * ease,
-    from.y + (to.y - from.y) * ease + Math.sin(Math.PI * k) * (CARRY_Y - FELT_Y) * .75,
-    from.z + (to.z - from.z) * ease
-  );
+  const x = from.x + (to.x - from.x) * ease;
+  const z = from.z + (to.z - from.z) * ease;
+  // The arc peaked three quarters of the way to the carrying height, which put
+  // the checker's middle fifty thousandths above the bar and its underside
+  // inside it — and the peak sits at the middle of the move rather than over
+  // the middle of the board, so a crossing that was not centred met the bar
+  // lower still. It is carried the full height now, and held there while it is
+  // over the bar rather than dipping through it on the way past.
+  const lift = (CARRY_Y - FELT_Y) * Math.min(1, Math.sin(Math.PI * k) * 1.6);
+  const overBar = Math.abs(x) < BAR_HALF + CHECKER_R;
+  const floor = overBar ? CASE_TOP - FELT_Y + CHECKER_H : 0;
+  mesh.position.set(x, from.y + (to.y - from.y) * ease + Math.max(lift, floor), z);
   if (k < 1) return;
   scene.remove(mesh);
   const done = sliding.onDone;
