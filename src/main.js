@@ -2504,8 +2504,15 @@ function undoMove() {
 // are provisional until Tamam — that is what Geri al is for — so a snapshot
 // that lands mid-turn is allowed to bring the score and the dice but not to
 // tread on the board underneath the player's hand.
+//
+// "Being played" ends at Tamam, not when the server gets round to answering,
+// which is why handing over is marked here rather than read off the history.
+// It matters most at the end of a game: a game is won on the winner's own
+// turn and the server leaves the turn with them, so a board still thinking of
+// itself as mid-turn would throw away the one snapshot that says it has won.
 let remoteSeq = -1;
 let forcedRoll = null;
+let handedOver = false;
 
 function unpackServerPosition(packed) {
   const points = Array.from({ length: 25 }, () => null);
@@ -2544,7 +2551,8 @@ function playRemoteTurn(colour, moves, done) {
 
 function applyServerState(state) {
   if (!game || state.seq <= remoteSeq) return;
-  const ours = state.turn === HUMAN && game.history.length && state.phase === "play";
+  const ours = !state.over && !handedOver
+    && state.turn === HUMAN && game.history.length && state.phase === "play";
   remoteSeq = state.seq;
 
   game.phase = state.phase;
@@ -2600,9 +2608,27 @@ function endTurn() {
   if (!turnComplete() || game.over || !isHuman(game.turn)) return;
   const played = game.history.flatMap(step => step.moves ?? []);
   const handingOver = game.turn;
+  handedOver = true;
   session.commitTurn(played).then(reply => {
+    handedOver = false;
     if (!reply?.ok || game.over || game.turn !== handingOver) return;
     startTurn(Rules.other(handingOver));
+    updateHud();
+  }).catch(reason => {
+    // The server would not have the turn: it was already played, the match is
+    // finished, or the connection went in the middle of it. The board cannot
+    // stay where the refused moves left it, so it goes back to how it stood
+    // when the turn began and waits to be told the truth.
+    console.info("tavla: tur kabul edilmedi —", reason?.message ?? reason);
+    handedOver = false;
+    const start = game.history[0];
+    if (start) {
+      game.pos = start.pos;
+      game.remaining = start.remaining;
+      game.played = start.played;
+    }
+    game.history = [];
+    renderPieces();
     updateHud();
   });
 }
@@ -2674,7 +2700,14 @@ function showResult() {
 // won starts over from nothing.
 function nextGame() {
   resultBox?.setAttribute("hidden", "");
-  if (session.online) { session.nextGame().catch(() => {}); return; }
+  if (session.online) {
+    // A won match is not played on: the server will not lay the board out a
+    // fourth time, so the way on from here is up from the table.
+    if (matchWinner()) return leaveTable();
+    session.nextGame().catch(reason =>
+      console.info("tavla: yeni oyun kurulamadı —", reason?.message ?? reason));
+    return;
+  }
   if (matchWinner()) match = { ivory: 0, black: 0 };
   resetState();
   resetDice();
