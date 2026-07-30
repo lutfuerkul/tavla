@@ -2460,6 +2460,7 @@ function onDiceSettled() {
   const values = rolled.map(d => d.userData.die.value);
   if (values.length < 2 || values.some(v => !v)) return;
   game.dice = values;
+  openingStands = false;
   game.remaining = Rules.diceFor(values[0], values[1]);
   game.required = Rules.legalSequences(game.pos, game.turn, game.remaining)[0].length;
   game.played = 0;
@@ -2563,6 +2564,7 @@ function openingSettled() {
   updateHud();
   holdTheOpening(() => {
     game.phase = "play";
+    openingStands = true;
     resetDice();
     startTurn(mine > theirs ? HUMAN : COMPUTER);
     updateHud();
@@ -2671,6 +2673,12 @@ let shownOpening = null;
 let theirSeat = null;
 let watchingSeat = false;
 let opponentGone = false;
+// True between the opening being settled and the first dice of the game being
+// thrown. The panel says who won the opening in that gap, and it was saying it
+// on every later turn too: the opening numbers stay on the match for the whole
+// game, so "the opening is decided and nothing has been thrown yet" was true
+// again at the start of every single turn.
+let openingStands = false;
 // Long enough to read and no longer. Both of these are news, not states of
 // the board: once either has been said there is nothing to be done about it,
 // and a line that stays put is a line still covering something else an hour
@@ -2860,7 +2868,7 @@ function runningClock(state) {
 // the eight languages.
 function showClock() {
   if (!clockBox) return;
-  const left = clockUntil - performance.now();
+  const left = clockUntil - Date.now();
   if (left <= 0) {
     clockBox.textContent = "";
     clockBox.classList.remove("running", "nearly");
@@ -2915,8 +2923,13 @@ function applyServerState(state) {
   const settle = () => {
     // The clock starts again on every word from the server, since every word
     // is the server starting it again.
+    // Anchored to the server's own stamp rather than to the moment this board
+    // heard about it. The two boards sit down at different times and would
+    // otherwise be counting from different places — one of them showing a
+    // number while the other had already run out, for the same turn.
     const seconds = runningClock(state);
-    clockUntil = seconds ? performance.now() + seconds * 1000 : 0;
+    const from = state.updatedAt?.toMillis?.() ?? Date.now();
+    clockUntil = seconds ? from + seconds * 1000 : 0;
     showClock();
     game.phase = state.phase;
     game.pos = unpackServerPosition(state.pos);
@@ -2935,7 +2948,8 @@ function applyServerState(state) {
     if (state.phase === "play" && !state.dice) thrown = false;
     // The opening is over: the pair goes back to the middle together, the one
     // that was waiting off the board along with it.
-    if (wasOpening && state.phase === "play") resetDice();
+    if (wasOpening && state.phase === "play") { resetDice(); openingStands = true; }
+    if (state.dice || state.lastBy) openingStands = false;
     game.over = state.over ?? null;
     if (game.over) setTimeout(showResult, 1100);
     // Only one of the two presses "another game"; the other finds out here,
@@ -3221,7 +3235,7 @@ function updateHud() {
     // the two dice stay on the panel with their names against them, and the
     // one they gave the game to is said outright rather than left to be
     // worked out from which of the numbers is bigger.
-    if (!game.over && game.phase === "play" && !game.dice && !thrown
+    if (openingStands && !game.over && game.phase === "play" && !game.dice && !thrown
         && game.opening[HUMAN] != null && game.opening[COMPUTER] != null) {
       side.textContent = mode === "hotseat"
         ? t("open.startsHot", { name: nameOf(game.turn) })
