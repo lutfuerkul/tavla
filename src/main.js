@@ -2311,7 +2311,15 @@ function onDiceSettled() {
     updateHud();
     // Only the computer's re-throw is automatic — the people at the table pick
     // the dice back up themselves — so it is always aimed from its chair.
-    if (!isHuman(thrower() || game.turn)) setTimeout(() => throwDice(-AWAY), 1400);
+    if (isHuman(thrower() || game.turn)) return;
+    // Online this is not a throw at all but a replay of one the server has
+    // already named, so it goes again to the same numbers rather than asking
+    // for new ones. With nothing to replay there is nothing to re-throw.
+    if (mode === "online") {
+      if (!game.dice?.length) return;
+      forcedRoll = game.dice.slice();
+    }
+    setTimeout(() => throwDice(-AWAY), 1400);
     return;
   }
   game.cocked = false;
@@ -2323,7 +2331,9 @@ function onDiceSettled() {
   game.remaining = Rules.diceFor(values[0], values[1]);
   game.required = Rules.legalSequences(game.pos, game.turn, game.remaining)[0].length;
   game.played = 0;
-  if (!isHuman(game.turn)) setTimeout(playComputerTurn, 700);
+  // Only the computer's turn is played from here. Online the other side plays
+  // its own, on its own board, and what it did arrives as moves to be watched.
+  if (mode !== "online" && !isHuman(game.turn)) setTimeout(playComputerTurn, 700);
   updateHud();
 }
 
@@ -2382,6 +2392,13 @@ function openingSettled() {
   if (die.mode !== "rest" || !die.value) return;
   game.opening[who] = die.value;
   game.waitingOn = null;
+
+  // Across a network the opening is the server's to run: it named this die
+  // before it was let go of and has already written down what it said. Who
+  // throws next, whether it was a tie, and who ends up starting all arrive on
+  // the next snapshot — deciding any of it here would be this board playing a
+  // second, private game. The other player's die is thrown on their own board.
+  if (mode === "online") { updateHud(); return; }
 
   if (game.opening[HUMAN] === null || game.opening[COMPUTER] === null) {
     // The other side still has to throw.
@@ -2544,6 +2561,9 @@ function applyServerState(state) {
     game.required = state.required ?? 0;
     game.played = 0;
     game.history = [];
+    // A turn with no dice on it yet is a turn waiting to be thrown, whoever's
+    // it is. Locally startTurn says so; here the server does.
+    if (state.phase === "play") thrown = !!state.dice;
     game.over = state.over ?? null;
     if (game.over) setTimeout(showResult, 1100);
     // Only one of the two presses "another game"; the other finds out here,
@@ -3125,6 +3145,16 @@ function launchDice() {
       salt: (Math.random() * 0xffffffff) | 0,
       tried: 0, seed: null, ready: false, exhausted: false,
     };
+  }).catch(reason => {
+    // The server would not name a roll: the turn moved on, the match is over,
+    // the connection went. Whatever it was, the dice must not be left shaking
+    // in a hand that is never going to open — they go back to the felt and the
+    // player may try again once the board has caught up.
+    console.info("tavla: zar istenemedi —", reason?.message ?? reason);
+    if (heldDice !== token) return;
+    pending = null;
+    resetDice();
+    canvas.style.cursor = "grab";
   });
 }
 
