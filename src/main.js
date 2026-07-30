@@ -131,9 +131,25 @@ const CAMERA_AIM = new THREE.Vector3(0, .4, 0);
 // asked for from the board. An answer given is remembered and outranks the
 // mode's own preference; until one is given, changing the mode at the door
 // changes the view with it.
+// Fingers rather than a mouse, and how much screen there is to fill. A tablet
+// and a phone are both handhelds and want opposite things: the tablet paints
+// three times the phone's pixels off a chip that is not three times the phone's
+// and could not hold its own resolution, so its frame is made cheaper. The
+// phone's frame was never the problem, and the same economies were visible on
+// it — so the phone keeps everything it had.
+const HANDHELD = matchMedia?.("(pointer: coarse)").matches ?? false;
+const TABLET = HANDHELD && Math.min(innerWidth, innerHeight) >= 600;
+
 const VIEW_KEY = "tavla.kamera";
 let chosenView = localStorage.getItem(VIEW_KEY);
-const overhead = () => (chosenView ?? (mode === "hotseat" ? "tepe" : "koltuk")) === "tepe";
+// Where the camera starts, until somebody says otherwise. Two people round one
+// tablet are sitting opposite each other, so a view from either chair is the
+// wrong way up for one of them — it goes overhead. A phone or a tablet does
+// the same whoever is playing: held in the hand the board is being looked down
+// at anyway, and the low view spends most of the screen on the rail. On a
+// desktop, alone, the seat is still the nicer picture.
+const overhead = () =>
+  (chosenView ?? (HANDHELD || mode === "hotseat" ? "tepe" : "koltuk")) === "tepe";
 
 function takeSeat() {
   if (overhead()) {
@@ -151,14 +167,6 @@ function takeSeat() {
 
 takeSeat();
 
-// Fingers rather than a mouse, and how much screen there is to fill. A tablet
-// and a phone are both handhelds and want opposite things: the tablet paints
-// three times the phone's pixels off a chip that is not three times the phone's
-// and could not hold its own resolution, so its frame is made cheaper. The
-// phone's frame was never the problem, and the same economies were visible on
-// it — so the phone keeps everything it had.
-const HANDHELD = matchMedia?.("(pointer: coarse)").matches ?? false;
-const TABLET = HANDHELD && Math.min(innerWidth, innerHeight) >= 600;
 
 // A dense screen has two of its own pixels to every one the page asks for,
 // which does most of the work multisampling is there to do: an edge already
