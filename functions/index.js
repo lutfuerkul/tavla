@@ -28,12 +28,15 @@ const MATCH_TARGET = 3;
 // is empty and gives them straight back when they sit down again.
 const ROLL_SECONDS = 20;
 const MOVE_SECONDS = 60;
-// The opening is not part of that. Nobody is thinking yet — they have just sat
-// down, and the first thing asked of them is a die that decides nothing but
-// who goes first. Taking that throw away from somebody who is still finding
-// the board is the rudest thing the clock can do, so the opening is left alone
-// for half a minute and only then thrown for them.
-const OPEN_SECONDS = 30;
+// The opening keeps no time at all. Nobody is thinking yet — they have just
+// sat down, and the first thing asked of them is a die that decides nothing
+// but who goes first. Taking that throw away from somebody who is still
+// finding the board buys nothing and reads as the game throwing dice by
+// itself, so it waits for them however long they take.
+//
+// An empty chair is a different matter and is still covered: somebody who has
+// gone would otherwise leave the opening unfinished for good.
+const OPEN_SECONDS = Infinity;
 // And how long before the other player is told they are not coming back.
 const GONE_SECONDS = 180;
 // Long enough that two rooms are never open on the same code, short enough to

@@ -1437,6 +1437,12 @@ function resetDice() {
   const parked = game?.phase === "opening";
   diceMeshes.forEach((die, i) => {
     const [x, z, face] = parked && i === 1 ? DICE_REST : (DICE_HOME[i] ?? DICE_HOME[0]);
+    // One die opens the game, passed between the two players, so the second
+    // one has no business being on the table yet. It used to sit off the edge
+    // waiting, which is a die in front of somebody who has been handed one —
+    // and a number they can read that means nothing. It comes out when the
+    // game does.
+    die.visible = !(parked && i === 1);
     die.position.set(parked && i === 1 ? MIRROR * x : x, FELT_Y + DIE_SIZE / 2, z);
     die.quaternion.setFromEuler(FACE_UP[face]);
     Object.assign(die.userData.die, {
@@ -1522,7 +1528,10 @@ function wakeDie(die) {
 function showDiceValues() {
   const readout = hud.querySelectorAll("strong")[1];
   if (!readout) return;
-  if (diceMeshes.some(d => d.userData.die.mode !== "rest")) { readout.textContent = "…"; return; }
+  // Only what is actually on the table. During the opening the second die is
+  // put away, and reading a face off it was reading a number nobody threw.
+  const onTable = diceMeshes.filter(d => d.visible);
+  if (onTable.some(d => d.userData.die.mode !== "rest")) { readout.textContent = "…"; return; }
   if (!game) { readout.textContent = "—"; return; }
   // The opening is read out a die at a time with a name against each, which
   // is the panel's business rather than this one's.
@@ -2462,6 +2471,11 @@ function onDiceSettled() {
   if (values.length < 2 || values.some(v => !v)) return;
   game.dice = values;
   openingStands = false;
+  // The panel is written from the dice on the felt, and it was written a
+  // moment ago — as each die came to rest, while this was still empty, so it
+  // said "—" and nothing said otherwise afterwards. The numbers only exist as
+  // a roll once they are here, so this is where they are read out.
+  showDiceValues();
   game.remaining = Rules.diceFor(values[0], values[1]);
   game.required = Rules.legalSequences(game.pos, game.turn, game.remaining)[0].length;
   game.played = 0;
@@ -2858,7 +2872,7 @@ const OPENING_HELD_MS = 3500;
 // the panel. Nothing is decided by these — the clock that matters runs on the
 // server and is read by the other board — but a turn that can be taken away
 // without warning is a turn taken away unfairly, so it is shown.
-const OPEN_SECONDS = 30, ROLL_SECONDS = 20, MOVE_SECONDS = 60;
+const ROLL_SECONDS = 20, MOVE_SECONDS = 60;
 const clockBox = document.querySelector("#sayac");
 let clockUntil = 0;
 
@@ -2873,7 +2887,8 @@ let clockUntil = 0;
 // disagree about the time is worse than one that is a moment late.
 function runningClock(state) {
   if (mode !== "online" || !state || state.over) return 0;
-  if (state.phase === "opening") return state.waitingOn ? OPEN_SECONDS : 0;
+  // The opening keeps no time, so there is nothing to count out.
+  if (state.phase === "opening") return 0;
   if (!state.turn) return 0;
   return state.dice ? MOVE_SECONDS : ROLL_SECONDS;
 }
