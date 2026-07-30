@@ -559,10 +559,11 @@ function sitDownTo(id, colour) {
 // takes the waiting place and watches it: whoever arrives next writes the
 // match onto it.
 const findButton = document.querySelector("#find");
-let watchingQueue = null, looking = false;
+let watchingQueue = null, looking = false, stillHere = null;
 
 async function stopLooking() {
   looking = false;
+  clearInterval(stillHere);
   watchingQueue?.();
   watchingQueue = null;
   findButton.textContent = t("lobby.find");
@@ -590,6 +591,21 @@ findButton?.addEventListener("click", async () => {
     watchingQueue = await follow("sira", live?.uid ?? "", entry => {
       if (looking && entry.matchId) sitDownTo(entry.matchId, entry.colour ?? "black");
     });
+    // Saying we are still here, over and over, so a place left behind by a
+    // closed tab stops being one somebody can be sent to. It looks again on
+    // the way past, which is also how two people who sat down to wait in the
+    // same breath find each other rather than waiting for a third.
+    const every = Math.max(10, Math.round((answer?.refresh ?? 45) / 3)) * 1000;
+    clearInterval(stillHere);
+    stillHere = setInterval(async () => {
+      if (!looking) return clearInterval(stillHere);
+      try {
+        const again = await ask("eslesmeyeGir", {});
+        if (looking && again?.matchId) sitDownTo(again.matchId, again.colour ?? "ivory");
+      } catch (reason) {
+        console.info("tavla: sırada kalınamadı —", reason?.message ?? reason);
+      }
+    }, every);
   } catch (reason) {
     console.info("tavla: eşleşme aranamadı —", reason?.message ?? reason);
     looking = false;

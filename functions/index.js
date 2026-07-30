@@ -210,14 +210,22 @@ export const odayaBak = onCall(settings, async request => {
 // The queue is one document per player, named by their own uid, so nobody can
 // hold two places in it and coming back twice is not two entries.
 
-// Is that player still at their machine at all? A queue entry outlives the tab
-// that wrote it — a closed browser leaves it behind — so the presence they
-// keep for the lobby count is asked after before anybody is sat down opposite
-// an entry that nobody is behind.
-async function isOnline(uid) {
-  const seen = await rtdb().ref(`presence/${uid}`).get();
-  return seen.exists();
-}
+// A queue entry outlives the tab that wrote it: a closed browser leaves it
+// behind, and somebody sat down opposite it waits for a player who is not
+// coming. So an entry says when it was made and the board that is waiting says
+// so again every little while; one that has stopped saying so is not somebody
+// to be found.
+//
+// Judged by the entry itself rather than by the presence kept for the lobby
+// count. Tying the two together meant that anything wrong with presence — and
+// it is a separate system, on a separate database — showed up here as nobody
+// in the world ever being matched with anybody, silently.
+const QUEUE_FRESH_SECONDS = 45;
+
+const stale = entry => {
+  const at = entry.at?.toDate?.();
+  return !at || (Date.now() - at.getTime()) / 1000 > QUEUE_FRESH_SECONDS;
+};
 
 export const eslesmeyeGir = onCall(settings, async request => {
   const uid = whoIsAsking(request);
@@ -228,7 +236,7 @@ export const eslesmeyeGir = onCall(settings, async request => {
   const waiting = await queue.orderBy("at").limit(10).get();
   for (const entry of waiting.docs) {
     if (entry.id === uid || entry.data().matchId) continue;
-    if (!(await isOnline(entry.id))) {
+    if (stale(entry.data())) {
       await entry.ref.delete().catch(() => {});
       continue;
     }
@@ -252,8 +260,12 @@ export const eslesmeyeGir = onCall(settings, async request => {
 
   // Nobody to be found, so wait to be the one found. The entry is watched by
   // the board that wrote it: whoever arrives next writes the match onto it.
+  // Asking again is how a board says it is still there, and it re-reads the
+  // queue on the way past — so two people who arrived in the same breath and
+  // both sat down to wait find each other on their next ask rather than
+  // waiting for a third.
   await queue.doc(uid).set({ at: now(), matchId: null });
-  return { waiting: true };
+  return { waiting: true, refresh: QUEUE_FRESH_SECONDS };
 });
 
 export const siradanCik = onCall(settings, async request => {
