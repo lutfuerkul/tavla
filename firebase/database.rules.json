@@ -7,6 +7,17 @@
         ".validate": "!newData.exists() || newData.hasChildren(['at'])"
       }
     },
+
+    "masalar": {
+      "$mac": {
+        ".read": "auth != null",
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "!newData.exists() || newData.hasChildren(['at'])"
+        }
+      }
+    },
+
     "$other": {
       ".read": false,
       ".write": false

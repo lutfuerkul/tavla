@@ -2704,7 +2704,13 @@ function showTheirOpening(state) {
   if (value === null) { shownOpening = null; return; }
   if (shownOpening === value) return;
   shownOpening = value;
-  replayThrow(theirs, [value], state.seq);
+  // An opening die does not go stale when the server says something new — it
+  // goes stale when the opening itself is wiped or thrown again. Judging it by
+  // the snapshot meant the first player to throw never saw the second die: it
+  // arrives in the same breath as the start of the game, the player who won
+  // the opening throws their pair a moment later, and that newer word threw
+  // the waiting replay away.
+  replayThrow(theirs, [value], () => shownOpening !== value);
 }
 
 // The other side's throw, shown on this board. One at a time, and never on
@@ -2712,11 +2718,11 @@ function showTheirOpening(state) {
 // searched for, theirs waits its turn rather than being dropped — a die that
 // is never thrown is a number that never appears, since the panel reads the
 // dice on the felt. It gives up if the board moves on while it is waiting.
-function replayThrow(colour, values, seq, tries = 0) {
-  if (seq !== remoteSeq) return;
+function replayThrow(colour, values, stale, tries = 0) {
+  if (stale()) return;
   if (thrown || heldDice || pending) {
     if (tries > 40) return;
-    setTimeout(() => replayThrow(colour, values, seq, tries + 1), 400);
+    setTimeout(() => replayThrow(colour, values, stale, tries + 1), 400);
     return;
   }
   replayingFor = colour;
@@ -2771,7 +2777,9 @@ function applyServerState(state) {
     // the two dice unthrown on the board that was waiting to see it.
     if (state.opening) showTheirOpening(state);
     if (state.phase === "opening" || !state.dice) return;
-    if (state.turn !== HUMAN) replayThrow(state.turn, state.dice, state.seq);
+    // A turn's dice, on the other hand, are only worth showing while they are
+    // still the turn's dice.
+    if (state.turn !== HUMAN) replayThrow(state.turn, state.dice, () => remoteSeq !== state.seq);
   };
 
   // Something they played since we last looked: watch it happen, then take
