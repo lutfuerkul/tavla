@@ -437,9 +437,21 @@ export const sure = onCall(settings, async request => {
   if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
 
   const waiting = waitingFor(match);
-  // Nobody is being waited for, or it is the caller — you cannot run your own
-  // clock down and hand your checkers to the computer.
-  if (!waiting || waiting.colour === mine) return { acted: false };
+  if (!waiting) return { acted: false };
+
+  // Ordinarily you may not run your own clock down: a client that could would
+  // be able to hand its own checkers to the computer whenever the position
+  // stopped suiting it, and it is the player kept waiting who has the reason
+  // to ask in the first place.
+  //
+  // Unless there is nobody opposite. A player who leaves takes their board
+  // with them, and with it the only thing that was asking — so a game with one
+  // person left in it stopped for good, whoever's turn it was. With that chair
+  // empty the last player may ask about themselves, and the emptiness is read
+  // here rather than claimed by the caller.
+  if (waiting.colour === mine) {
+    if (await isSeated(id, match.players[Rules.other(mine)])) return { acted: false };
+  }
 
   const theirUid = match.players[waiting.colour];
   const seated = await isSeated(id, theirUid);

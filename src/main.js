@@ -2460,6 +2460,7 @@ function onDiceSettled() {
   const values = rolled.map(d => d.userData.die.value);
   if (values.length < 2 || values.some(v => !v)) return;
   game.dice = values;
+  openingStands = false;
   game.remaining = Rules.diceFor(values[0], values[1]);
   game.required = Rules.legalSequences(game.pos, game.turn, game.remaining)[0].length;
   game.played = 0;
@@ -2563,6 +2564,7 @@ function openingSettled() {
   updateHud();
   holdTheOpening(() => {
     game.phase = "play";
+    openingStands = true;
     resetDice();
     startTurn(mine > theirs ? HUMAN : COMPUTER);
     updateHud();
@@ -2671,6 +2673,12 @@ let shownOpening = null;
 let theirSeat = null;
 let watchingSeat = false;
 let opponentGone = false;
+// True between the opening being settled and the first dice of the game being
+// thrown. The panel says who won the opening in that gap, and it was saying it
+// on every later turn too: the opening numbers stay on the match for the whole
+// game, so "the opening is decided and nothing has been thrown yet" was true
+// again at the start of every single turn.
+let openingStands = false;
 // Long enough to read and no longer. Both of these are news, not states of
 // the board: once either has been said there is nothing to be done about it,
 // and a line that stays put is a line still covering something else an hour
@@ -2683,6 +2691,11 @@ let asking = false;
 // other side is worth asking about: our own clock is ours to run down.
 function waitingOnThem() {
   if (mode !== "online" || !game || game.over) return false;
+  // With the chair opposite empty there is nobody left to ask on our behalf,
+  // and a game with one player in it would stop where it stood — so the board
+  // asks whoever's turn it is. The server checks the empty chair itself before
+  // it agrees to anything, so this is a nudge rather than a claim.
+  if (theirSeat === false) return true;
   if (game.phase === "opening") return game.waitingOn && game.waitingOn !== HUMAN;
   return game.turn !== HUMAN;
 }
@@ -2826,6 +2839,48 @@ function announce(word) {
 // word, since a die that is still tumbling has not been read yet.
 const OPENING_HELD_MS = 3500;
 
+// What the server allows, written down again here so it can be counted out on
+// the panel. Nothing is decided by these — the clock that matters runs on the
+// server and is read by the other board — but a turn that can be taken away
+// without warning is a turn taken away unfairly, so it is shown.
+const OPEN_SECONDS = 30, ROLL_SECONDS = 20, MOVE_SECONDS = 60;
+const clockBox = document.querySelector("#sayac");
+let clockUntil = 0;
+
+// How long whoever is being waited on has left — shown on both boards, not
+// just theirs. Two people playing across a network are each waiting on the
+// other, and a game where you can watch your own time run out but not your
+// opponent's is only half a clock. Whose it is needs no saying: the panel
+// above it is already the turn.
+//
+// Counted from the word arriving rather than from the timestamp on it: the two
+// agree closely enough, and a number that jumps backwards because two machines
+// disagree about the time is worse than one that is a moment late.
+function runningClock(state) {
+  if (mode !== "online" || !state || state.over) return 0;
+  if (state.phase === "opening") return state.waitingOn ? OPEN_SECONDS : 0;
+  if (!state.turn) return 0;
+  return state.dice ? MOVE_SECONDS : ROLL_SECONDS;
+}
+
+// Written as a clock rather than as a bare number of seconds: under a row of
+// dice a lone "18" reads as a die, and this way it needs no words in any of
+// the eight languages.
+function showClock() {
+  if (!clockBox) return;
+  const left = clockUntil - Date.now();
+  if (left <= 0) {
+    clockBox.textContent = "";
+    clockBox.classList.remove("running", "nearly");
+    return;
+  }
+  const seconds = Math.ceil(left / 1000);
+  clockBox.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+  clockBox.classList.add("running");
+  clockBox.classList.toggle("nearly", seconds <= 5);
+}
+setInterval(showClock, 250);
+
 function holdTheOpening(done, waited = 0) {
   const rolling = replayingFor || replayOwed || thrown || heldDice || pending;
   // Not for ever: a throw that never lands must not strand the game.
@@ -2866,6 +2921,16 @@ function applyServerState(state) {
   if (ours) { updateHud(); return; }
 
   const settle = () => {
+    // The clock starts again on every word from the server, since every word
+    // is the server starting it again.
+    // Anchored to the server's own stamp rather than to the moment this board
+    // heard about it. The two boards sit down at different times and would
+    // otherwise be counting from different places — one of them showing a
+    // number while the other had already run out, for the same turn.
+    const seconds = runningClock(state);
+    const from = state.updatedAt?.toMillis?.() ?? Date.now();
+    clockUntil = seconds ? from + seconds * 1000 : 0;
+    showClock();
     game.phase = state.phase;
     game.pos = unpackServerPosition(state.pos);
     game.turn = state.turn;
@@ -2883,7 +2948,8 @@ function applyServerState(state) {
     if (state.phase === "play" && !state.dice) thrown = false;
     // The opening is over: the pair goes back to the middle together, the one
     // that was waiting off the board along with it.
-    if (wasOpening && state.phase === "play") resetDice();
+    if (wasOpening && state.phase === "play") { resetDice(); openingStands = true; }
+    if (state.dice || state.lastBy) openingStands = false;
     game.over = state.over ?? null;
     if (game.over) setTimeout(showResult, 1100);
     // Only one of the two presses "another game"; the other finds out here,
@@ -3169,7 +3235,7 @@ function updateHud() {
     // the two dice stay on the panel with their names against them, and the
     // one they gave the game to is said outright rather than left to be
     // worked out from which of the numbers is bigger.
-    if (!game.over && game.phase === "play" && !game.dice && !thrown
+    if (openingStands && !game.over && game.phase === "play" && !game.dice && !thrown
         && game.opening[HUMAN] != null && game.opening[COMPUTER] != null) {
       side.textContent = mode === "hotseat"
         ? t("open.startsHot", { name: nameOf(game.turn) })
