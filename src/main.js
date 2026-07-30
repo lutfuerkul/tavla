@@ -2504,11 +2504,18 @@ function stepSlide(dt) {
   const k = Math.min(1, sliding.t / sliding.span);
   const ease = k < .5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
   const { from, to, mesh } = sliding;
-  mesh.position.set(
-    from.x + (to.x - from.x) * ease,
-    from.y + (to.y - from.y) * ease + Math.sin(Math.PI * k) * (CARRY_Y - FELT_Y) * .75,
-    from.z + (to.z - from.z) * ease
-  );
+  const x = from.x + (to.x - from.x) * ease;
+  const z = from.z + (to.z - from.z) * ease;
+  // The arc peaked three quarters of the way to the carrying height, which put
+  // the checker's middle fifty thousandths above the bar and its underside
+  // inside it — and the peak sits at the middle of the move rather than over
+  // the middle of the board, so a crossing that was not centred met the bar
+  // lower still. It is carried the full height now, and held there while it is
+  // over the bar rather than dipping through it on the way past.
+  const lift = (CARRY_Y - FELT_Y) * Math.min(1, Math.sin(Math.PI * k) * 1.6);
+  const overBar = Math.abs(x) < BAR_HALF + CHECKER_R;
+  const floor = overBar ? CASE_TOP - FELT_Y + CHECKER_H : 0;
+  mesh.position.set(x, from.y + (to.y - from.y) * ease + Math.max(lift, floor), z);
   if (k < 1) return;
   scene.remove(mesh);
   const done = sliding.onDone;
@@ -2555,7 +2562,9 @@ function openingSettled() {
     // The other side still has to throw.
     const next = game.opening[HUMAN] === null ? HUMAN : COMPUTER;
     game.waitingOn = next;
-    if (!isHuman(next)) setTimeout(() => throwDice(next === HUMAN ? AWAY : -AWAY), 900);
+    // Long enough to read the die that was just thrown before the other one
+    // answers it. At nine hundred the pair went by as one event.
+    if (!isHuman(next)) setTimeout(() => throwDice(next === HUMAN ? AWAY : -AWAY), 1500);
     updateHud();
     return;
   }
@@ -2611,10 +2620,13 @@ function playComputerTurn() {
       game.pos = Rules.applyMove(game.pos, COMPUTER, move);
       renderPieces();
       updateHud();
-      setTimeout(step, 260);
+      // A hand's pause between one checker and the next. At half this the
+      // turn read as a single shuffle rather than as moves being made.
+      setTimeout(step, 520);
     });
   };
-  setTimeout(step, 520);
+  // And a moment to look at the dice before anything is moved with them.
+  setTimeout(step, 900);
 }
 
 function startTurn(colour) {
@@ -2791,14 +2803,17 @@ function playRemoteTurn(colour, moves, done) {
         }
         renderPieces();
         updateHud();
-        setTimeout(step, 260);
+        setTimeout(step, 520);
       });
     } catch (reason) {
       console.info("tavla: hamle oynatılamadı —", reason?.message ?? reason);
       finish();
     }
   };
-  setTimeout(step, 380);
+  // The same pause before the first checker moves as the computer takes at
+  // the table, so a turn played across a network is watched at a hand's pace
+  // rather than arriving.
+  setTimeout(step, 900);
 }
 
 // The other player's opening die, thrown on this board so it can be watched
@@ -2848,7 +2863,11 @@ function replayThrow(colour, values, stale, tries = 0) {
   replayOwed = false;
   replayingFor = colour;
   forcedRoll = values.slice();
-  throwDice(-AWAY);
+  // Away from whoever is throwing it, not always towards us. Their throw
+  // crosses the board this way; ours — which is what the clock throws when we
+  // are too slow — has to leave from our own side, or the dice come at us out
+  // of the opposite corner as though somebody else had made our throw.
+  throwDice(colour === HUMAN ? AWAY : -AWAY);
 }
 
 // A line of news, up long enough to read. It is taken down on a timer rather
@@ -3010,8 +3029,15 @@ function applyServerState(state) {
   // had the winner watching their own winning moves played back at them in the
   // other colour, which is not a thing the rules allow and left the board
   // stuck half way through with no result ever shown.
-  const theirs = state.lastMoves?.length && state.lastBy && state.lastBy !== HUMAN;
-  if (theirs) playRemoteTurn(state.lastBy, state.lastMoves, settle);
+  // Moves worth watching are the ones this board did not make. Theirs always,
+  // and ours when the clock made them for us: we played nothing that turn, so
+  // there is nothing in hand and nothing was ever seen to move — the checkers
+  // simply arrived where the server said they were. Our own turn, played here
+  // by hand, has been watched already and wants no second showing, and it is
+  // told apart by what is in hand for it rather than by whose name is on it.
+  const unseen = state.lastMoves?.length && state.lastBy
+    && (state.lastBy !== HUMAN || !game.history.length);
+  if (unseen) playRemoteTurn(state.lastBy, state.lastMoves, settle);
   // The opening is decided by two dice and it is worth seeing them decide it.
   // The server settles both in one write, so without this the second die lands
   // and the board is swept in the same breath — the throw that chose who goes
