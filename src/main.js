@@ -2555,7 +2555,9 @@ function openingSettled() {
     // The other side still has to throw.
     const next = game.opening[HUMAN] === null ? HUMAN : COMPUTER;
     game.waitingOn = next;
-    if (!isHuman(next)) setTimeout(() => throwDice(next === HUMAN ? AWAY : -AWAY), 900);
+    // Long enough to read the die that was just thrown before the other one
+    // answers it. At nine hundred the pair went by as one event.
+    if (!isHuman(next)) setTimeout(() => throwDice(next === HUMAN ? AWAY : -AWAY), 1500);
     updateHud();
     return;
   }
@@ -2611,10 +2613,13 @@ function playComputerTurn() {
       game.pos = Rules.applyMove(game.pos, COMPUTER, move);
       renderPieces();
       updateHud();
-      setTimeout(step, 260);
+      // A hand's pause between one checker and the next. At half this the
+      // turn read as a single shuffle rather than as moves being made.
+      setTimeout(step, 520);
     });
   };
-  setTimeout(step, 520);
+  // And a moment to look at the dice before anything is moved with them.
+  setTimeout(step, 900);
 }
 
 function startTurn(colour) {
@@ -2791,14 +2796,17 @@ function playRemoteTurn(colour, moves, done) {
         }
         renderPieces();
         updateHud();
-        setTimeout(step, 260);
+        setTimeout(step, 520);
       });
     } catch (reason) {
       console.info("tavla: hamle oynatılamadı —", reason?.message ?? reason);
       finish();
     }
   };
-  setTimeout(step, 380);
+  // The same pause before the first checker moves as the computer takes at
+  // the table, so a turn played across a network is watched at a hand's pace
+  // rather than arriving.
+  setTimeout(step, 900);
 }
 
 // The other player's opening die, thrown on this board so it can be watched
