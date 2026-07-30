@@ -236,10 +236,24 @@ scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).textur
 // full strength it lights the whole board and flattens every material.
 scene.environmentIntensity = BOARD.room.env;
 
+// Coming back to a match already under way is not the same as starting one.
+// The board arrives at whatever the position has become while you were gone,
+// the server is still handing your checkers back, and anything in the air is
+// still landing. Reaching for the dice into that is how a returning player
+// finds themselves in the middle of something they have not seen. So the
+// first few seconds back are spent watching: the board is live and the
+// position is drawn, but nothing on it can be picked up.
+const WATCH_ON_RETURN_MS = 4000;
+let watchingUntil = 0;
+const stillWatching = () => performance.now() < watchingUntil;
+
 function sitDown() {
   intro.classList.add("hidden");
   hud.classList.add("visible");
   guardBack();
+  // Only when there is something to come back to. A match made a moment ago
+  // at the door has nothing to catch up on.
+  if (mode === "online" && matchId) watchingUntil = performance.now() + WATCH_ON_RETURN_MS;
   // Sitting at an online table is where the session changes hands: from here
   // the dice and the turns come from the server, and the match is watched.
   // Not before — at the door there is no board to put anything on.
@@ -3820,7 +3834,8 @@ canvas.addEventListener("pointerdown", (e) => {
   // is let go of across the felt it is already somebody's turn to throw — and
   // taking the dice up then takes both of them, that one included, on a board
   // that has been told it is holding a pair the server has never named.
-  const canThrow = !replayingFor && !replayOwed && (game.phase === "opening"
+  const canThrow = !stillWatching() && !replayingFor && !replayOwed
+    && (game.phase === "opening"
     // Nobody being waited on means the opening is over bar the looking, and
     // two people round one device count as human whoever is asked — so
     // without the first half of this, a hand could reach in during the pause
@@ -3882,6 +3897,8 @@ canvas.addEventListener("pointerdown", (e) => {
   if (!hits.length) return;
   const key = hits[0].object.userData.pointKey;
   if (hits[0].object.userData.colour !== game.turn || !isHuman(game.turn)) return;
+  // Nor a checker, for the same few seconds — watching means watching.
+  if (stillWatching()) return;
 
   // Only a checker with somewhere legal to go can be picked up. Lifting one
   // that cannot move and dropping it back is a move you did not make.
