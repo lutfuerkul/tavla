@@ -2386,19 +2386,22 @@ function seatOfMove(colour, move) {
 
 // The opening: each side throws one die and the higher of the two starts.
 function openingSettled() {
+  // Across a network the opening is the server's to run, and none of it may be
+  // written down here. It named this die before it was let go of and recorded
+  // what it said the moment it was asked — by the time the die actually comes
+  // to rest the server has already moved on to waiting for the other player,
+  // so writing "the value of the die that just landed" against whoever is
+  // being waited for now would put our own throw down in their name. Who
+  // throws next, whether it was a tie and who ends up starting all arrive on
+  // the next snapshot; the other player's die is thrown on their own board.
+  if (mode === "online") return;
+
   const who = game.waitingOn;
   if (!who) return;
   const die = diceInHand(who)[0].userData.die;
   if (die.mode !== "rest" || !die.value) return;
   game.opening[who] = die.value;
   game.waitingOn = null;
-
-  // Across a network the opening is the server's to run: it named this die
-  // before it was let go of and has already written down what it said. Who
-  // throws next, whether it was a tie, and who ends up starting all arrive on
-  // the next snapshot — deciding any of it here would be this board playing a
-  // second, private game. The other player's die is thrown on their own board.
-  if (mode === "online") { updateHud(); return; }
 
   if (game.opening[HUMAN] === null || game.opening[COMPUTER] === null) {
     // The other side still has to throw.
