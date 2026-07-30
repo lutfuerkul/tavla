@@ -30,6 +30,18 @@ const REGION = "europe-west1";
 const EMULATED = new URLSearchParams(location.search).has("emulator")
   && ["localhost", "127.0.0.1"].includes(location.hostname);
 
+// A Realtime Database namespace is a whole separate database, and against the
+// emulator the two sides are handed different ones: the page keeps the one in
+// the URL above, while the server's admin SDK is given ?ns=<projectId> by the
+// emulator suite. The seat a player claims then goes into one database and the
+// server looks for it in the other, so everybody appears to have walked away
+// and the computer takes every turn the moment it is due. The real project has
+// a single default instance and both sides land on it — this only differs
+// under the emulator, so only the emulator's copy of the config is bent.
+const SETTINGS = EMULATED
+  ? { ...CONFIG, databaseURL: `https://${CONFIG.projectId}.firebaseio.com` }
+  : CONFIG;
+
 // Nothing is fetched until something asks for it, and it is only fetched once.
 let opening = null;
 
@@ -41,7 +53,7 @@ async function open() {
     import(`${SDK}/firebase-firestore.js`),
     import(`${SDK}/firebase-functions.js`),
   ]);
-  const started = app.initializeApp(CONFIG);
+  const started = app.initializeApp(SETTINGS);
 
   const signIn = auth.getAuth(started);
   const db = database.getDatabase(started);
