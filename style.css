@@ -136,6 +136,15 @@ body.ideographic #hud span, body.ideographic #hud strong {
   letter-spacing: .16em; text-transform: uppercase; color: #0d0a06; background: #e5ad54;
   border: 0; border-radius: .4rem; cursor: pointer; transition: background .2s ease; }
 #start:disabled { background: #3a3229; color: #8b8073; cursor: default; }
+
+/* Who else is at a table right now. Quiet, under the way in, and simply not
+   there when there is nothing to say — see firebase.js. */
+#online { margin: 1.1rem 0 0; display: flex; align-items: center; justify-content: center;
+  gap: .45rem; font: 500 .68rem/1 "DM Mono", monospace; letter-spacing: .08em;
+  color: #9b907e; }
+#online[hidden] { display: none; }
+#online::before { content: ""; width: .42rem; height: .42rem; border-radius: 50%;
+  background: #6fbf73; box-shadow: 0 0 .4rem rgba(111,191,115,.7); }
 #start:not(:disabled):hover { background: #f0bd68; }
 
 /* On a phone the door is five rows tall and the window is narrow enough that

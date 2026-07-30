@@ -46,6 +46,8 @@ export const LANGS = [
 
 const TEXT = {
   tr: {
+    "online.count": "{n} kişi çevrimiçi",
+    "online.one": "1 kişi çevrimiçi",
     "view.top": "Tepe kamerası",
     "view.seat": "Normal kamera",
     "aria.langs": "Dil",
@@ -108,6 +110,8 @@ const TEXT = {
     "result.quit": "Çık",
   },
   en: {
+    "online.count": "{n} players online",
+    "online.one": "1 player online",
     "view.top": "Top view",
     "view.seat": "Table view",
     "aria.langs": "Language",
@@ -170,6 +174,8 @@ const TEXT = {
     "result.quit": "Leave",
   },
   it: {
+    "online.count": "{n} giocatori online",
+    "online.one": "1 giocatore online",
     "view.top": "Vista dall'alto",
     "view.seat": "Vista dal tavolo",
     "aria.langs": "Lingua",
@@ -232,6 +238,8 @@ const TEXT = {
     "result.quit": "Esci",
   },
   de: {
+    "online.count": "{n} Spieler online",
+    "online.one": "1 Spieler online",
     "view.top": "Draufsicht",
     "view.seat": "Tischansicht",
     "aria.langs": "Sprache",
@@ -294,6 +302,8 @@ const TEXT = {
     "result.quit": "Verlassen",
   },
   es: {
+    "online.count": "{n} jugadores conectados",
+    "online.one": "1 jugador conectado",
     "view.top": "Vista cenital",
     "view.seat": "Vista de mesa",
     "aria.langs": "Idioma",
@@ -356,6 +366,8 @@ const TEXT = {
     "result.quit": "Salir",
   },
   ru: {
+    "online.count": "{n} игроков в сети",
+    "online.one": "1 игрок в сети",
     "view.top": "Вид сверху",
     "view.seat": "Вид от стола",
     "aria.langs": "Язык",
@@ -418,6 +430,8 @@ const TEXT = {
     "result.quit": "Выйти",
   },
   zh: {
+    "online.count": "{n} 人在线",
+    "online.one": "1 人在线",
     "view.top": "俯视视角",
     "view.seat": "桌面视角",
     "aria.langs": "语言",
@@ -480,6 +494,8 @@ const TEXT = {
     "result.quit": "退出",
   },
   ja: {
+    "online.count": "{n} 人がオンライン",
+    "online.one": "1 人がオンライン",
     "view.top": "真上から",
     "view.seat": "テーブル視点",
     "aria.langs": "言語",
