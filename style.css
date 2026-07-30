@@ -122,6 +122,31 @@ body.ideographic #hud span, body.ideographic #hud strong {
 /* Nothing to end and nothing to take back until somebody has sat down. */
 #intro:not(.hidden) ~ #controls, #intro:not(.hidden) ~ #notice { display: none; }
 
+/* Playing somebody who is not in the room: make a room and read the code out,
+   or take one you have been given. */
+#lobby { margin: 1.2rem 0 0; }
+#lobby[hidden] { display: none; }
+.lobby-row { display: flex; gap: .6rem; align-items: center; justify-content: center;
+  flex-wrap: wrap; }
+.lobby-or { font-size: .7rem; letter-spacing: .1em; color: #9b907e; text-transform: uppercase; }
+#host, #join { padding: .68rem 1.4rem; font: 500 .78rem/1 "DM Mono", monospace;
+  letter-spacing: .12em; text-transform: uppercase; color: #d8ccb4;
+  background: rgba(20,15,10,.78); border: 1px solid rgba(229,173,84,.4);
+  border-radius: .45rem; box-shadow: none; cursor: pointer;
+  transition: color .2s ease, border-color .2s ease, background .2s ease; }
+#host:hover, #join:hover { border-color: #e5ad54; color: #f6ecd6; background: rgba(36,26,16,.9); }
+#host:disabled, #join:disabled { color: #7d7466; border-color: rgba(229,173,84,.2); cursor: default; }
+#code { width: 6.4rem; padding: .68rem .6rem; text-align: center;
+  font: 500 .9rem/1 "DM Mono", monospace; letter-spacing: .22em; text-transform: uppercase;
+  color: #f3ead7; background: rgba(8,6,4,.8); border: 1px solid rgba(229,173,84,.4);
+  border-radius: .45rem; }
+#code::placeholder { color: #6b6153; letter-spacing: .22em; }
+#lobby-said { margin: .9rem 0 0; min-height: 1.2rem; font-size: .74rem; letter-spacing: .06em;
+  color: #d2c8b4; }
+#lobby-said .kod { display: inline-block; margin-left: .35rem; padding: .12rem .5rem;
+  font-size: 1.05rem; letter-spacing: .3em; color: #0d0a06; background: #e5ad54;
+  border-radius: .3rem; }
+
 /* Which checkers are yours, and the door handle. */
 #colours { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin: 1.1rem 0 0; }
 

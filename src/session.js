@@ -29,6 +29,29 @@ const d6 = () => {
   return Math.floor(Math.random() * 6) + 1;
 };
 
+// A game against somebody who is not in the room. The two questions are the
+// same two questions; the answers come from a server instead of from here, and
+// take as long as they take.
+//
+// It carries a third thing the local one does not need: the match itself,
+// watched as the server writes it, which is how the opponent's turn arrives.
+export function onlineSession({ matchId, colour, ask, follow }) {
+  return {
+    online: true,
+    matchId,
+    colour,
+    roll: async () => (await ask("zarAt", { matchId })).dice,
+    commitTurn: async moves => {
+      await ask("turuOyna", { matchId, moves });
+      return { ok: true };
+    },
+    // The board is laid out again by the server, not by the player, so that
+    // both of them are looking at the same one.
+    nextGame: () => ask("yeniOyun", { matchId }),
+    watch: onChange => follow("matches", matchId, onChange),
+  };
+}
+
 export function localSession() {
   return {
     online: false,

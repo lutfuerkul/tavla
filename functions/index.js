@@ -137,9 +137,10 @@ export const odayaKatil = onCall(settings, async request => {
     // Coming back to a room that has already been paired is not an error: it
     // is what happens when a player reloads. They are sent to their match.
     if (it.status === "matched") {
-      return it.host === uid || it.guest === uid
-        ? { matchId: it.matchId }
-        : { error: "full" };
+      const other = it.hostColour === "black" ? "ivory" : "black";
+      if (it.host === uid) return { matchId: it.matchId, colour: it.hostColour };
+      if (it.guest === uid) return { matchId: it.matchId, colour: other };
+      return { error: "full" };
     }
     if (it.host === uid) return { error: "own-room" };
     if (it.expiresAt?.toDate?.() < new Date()) return { error: "expired" };
@@ -149,7 +150,9 @@ export const odayaKatil = onCall(settings, async request => {
       : { ivory: it.host, black: uid };
     tx.set(match, freshMatch(players));
     tx.update(room, { status: "matched", guest: uid, matchId: match.id });
-    return { matchId: match.id };
+    // Which colour the one arriving is playing is the server's to say, not
+    // something the client should have to work out from what it asked for.
+    return { matchId: match.id, colour: it.hostColour === "black" ? "ivory" : "black" };
   });
 
   if (answer.error === "not-found") throw new HttpsError("not-found", "Böyle bir oda yok.");

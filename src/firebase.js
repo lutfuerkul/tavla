@@ -22,22 +22,65 @@ const CONFIG = {
 };
 
 const SDK = "https://www.gstatic.com/firebasejs/10.14.1";
+const REGION = "europe-west1";
+
+// Against the emulator suite rather than the real project, when the page is
+// opened with ?emulator on a machine that is running one. Only ever local
+// addresses, so it cannot be turned on against anything that matters.
+const EMULATED = new URLSearchParams(location.search).has("emulator")
+  && ["localhost", "127.0.0.1"].includes(location.hostname);
 
 // Nothing is fetched until something asks for it, and it is only fetched once.
 let opening = null;
 
 async function open() {
-  const [app, auth, database] = await Promise.all([
+  const [app, auth, database, store, functions] = await Promise.all([
     import(`${SDK}/firebase-app.js`),
     import(`${SDK}/firebase-auth.js`),
     import(`${SDK}/firebase-database.js`),
+    import(`${SDK}/firebase-firestore.js`),
+    import(`${SDK}/firebase-functions.js`),
   ]);
   const started = app.initializeApp(CONFIG);
+
+  const signIn = auth.getAuth(started);
+  const db = database.getDatabase(started);
+  const firestore = store.getFirestore(started);
+  const calls = functions.getFunctions(started, REGION);
+
+  if (EMULATED) {
+    auth.connectAuthEmulator(signIn, "http://127.0.0.1:9099", { disableWarnings: true });
+    database.connectDatabaseEmulator(db, "127.0.0.1", 9000);
+    store.connectFirestoreEmulator(firestore, "127.0.0.1", 8181);
+    functions.connectFunctionsEmulator(calls, "127.0.0.1", 5001);
+  }
+
   // Anonymous, because a game of tavla does not need to know who you are. The
   // account is a name for this browser, nothing more, and Firebase is told to
   // sweep up the ones that stop coming back.
-  const signedIn = await auth.signInAnonymously(auth.getAuth(started));
-  return { auth, database, db: database.getDatabase(started), uid: signedIn.user.uid };
+  const signedIn = await auth.signInAnonymously(signIn);
+  return { auth, database, store, functions, db, firestore, calls, uid: signedIn.user.uid };
+}
+
+// Asks the server to do something. Everything the game cannot be trusted to do
+// itself is on the other side of one of these.
+export async function ask(name, data) {
+  const live = await connect();
+  if (!live) throw new Error("çevrimdışı");
+  const call = live.functions.httpsCallable(live.calls, name);
+  const answer = await call(data ?? {});
+  return answer.data;
+}
+
+// Watches a document and calls back with it every time the server changes it.
+// Returns the way to stop watching, and a no-op if there is no connection.
+export async function follow(path, id, watch) {
+  const live = await connect();
+  if (!live) return () => {};
+  const { store, firestore } = live;
+  return store.onSnapshot(store.doc(firestore, path, id), snapshot => {
+    if (snapshot.exists()) watch(snapshot.data());
+  }, reason => console.info("tavla: dinleme koptu —", reason?.message ?? reason));
 }
 
 export function connect() {

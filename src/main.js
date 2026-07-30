@@ -4,13 +4,13 @@ import { RoomEnvironment } from "../vendor/three/examples/jsm/environments/RoomE
 const canvas = document.querySelector("#scene");
 import * as Rules from "./rules.js";
 import { LANGS, language, setLanguage, t, isIdeographic } from "./i18n.js";
-import { localSession } from "./session.js";
-import { attend } from "./firebase.js";
+import { localSession, onlineSession } from "./session.js";
+import { attend, ask, follow } from "./firebase.js";
 
 // Where the turns come from. Everything the board cannot decide by itself goes
 // through here, so a game against a server can be a different session rather
 // than a different board.
-const session = localSession();
+let session = localSession();
 
 const intro = document.querySelector("#intro");
 const hud = document.querySelector("#hud");
@@ -93,7 +93,14 @@ const MIRROR = (HUMAN === "black" ? -1 : 1) * SIDE;
 // taking the table in turns. Both are settled at the door, before anything is
 // built, because the picker that sets them runs there.
 const MODE_KEY = "tavla.mode";
-let mode = localStorage.getItem(MODE_KEY) === "hotseat" ? "hotseat" : "solo";
+const MATCH_KEY = "tavla.mac";
+const MODES = ["solo", "hotseat", "online"];
+let mode = MODES.includes(localStorage.getItem(MODE_KEY)) ? localStorage.getItem(MODE_KEY) : "solo";
+// The match this browser is sitting at, if it is sitting at one. Online is the
+// only mode that has one, and losing it is how a game is left.
+let matchId = mode === "online" ? localStorage.getItem(MATCH_KEY) : null;
+if (mode === "online" && !matchId) mode = "solo";
+// Across a network only your own colour is yours; on one device both are.
 const isHuman = colour => mode === "hotseat" || colour === HUMAN;
 
 const BOARD_KEY = "tavla.board";
@@ -224,6 +231,13 @@ scene.environmentIntensity = BOARD.room.env;
 function sitDown() {
   intro.classList.add("hidden");
   hud.classList.add("visible");
+  // Sitting at an online table is where the session changes hands: from here
+  // the dice and the turns come from the server, and the match is watched.
+  // Not before — at the door there is no board to put anything on.
+  if (mode === "online" && matchId && !session.online) {
+    session = onlineSession({ matchId, colour: HUMAN, ask, follow });
+    session.watch(applyServerState);
+  }
 }
 
 // Picking the board that is already on the table just opens the door. Picking
@@ -244,7 +258,11 @@ function markChosen(attribute, value) {
 }
 
 function refreshStart() {
-  if (startButton) startButton.disabled = !(pickedBoard && pickedColour && pickedSide);
+  if (!startButton) return;
+  // Online has no "start" of its own — the lobby does that, and the colour
+  // belongs to the room rather than to the player.
+  startButton.toggleAttribute("hidden", mode === "online");
+  startButton.disabled = !(pickedBoard && pickedColour && pickedSide);
 }
 
 document.querySelectorAll("[data-mode]").forEach(button => {
@@ -252,6 +270,7 @@ document.querySelectorAll("[data-mode]").forEach(button => {
     mode = button.dataset.mode;
     localStorage.setItem(MODE_KEY, mode);
     markChosen("mode", mode);
+    showLobby();
     // Changing this does not reload the page, and it decides where the camera
     // sits, so the seat is taken again here rather than only at startup.
     fitCamera();
@@ -329,6 +348,90 @@ function showOnline() {
 
 applyStaticText();
 attend(here => { onlineCount = here; showOnline(); });
+
+// The lobby: make a room and read the code out, or take one you were given.
+// Either way it ends the same — a match exists, this browser knows which
+// colour it is playing, and the page is loaded again to build the board round
+// that. Which colour you are is not yours to choose here; it belongs to the
+// room, and the host takes black.
+const lobby = document.querySelector("#lobby");
+const hostButton = document.querySelector("#host");
+const joinButton = document.querySelector("#join");
+const codeBox = document.querySelector("#code");
+const lobbySaid = document.querySelector("#lobby-said");
+let watchingRoom = null;
+
+function say(key, code) {
+  if (!lobbySaid) return;
+  lobbySaid.textContent = t(key);
+  if (code) {
+    const shown = document.createElement("span");
+    shown.className = "kod";
+    shown.textContent = code;
+    lobbySaid.append(shown);
+  }
+}
+
+function showLobby() {
+  const online = mode === "online";
+  lobby?.toggleAttribute("hidden", !online);
+  // Your colour comes from the room, so it is not asked for here.
+  document.querySelector("#colours")?.toggleAttribute("hidden", online);
+  refreshStart();
+}
+
+// A match is waiting: remember which one and which colour, and start the page
+// again so the board is built the right way round.
+function sitDownTo(id, colour) {
+  localStorage.setItem(MATCH_KEY, id);
+  localStorage.setItem(COLOUR_KEY, colour);
+  localStorage.setItem(MODE_KEY, "online");
+  if (pickedBoard) localStorage.setItem(BOARD_KEY, pickedBoard);
+  if (pickedSide) localStorage.setItem(SIDE_KEY, pickedSide);
+  sessionStorage.setItem("tavla.sitOnLoad", "1");
+  say("lobby.found");
+  location.reload();
+}
+
+hostButton?.addEventListener("click", async () => {
+  hostButton.disabled = joinButton.disabled = true;
+  try {
+    const room = await ask("odaKur", { colour: "black" });
+    say("lobby.made", room.code);
+    // The guest's arrival is written on the room, so it is watched rather than
+    // asked after.
+    watchingRoom?.();
+    watchingRoom = await follow("rooms", room.code, it => {
+      if (it.status === "matched" && it.matchId) sitDownTo(it.matchId, room.colour);
+    });
+    lobbySaid.append(document.createTextNode(" · " + t("lobby.waiting")));
+  } catch (reason) {
+    // Nothing here is worth alarming anybody with: either there is a
+    // connection or there is not, and the rest of the game does not need one.
+    console.info("tavla: oda kurulamadı —", reason?.message ?? reason);
+    say("lobby.offline");
+    hostButton.disabled = joinButton.disabled = false;
+  }
+});
+
+joinButton?.addEventListener("click", async () => {
+  const wanted = (codeBox?.value ?? "").trim().toUpperCase();
+  if (!/^[A-Z2-9]{5}$/.test(wanted)) return say("lobby.badCode");
+  hostButton.disabled = joinButton.disabled = true;
+  say("lobby.joining");
+  try {
+    const joined = await ask("odayaKatil", { code: wanted });
+    // Which colour that leaves is the server's to say — the one arriving
+    // usually takes ivory, but a host who types their own code back in is
+    // sent to their own seat rather than to the other one.
+    sitDownTo(joined.matchId, joined.colour ?? "ivory");
+  } catch (reason) {
+    lobbySaid.textContent = reason?.message ?? t("lobby.offline");
+    hostButton.disabled = joinButton.disabled = false;
+  }
+});
+
+showLobby();
 
 document.querySelectorAll("[data-side]").forEach(button => {
   button.addEventListener("click", () => {
@@ -2344,7 +2447,9 @@ function startTurn(colour) {
   game.required = 0;
   game.played = 0;
   game.history = [];
-  if (!isHuman(colour)) setTimeout(() => throwDice(-AWAY), 550);
+  // Across a network the other side throws for itself; here there is nobody
+  // to throw for but the computer.
+  if (mode !== "online" && !isHuman(colour)) setTimeout(() => throwDice(-AWAY), 550);
 }
 
 // The turn is over when there is nothing left that may be played — which is
@@ -2371,6 +2476,99 @@ function undoMove() {
   updateHud();
 }
 
+// Playing somebody who is not in the room. The board stops deciding anything
+// it cannot see the other side of: the server owns the position, whose turn it
+// is and what the dice say, and this is where that arrives.
+//
+// Our own turn is the exception, and only while it is being played. The moves
+// are provisional until Tamam — that is what Geri al is for — so a snapshot
+// that lands mid-turn is allowed to bring the score and the dice but not to
+// tread on the board underneath the player's hand.
+let remoteSeq = -1;
+let forcedRoll = null;
+
+function unpackServerPosition(packed) {
+  const points = Array.from({ length: 25 }, () => null);
+  for (const [point, stack] of Object.entries(packed.points ?? {})) {
+    points[Number(point)] = { colour: stack.colour, count: stack.count };
+  }
+  return { points, bar: { ...packed.bar }, off: { ...packed.off } };
+}
+
+// The opponent's turn, played out one checker at a time so it can be watched
+// rather than appearing all at once.
+function playRemoteTurn(colour, moves, done) {
+  game.thinking = true;
+  updateHud();
+  let i = 0;
+  const step = () => {
+    if (i >= moves.length) {
+      game.thinking = false;
+      done();
+      return;
+    }
+    const move = moves[i++];
+    const { fromKey, from, to } = seatOfMove(colour, move);
+    game.lifted = { key: fromKey };
+    renderPieces();
+    slideChecker(colour, from, to, () => {
+      game.lifted = null;
+      game.pos = Rules.applyMove(game.pos, colour, move);
+      renderPieces();
+      updateHud();
+      setTimeout(step, 260);
+    });
+  };
+  setTimeout(step, 380);
+}
+
+function applyServerState(state) {
+  if (!game || state.seq <= remoteSeq) return;
+  const ours = state.turn === HUMAN && game.history.length && state.phase === "play";
+  remoteSeq = state.seq;
+
+  game.phase = state.phase;
+  game.opening = { ...state.opening };
+  game.waitingOn = state.waitingOn ?? null;
+  // The running score of the match belongs to the server too.
+  match.ivory = state.score.ivory;
+  match.black = state.score.black;
+
+  if (ours) { updateHud(); return; }
+
+  const settle = () => {
+    game.pos = unpackServerPosition(state.pos);
+    game.turn = state.turn;
+    game.dice = state.dice ?? null;
+    game.remaining = (state.remaining ?? []).slice();
+    game.required = state.required ?? 0;
+    game.played = 0;
+    game.history = [];
+    game.over = state.over ?? null;
+    if (game.over) setTimeout(showResult, 1100);
+    // Only one of the two presses "another game"; the other finds out here,
+    // and the box in front of them has to come down by itself. The dice go
+    // back to where they sit before a throw for the same reason.
+    else if (!resultBox?.hasAttribute("hidden")) { resultBox?.setAttribute("hidden", ""); resetDice(); }
+    renderPieces();
+    updateHud();
+    // Their dice, thrown here so they can be seen landing rather than simply
+    // appearing. The numbers are the server's; the tumble is found the same
+    // way ours is.
+    if (state.phase !== "play" || !state.dice) return;
+    if (state.turn !== HUMAN && !thrown) {
+      forcedRoll = state.dice.slice();
+      throwDice(-AWAY);
+    }
+  };
+
+  // Something they played since we last looked: watch it happen, then take
+  // the server's word for where the board ended up.
+  const theirs = state.lastMoves?.length && state.turn === HUMAN;
+  if (theirs) playRemoteTurn(Rules.other(HUMAN), state.lastMoves, settle);
+  else settle();
+}
+
 // The turn is handed over through the session rather than taken over directly.
 // Locally that is granted at once; against a server it is the moment the moves
 // are sent and the reply waited for, which is why the board is left alone until
@@ -2393,12 +2591,20 @@ const menuButton = document.querySelector("#menu");
 const confirmBox = document.querySelector("#confirm");
 const closeConfirm = () => confirmBox?.setAttribute("hidden", "");
 
+// Getting up from an online table. The seat is only remembered here, so
+// forgetting it is the whole of leaving as far as this browser is concerned —
+// the door then opens on the lobby rather than straight back into the match.
+// What the other player sees when somebody walks off is the server's business
+// and is not built yet.
+function leaveTable() {
+  sessionStorage.removeItem("tavla.sitOnLoad");
+  localStorage.removeItem(MATCH_KEY);
+  location.reload();
+}
+
 menuButton?.addEventListener("click", () => confirmBox?.removeAttribute("hidden"));
 document.querySelector("#confirm-no")?.addEventListener("click", closeConfirm);
-document.querySelector("#confirm-yes")?.addEventListener("click", () => {
-  sessionStorage.removeItem("tavla.sitOnLoad");
-  location.reload();
-});
+document.querySelector("#confirm-yes")?.addEventListener("click", leaveTable);
 confirmBox?.addEventListener("click", event => {
   if (event.target === confirmBox) closeConfirm();
 });
@@ -2445,6 +2651,7 @@ function showResult() {
 // won starts over from nothing.
 function nextGame() {
   resultBox?.setAttribute("hidden", "");
+  if (session.online) { session.nextGame().catch(() => {}); return; }
   if (matchWinner()) match = { ivory: 0, black: 0 };
   resetState();
   resetDice();
@@ -2453,10 +2660,7 @@ function nextGame() {
 }
 
 resultNext?.addEventListener("click", nextGame);
-document.querySelector("#result-quit")?.addEventListener("click", () => {
-  sessionStorage.removeItem("tavla.sitOnLoad");
-  location.reload();
-});
+document.querySelector("#result-quit")?.addEventListener("click", leaveTable);
 
 // The second camera, from the board rather than from the door. Its label is
 // what pressing it does, not where you are.
@@ -2906,7 +3110,11 @@ function launchDice() {
   // no time locally and a round trip online, and either way the dice carry on
   // being shaken until the answer and a matching throw are both in hand.
   const token = heldDice;
-  session.roll(dice.length).then(want => {
+  const asked = forcedRoll
+    ? Promise.resolve(forcedRoll.slice(0, dice.length))
+    : session.roll(dice.length);
+  forcedRoll = null;
+  asked.then(want => {
     if (heldDice !== token) return;
     pending = {
       dice, aim, want,

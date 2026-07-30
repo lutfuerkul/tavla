@@ -16,6 +16,17 @@
         <div id="modes">
           <button class="mode-pick" data-mode="solo" data-i18n="mode.solo">Bilgisayara karşı</button>
           <button class="mode-pick" data-mode="hotseat" data-i18n="mode.hotseat">İki kişi · aynı cihaz</button>
+          <button class="mode-pick" data-mode="online" data-i18n="mode.online">İnternette</button>
+        </div>
+        <div id="lobby" hidden>
+          <div class="lobby-row">
+            <button id="host" data-i18n="lobby.host">Oda kur</button>
+            <span class="lobby-or" data-i18n="lobby.or">ya da</span>
+            <input id="code" inputmode="latin" autocapitalize="characters"
+                   autocomplete="off" spellcheck="false" maxlength="5" placeholder="ABC12" />
+            <button id="join" data-i18n="lobby.join">Katıl</button>
+          </div>
+          <p id="lobby-said"></p>
         </div>
         <div id="boards">
           <button class="board-pick" data-board="eski">
