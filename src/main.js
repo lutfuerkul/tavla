@@ -2557,10 +2557,16 @@ function openingSettled() {
   // own pair for the turn rather than playing the opening die as it lies, so
   // the pair is put back in the middle of the board together — including the
   // one that has been waiting off it since the game opened.
-  game.phase = "play";
-  resetDice();
-  startTurn(mine > theirs ? HUMAN : COMPUTER);
+  // Held so the two dice can be read before they are swept away, the same as
+  // across a network. Nobody is being waited on while it is held, which is
+  // what stops either of them being picked up again in the meantime.
   updateHud();
+  holdTheOpening(() => {
+    game.phase = "play";
+    resetDice();
+    startTurn(mine > theirs ? HUMAN : COMPUTER);
+    updateHud();
+  });
 }
 
 // The computer plays its whole turn as a sequence, one visible move at a time,
@@ -2653,6 +2659,11 @@ let handedOver = false;
 // been shown is remembered, because the same snapshot arrives more than once
 // and a tie wipes the opening and starts it again.
 let replayingFor = null;
+// Their throw is owed to this board but has not started yet — it waits while
+// anything of ours is in the air. The dice may not be picked up in that gap
+// either: it ends with two of them tumbling across the felt on somebody
+// else's behalf.
+let replayOwed = false;
 let shownOpening = null;
 // The other player's seat: whether anybody is in it, and whether the server
 // has given up on them coming back. Nothing here decides anything — it asks,
@@ -2787,12 +2798,14 @@ function showTheirOpening(state) {
 // is never thrown is a number that never appears, since the panel reads the
 // dice on the felt. It gives up if the board moves on while it is waiting.
 function replayThrow(colour, values, stale, tries = 0) {
-  if (stale()) return;
+  if (stale()) { replayOwed = false; return; }
   if (thrown || heldDice || pending) {
-    if (tries > 40) return;
+    if (tries > 40) { replayOwed = false; return; }
+    replayOwed = true;
     setTimeout(() => replayThrow(colour, values, stale, tries + 1), 400);
     return;
   }
+  replayOwed = false;
   replayingFor = colour;
   forcedRoll = values.slice();
   throwDice(-AWAY);
@@ -2808,6 +2821,21 @@ function announce(word) {
   setTimeout(() => { if (performance.now() >= newsUntil) notice(""); }, NEWS_SHOWN_MS);
 }
 
+// Long enough to look at two dice and see which is the higher. Counted from
+// the moment the last of them stops rolling rather than from the server's
+// word, since a die that is still tumbling has not been read yet.
+const OPENING_HELD_MS = 3500;
+
+function holdTheOpening(done, waited = 0) {
+  const rolling = replayingFor || replayOwed || thrown || heldDice || pending;
+  // Not for ever: a throw that never lands must not strand the game.
+  if (rolling && waited < 15000) {
+    setTimeout(() => holdTheOpening(done, waited + 200), 200);
+    return;
+  }
+  setTimeout(done, OPENING_HELD_MS);
+}
+
 function applyServerState(state) {
   if (!game || state.seq <= remoteSeq) return;
   const wasOpening = game.phase === "opening";
@@ -2815,7 +2843,10 @@ function applyServerState(state) {
     && state.turn === HUMAN && game.history.length && state.phase === "play";
   remoteSeq = state.seq;
 
-  game.phase = state.phase;
+  // The phase is settled with the turn and the dice rather than ahead of them.
+  // Moving it early meant the board could be in the play phase while it still
+  // thought the turn belonged to whoever held it last, and the play phase is
+  // what decides that picking the dice up picks up both of them.
   game.opening = { ...state.opening };
   game.waitingOn = state.waitingOn ?? null;
   watchSeats(state.players);
@@ -2835,6 +2866,7 @@ function applyServerState(state) {
   if (ours) { updateHud(); return; }
 
   const settle = () => {
+    game.phase = state.phase;
     game.pos = unpackServerPosition(state.pos);
     game.turn = state.turn;
     game.dice = state.dice ?? null;
@@ -2883,6 +2915,15 @@ function applyServerState(state) {
   // stuck half way through with no result ever shown.
   const theirs = state.lastMoves?.length && state.lastBy && state.lastBy !== HUMAN;
   if (theirs) playRemoteTurn(state.lastBy, state.lastMoves, settle);
+  // The opening is decided by two dice and it is worth seeing them decide it.
+  // The server settles both in one write, so without this the second die lands
+  // and the board is swept in the same breath — the throw that chose who goes
+  // first was over before it could be read. Their die is thrown here, and the
+  // game does not start until it has come to rest and been left there a while.
+  else if (wasOpening && state.phase === "play") {
+    if (state.opening) showTheirOpening(state);
+    holdTheOpening(settle);
+  }
   else settle();
 }
 
@@ -3591,9 +3632,18 @@ canvas.addEventListener("pointerdown", (e) => {
   // The die waiting off the board is not there to be picked up.
   const reachable = game.phase === "opening" ? [diceMeshes[0]] : diceMeshes;
   const dieHit = raycaster.intersectObjects(reachable, false);
-  const canThrow = game.phase === "opening"
-    ? isHuman(game.waitingOn)
-    : isHuman(game.turn) && !game.dice;
+  // Not while the other player's throw is being shown. The opening ends and
+  // the first turn begins in the same write, so the moment their opening die
+  // is let go of across the felt it is already somebody's turn to throw — and
+  // taking the dice up then takes both of them, that one included, on a board
+  // that has been told it is holding a pair the server has never named.
+  const canThrow = !replayingFor && !replayOwed && (game.phase === "opening"
+    // Nobody being waited on means the opening is over bar the looking, and
+    // two people round one device count as human whoever is asked — so
+    // without the first half of this, a hand could reach in during the pause
+    // and pick a die back up off the settled opening.
+    ? !!game.waitingOn && isHuman(game.waitingOn)
+    : isHuman(game.turn) && !game.dice);
   const reached = dieHit.length ? dieHit[0].object : withinReach(e, canThrow);
   if (reached && !heldDice && canThrow && !game.over) {
     const anchor = pointerOnPlane(liftPlane, new THREE.Vector3())

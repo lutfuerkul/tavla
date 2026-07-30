@@ -28,6 +28,12 @@ const MATCH_TARGET = 3;
 // is empty and gives them straight back when they sit down again.
 const ROLL_SECONDS = 20;
 const MOVE_SECONDS = 60;
+// The opening is not part of that. Nobody is thinking yet — they have just sat
+// down, and the first thing asked of them is a die that decides nothing but
+// who goes first. Taking that throw away from somebody who is still finding
+// the board is the rudest thing the clock can do, so the opening is left alone
+// for half a minute and only then thrown for them.
+const OPEN_SECONDS = 30;
 // And how long before the other player is told they are not coming back.
 const GONE_SECONDS = 180;
 // Long enough that two rooms are never open on the same code, short enough to
@@ -347,7 +353,7 @@ async function isSeated(matchId, uid) {
 // Whoever the match is waiting on, and how long they have had.
 function waitingFor(match) {
   if (match.over) return null;
-  if (match.phase === "opening") return { colour: match.waitingOn, seconds: ROLL_SECONDS };
+  if (match.phase === "opening") return { colour: match.waitingOn, seconds: OPEN_SECONDS };
   if (!match.turn) return null;
   return { colour: match.turn, seconds: match.dice ? MOVE_SECONDS : ROLL_SECONDS };
 }
