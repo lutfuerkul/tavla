@@ -2660,12 +2660,12 @@ let shownOpening = null;
 let theirSeat = null;
 let watchingSeat = false;
 let opponentGone = false;
-// Long enough to read and no longer. It is news, not a state of the board:
-// once it has been said there is nothing to be done about it, and a line that
-// stays put is a line that is still there covering something else an hour
+// Long enough to read and no longer. Both of these are news, not states of
+// the board: once either has been said there is nothing to be done about it,
+// and a line that stays put is a line still covering something else an hour
 // later.
-const GONE_SHOWN_MS = 5000;
-let goneUntil = 0;
+const NEWS_SHOWN_MS = 5000;
+let newsUntil = 0, newsWord = null;
 let asking = false;
 
 // Whoever the match is waiting on, from what the board last heard. Only the
@@ -2798,6 +2798,16 @@ function replayThrow(colour, values, stale, tries = 0) {
   throwDice(-AWAY);
 }
 
+// A line of news, up long enough to read. It is taken down on a timer rather
+// than by the next redraw: the panel is drawn on events, and in a game the
+// computer is playing there may not be another one for minutes.
+function announce(word) {
+  newsWord = word;
+  newsUntil = performance.now() + NEWS_SHOWN_MS;
+  notice(t(word));
+  setTimeout(() => { if (performance.now() >= newsUntil) notice(""); }, NEWS_SHOWN_MS);
+}
+
 function applyServerState(state) {
   if (!game || state.seq <= remoteSeq) return;
   const wasOpening = game.phase === "opening";
@@ -2813,14 +2823,10 @@ function applyServerState(state) {
   const goneNow = state.gone === Rules.other(HUMAN);
   if (goneNow !== opponentGone) {
     opponentGone = goneNow;
-    if (goneNow) {
-      goneUntil = performance.now() + GONE_SHOWN_MS;
-      notice(t("away.gone"));
-      // The panel is redrawn by events, and there may not be another one for
-      // minutes, so taking the line down is put on a timer rather than left to
-      // whatever happens next.
-      setTimeout(() => { if (performance.now() >= goneUntil) notice(""); }, GONE_SHOWN_MS);
-    }
+    // Both halves of the same piece of news. The return is only ever mentioned
+    // to somebody who was told about the leaving, since this only runs on a
+    // change and the leaving is what changed it.
+    announce(goneNow ? "away.gone" : "away.back");
   }
   // The running score of the match belongs to the server too.
   match.ivory = state.score.ivory;
@@ -3143,7 +3149,7 @@ function updateHud() {
         ? (game.dice ? nameOf(game.turn) : t("turn.hotThrow", { name: nameOf(game.turn) }))
         : t(game.dice ? "turn.you" : "turn.youThrow");
   }
-  notice(performance.now() < goneUntil ? t("away.gone") : "");
+  notice(performance.now() < newsUntil ? t(newsWord) : "");
   if (roll && !game.dice) roll.textContent = "—";
   if (undoButton) {
     undoButton.disabled = !game.history.length || !!game.over ||
