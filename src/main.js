@@ -3401,7 +3401,11 @@ function updateHud() {
         ? (game.dice ? nameOf(game.turn) : t("turn.hotThrow", { name: nameOf(game.turn) }))
         : t(game.dice ? "turn.you" : "turn.youThrow");
   }
-  notice(performance.now() < newsUntil ? t(newsWord) : "");
+  // While the computer is still covering for us the line stays up, because
+  // the board looks exactly as it would if we had the table and nothing we do
+  // to it has any effect. News comes and goes; this is a condition.
+  notice(weWereAway ? t("away.waiting")
+    : performance.now() < newsUntil ? t(newsWord) : "");
   if (roll && !game.dice) roll.textContent = "—";
   if (undoButton) {
     undoButton.disabled = !game.history.length || !!game.over ||
