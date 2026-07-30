@@ -2973,6 +2973,12 @@ function applyServerState(state) {
   if (ours) { updateHud(); return; }
 
   const settle = () => {
+    // An ask is answered by the next word about it, whatever that word says.
+    // The opening's answer carries no dice, so a mark left standing through it
+    // survived into the first turn — and the dice the clock threw there looked
+    // like ones we had asked for, and went unshown. Every turn after it was
+    // fine, which is what made it look like a fault of the first turn.
+    if (!state.dice) weAsked = false;
     // The clock starts again on every word from the server, since every word
     // is the server starting it again.
     // Anchored to the server's own stamp rather than to the moment this board
