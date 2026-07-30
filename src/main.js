@@ -2683,6 +2683,16 @@ function undoMove() {
 let remoteSeq = -1;
 let forcedRoll = null;
 let handedOver = false;
+// Set when this board sends a turn, cleared by the server's word about it.
+// game.history cannot answer "did we play this" — startTurn empties it, so by
+// the time the reply arrives our own moves look like somebody else's.
+let weCommitted = false;
+let weAsked = false;
+// The same for a throw: set when this board asks for numbers, cleared when the
+// server's word about them arrives. Comparing the numbers against the faces on
+// the felt cannot answer it — the server writes them down the moment it is
+// asked, seconds before the dice it named come to rest here, so our own throw
+// is still in the air when its own record arrives and looks unmade.
 // The other player's opening die, thrown on this board so it can be seen
 // landing rather than appearing as a number in the panel. What has already
 // been shown is remembered, because the same snapshot arrives more than once
@@ -3013,13 +3023,13 @@ function applyServerState(state) {
     // still the turn's dice.
     //
     // Whose they are does not decide whether they need throwing here — whether
-    // they are already lying on this felt does. Ours, thrown by hand, are
-    // sitting there showing exactly these numbers and want nothing. Ours,
-    // thrown by the clock because we were too slow, are not, and the numbers
-    // would otherwise appear on the panel without a die ever having moved.
-    const onFelt = diceMeshes.map(d => d.userData.die.value).slice().sort().join();
-    const named = state.dice.slice().sort().join();
-    if (onFelt !== named) replayThrow(state.turn, state.dice, () => remoteSeq !== state.seq);
+    // this board asked for them does. Ours, asked for and thrown by hand, are
+    // on their way and want nothing. Ours, thrown by the clock because we were
+    // too slow, were never asked for, and without this the numbers appear on
+    // the panel with no die having moved.
+    const oursInHand = state.turn === HUMAN && weAsked;
+    if (oursInHand) weAsked = false;
+    if (!oursInHand) replayThrow(state.turn, state.dice, () => remoteSeq !== state.seq);
   };
 
   // Something they played since we last looked: watch it happen, then take
@@ -3035,8 +3045,9 @@ function applyServerState(state) {
   // simply arrived where the server said they were. Our own turn, played here
   // by hand, has been watched already and wants no second showing, and it is
   // told apart by what is in hand for it rather than by whose name is on it.
-  const unseen = state.lastMoves?.length && state.lastBy
-    && (state.lastBy !== HUMAN || !game.history.length);
+  const echoed = state.lastBy === HUMAN && weCommitted;
+  if (echoed) weCommitted = false;
+  const unseen = state.lastMoves?.length && state.lastBy && !echoed;
   if (unseen) playRemoteTurn(state.lastBy, state.lastMoves, settle);
   // The opening is decided by two dice and it is worth seeing them decide it.
   // The server settles both in one write, so without this the second die lands
@@ -3059,6 +3070,7 @@ function endTurn() {
   const played = game.history.flatMap(step => step.moves ?? []);
   const handingOver = game.turn;
   handedOver = true;
+  weCommitted = true;
   session.commitTurn(played).then(reply => {
     handedOver = false;
     if (!reply?.ok || game.over || game.turn !== handingOver) return;
@@ -3071,6 +3083,7 @@ function endTurn() {
     // when the turn began and waits to be told the truth.
     console.info("tavla: tur kabul edilmedi —", reason?.message ?? reason);
     handedOver = false;
+    weCommitted = false;
     const start = game.history[0];
     if (start) {
       game.pos = start.pos;
@@ -3669,6 +3682,9 @@ function launchDice() {
   // no time locally and a round trip online, and either way the dice carry on
   // being shaken until the answer and a matching throw are both in hand.
   const token = heldDice;
+  // Asking is what tells our own throw apart from one made for us. A replay
+  // is not asking — it is being told — so it does not count.
+  if (!forcedRoll && session.online) weAsked = true;
   const asked = forcedRoll
     ? Promise.resolve(forcedRoll.slice(0, dice.length))
     : session.roll(dice.length);
