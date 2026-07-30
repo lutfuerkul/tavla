@@ -5,7 +5,7 @@ const canvas = document.querySelector("#scene");
 import * as Rules from "./rules.js";
 import { LANGS, language, setLanguage, t, isIdeographic } from "./i18n.js";
 import { localSession, onlineSession } from "./session.js";
-import { attend, ask, follow, seatTaken, sitAt } from "./firebase.js";
+import { attend, ask, connect, follow, seatTaken, sitAt } from "./firebase.js";
 
 // Where the turns come from. Everything the board cannot decide by itself goes
 // through here, so a game against a server can be a different session rather
@@ -553,6 +553,59 @@ function sitDownTo(id, colour) {
   say("lobby.found");
   location.reload();
 }
+
+// Being found a game rather than arranging one. Either somebody is already
+// waiting, in which case the server pairs the two at once, or this browser
+// takes the waiting place and watches it: whoever arrives next writes the
+// match onto it.
+const findButton = document.querySelector("#find");
+let watchingQueue = null, looking = false;
+
+async function stopLooking() {
+  looking = false;
+  watchingQueue?.();
+  watchingQueue = null;
+  findButton.textContent = t("lobby.find");
+  findButton.classList.remove("looking");
+  hostButton.disabled = joinButton.disabled = false;
+  if (lobbySaid) lobbySaid.textContent = "";
+  ask("siradanCik", {}).catch(() => {});
+}
+
+findButton?.addEventListener("click", async () => {
+  if (looking) return stopLooking();
+  looking = true;
+  findButton.textContent = t("lobby.stop");
+  findButton.classList.add("looking");
+  hostButton.disabled = joinButton.disabled = true;
+  say("lobby.searching");
+  try {
+    const answer = await ask("eslesmeyeGir", {});
+    if (!looking) return;
+    if (answer?.matchId) return sitDownTo(answer.matchId, answer.colour ?? "ivory");
+    // Waiting to be found. Our own place in the queue is the only thing we can
+    // read, and it is the thing the next arrival writes to.
+    const live = await connect();
+    watchingQueue?.();
+    watchingQueue = await follow("sira", live?.uid ?? "", entry => {
+      if (looking && entry.matchId) sitDownTo(entry.matchId, entry.colour ?? "black");
+    });
+  } catch (reason) {
+    console.info("tavla: eşleşme aranamadı —", reason?.message ?? reason);
+    looking = false;
+    findButton.textContent = t("lobby.find");
+    findButton.classList.remove("looking");
+    hostButton.disabled = joinButton.disabled = false;
+    say("lobby.offline");
+  }
+});
+
+// Leaving the page while waiting should not leave a place in the queue behind
+// for somebody to be sent to. Best effort — a queue entry nobody is behind is
+// checked for on the other side too.
+addEventListener("pagehide", () => {
+  if (looking) ask("siradanCik", {}).catch(() => {});
+});
 
 hostButton?.addEventListener("click", async () => {
   hostButton.disabled = joinButton.disabled = true;

@@ -48,6 +48,9 @@ const TEXT = {
   tr: {
     "mode.online": "Çevrimiçi",
     "lobby.host": "Oda kur",
+    "lobby.find": "Rakip bul",
+    "lobby.searching": "Rakip aranıyor…",
+    "lobby.stop": "Aramayı bırak",
     "lobby.join": "Katıl",
     "lobby.or": "ya da",
     "lobby.made": "Kodu arkadaşına söyle:",
@@ -135,6 +138,9 @@ const TEXT = {
   en: {
     "mode.online": "Online",
     "lobby.host": "Make a room",
+    "lobby.find": "Find an opponent",
+    "lobby.searching": "Looking for an opponent…",
+    "lobby.stop": "Stop looking",
     "lobby.join": "Join",
     "lobby.or": "or",
     "lobby.made": "Tell your friend the code:",
@@ -222,6 +228,9 @@ const TEXT = {
   it: {
     "mode.online": "Online",
     "lobby.host": "Crea una stanza",
+    "lobby.find": "Trova avversario",
+    "lobby.searching": "Ricerca avversario…",
+    "lobby.stop": "Interrompi",
     "lobby.join": "Entra",
     "lobby.or": "oppure",
     "lobby.made": "Dai il codice al tuo amico:",
@@ -309,6 +318,9 @@ const TEXT = {
   de: {
     "mode.online": "Online",
     "lobby.host": "Raum eröffnen",
+    "lobby.find": "Gegner suchen",
+    "lobby.searching": "Suche einen Gegner…",
+    "lobby.stop": "Suche beenden",
     "lobby.join": "Beitreten",
     "lobby.or": "oder",
     "lobby.made": "Gib deinem Freund den Code:",
@@ -396,6 +408,9 @@ const TEXT = {
   es: {
     "mode.online": "En línea",
     "lobby.host": "Crear sala",
+    "lobby.find": "Buscar rival",
+    "lobby.searching": "Buscando rival…",
+    "lobby.stop": "Dejar de buscar",
     "lobby.join": "Entrar",
     "lobby.or": "o",
     "lobby.made": "Dale el código a tu amigo:",
@@ -483,6 +498,9 @@ const TEXT = {
   ru: {
     "mode.online": "По сети",
     "lobby.host": "Создать комнату",
+    "lobby.find": "Найти соперника",
+    "lobby.searching": "Поиск соперника…",
+    "lobby.stop": "Прекратить поиск",
     "lobby.join": "Войти",
     "lobby.or": "или",
     "lobby.made": "Передайте другу код:",
@@ -570,6 +588,9 @@ const TEXT = {
   zh: {
     "mode.online": "联机",
     "lobby.host": "创建房间",
+    "lobby.find": "寻找对手",
+    "lobby.searching": "正在寻找对手…",
+    "lobby.stop": "停止寻找",
     "lobby.join": "加入",
     "lobby.or": "或",
     "lobby.made": "把房间号告诉朋友：",
@@ -657,6 +678,9 @@ const TEXT = {
   ja: {
     "mode.online": "オンライン",
     "lobby.host": "部屋を作る",
+    "lobby.find": "対戦相手を探す",
+    "lobby.searching": "対戦相手を探しています…",
+    "lobby.stop": "検索をやめる",
     "lobby.join": "参加",
     "lobby.or": "または",
     "lobby.made": "友達にコードを伝えてください：",

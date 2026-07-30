@@ -200,6 +200,68 @@ export const odayaBak = onCall(settings, async request => {
   return { status: it.status, matchId: it.matchId ?? null };
 });
 
+// --- being found a game -----------------------------------------------
+//
+// A room and a code is two people who already know each other. This is the
+// other way in: you say you would like a game, and either somebody is already
+// waiting — in which case you are put opposite them at once — or you are the
+// one waiting, and the next person along finds you.
+//
+// The queue is one document per player, named by their own uid, so nobody can
+// hold two places in it and coming back twice is not two entries.
+
+// Is that player still at their machine at all? A queue entry outlives the tab
+// that wrote it — a closed browser leaves it behind — so the presence they
+// keep for the lobby count is asked after before anybody is sat down opposite
+// an entry that nobody is behind.
+async function isOnline(uid) {
+  const seen = await rtdb().ref(`presence/${uid}`).get();
+  return seen.exists();
+}
+
+export const eslesmeyeGir = onCall(settings, async request => {
+  const uid = whoIsAsking(request);
+  const queue = db.collection("sira");
+
+  // The longest wait is served first; ten is plenty to look through, since
+  // anybody past that has been waiting long enough to be a stale entry.
+  const waiting = await queue.orderBy("at").limit(10).get();
+  for (const entry of waiting.docs) {
+    if (entry.id === uid || entry.data().matchId) continue;
+    if (!(await isOnline(entry.id))) {
+      await entry.ref.delete().catch(() => {});
+      continue;
+    }
+
+    const match = db.collection("matches").doc();
+    const paired = await db.runTransaction(async tx => {
+      const found = await tx.get(entry.ref);
+      // Somebody else reached them first between the search and here.
+      if (!found.exists || found.data().matchId) return null;
+      // The one who waited takes black, and black opens — the small courtesy
+      // of throwing first goes to whoever sat there longest.
+      tx.set(match, freshMatch({ black: entry.id, ivory: uid }));
+      tx.update(entry.ref, { matchId: match.id, colour: "black" });
+      return { matchId: match.id, colour: "ivory" };
+    });
+    if (paired) {
+      await queue.doc(uid).delete().catch(() => {});
+      return paired;
+    }
+  }
+
+  // Nobody to be found, so wait to be the one found. The entry is watched by
+  // the board that wrote it: whoever arrives next writes the match onto it.
+  await queue.doc(uid).set({ at: now(), matchId: null });
+  return { waiting: true };
+});
+
+export const siradanCik = onCall(settings, async request => {
+  const uid = whoIsAsking(request);
+  await db.collection("sira").doc(uid).delete().catch(() => {});
+  return { ok: true };
+});
+
 // --- the turn ---------------------------------------------------------
 
 // One die each to open, the pair once somebody has started. The numbers are
