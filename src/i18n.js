@@ -46,7 +46,7 @@ export const LANGS = [
 
 const TEXT = {
   tr: {
-    "mode.online": "İnternette",
+    "mode.online": "Çevrimiçi",
     "lobby.host": "Oda kur",
     "lobby.join": "Katıl",
     "lobby.or": "ya da",
