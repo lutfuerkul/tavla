@@ -5,7 +5,7 @@ const canvas = document.querySelector("#scene");
 import * as Rules from "./rules.js";
 import { LANGS, language, setLanguage, t, isIdeographic } from "./i18n.js";
 import { localSession, onlineSession } from "./session.js";
-import { attend, ask, follow } from "./firebase.js";
+import { attend, ask, follow, sitAt } from "./firebase.js";
 
 // Where the turns come from. Everything the board cannot decide by itself goes
 // through here, so a game against a server can be a different session rather
@@ -2240,8 +2240,10 @@ function resetState() {
     thinking: false,
   };
   // Which puts one die off the board and leaves the other in the middle,
-  // because the game opens with a single die passed between the players.
-  resetDice();
+  // because the game opens with a single die passed between the players. At
+  // the very first call there are no dice yet — they are built further down —
+  // and the pair is placed again once there are.
+  if (diceMeshes.length) resetDice();
 }
 
 // What the player may do with the dice still on the table. Empty means the
@@ -2652,6 +2654,53 @@ let handedOver = false;
 // and a tie wipes the opening and starts it again.
 let replayingFor = null;
 let shownOpening = null;
+// The other player's seat: whether anybody is in it, and whether the server
+// has given up on them coming back. Nothing here decides anything — it asks,
+// and the server reads the seat itself before it acts.
+let theirSeat = null;
+let watchingSeat = false;
+let opponentGone = false;
+let asking = false;
+
+// Whoever the match is waiting on, from what the board last heard. Only the
+// other side is worth asking about: our own clock is ours to run down.
+function waitingOnThem() {
+  if (mode !== "online" || !game || game.over) return false;
+  if (game.phase === "opening") return game.waitingOn && game.waitingOn !== HUMAN;
+  return game.turn !== HUMAN;
+}
+
+// Asked while the other side is the one to move, and answered by the server
+// with silence unless something is genuinely wrong. It is deliberately dull:
+// a client that could decide this could hand its opponent's checkers to the
+// computer whenever it felt like it.
+async function askAboutThem() {
+  if (asking || !matchId || !waitingOnThem()) return;
+  asking = true;
+  try { await ask("sure", { matchId }); }
+  catch (reason) { console.info("tavla: saat sorulamadı —", reason?.message ?? reason); }
+  finally { asking = false; }
+}
+
+setInterval(askAboutThem, 5000);
+
+// Claims this seat for as long as the page is open, and watches the one
+// opposite. Firebase clears the claim itself when the connection goes, so a
+// closed tab and a tunnel look the same from the other side.
+function watchSeats(players) {
+  if (watchingSeat || !players || !matchId) return;
+  const theirs = players[Rules.other(HUMAN)];
+  if (!theirs) return;
+  watchingSeat = true;
+  sitAt(matchId, theirs, here => {
+    theirSeat = here;
+    // Empty seat, their move: the computer may take it now rather than in a
+    // minute, and the server checks the seat itself before it does.
+    if (!here) askAboutThem();
+  });
+  // And if it was this browser that went away, it is back.
+  ask("geriGeldim", { matchId }).catch(() => {});
+}
 
 function unpackServerPosition(packed) {
   const points = Array.from({ length: 25 }, () => null);
@@ -2753,6 +2802,13 @@ function applyServerState(state) {
   game.phase = state.phase;
   game.opening = { ...state.opening };
   game.waitingOn = state.waitingOn ?? null;
+  watchSeats(state.players);
+  // Said once the server has given up on them: three minutes of an empty seat.
+  const goneNow = state.gone === Rules.other(HUMAN);
+  if (goneNow !== opponentGone) {
+    opponentGone = goneNow;
+    if (goneNow) notice(t("away.gone"));
+  }
   // The running score of the match belongs to the server too.
   match.ivory = state.score.ivory;
   match.black = state.score.black;
@@ -3746,6 +3802,8 @@ addBoard();
 resetState();
 renderPieces();
 DICE_HOME.forEach(([x, z, face]) => dice(x, z, face));
+// Now that they exist, they can be put where the opening wants them.
+resetDice();
 showDiceValues();
 // The dice on the table at the start are scenery, not a roll: the game waits
 // for you to pick them up and throw them.
