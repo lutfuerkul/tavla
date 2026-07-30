@@ -5,6 +5,7 @@ const canvas = document.querySelector("#scene");
 import * as Rules from "./rules.js";
 import { LANGS, language, setLanguage, t, isIdeographic } from "./i18n.js";
 import { localSession } from "./session.js";
+import { attend } from "./firebase.js";
 
 // Where the turns come from. Everything the board cannot decide by itself goes
 // through here, so a game against a server can be a different session rather
@@ -308,9 +309,26 @@ function applyStaticText() {
   intro?.setAttribute("aria-label", t("door.title"));
   langBar?.setAttribute("aria-label", t("aria.langs"));
   markChosen("lang", language());
+  showOnline();
+}
+
+// How many people are at a table right now, said quietly under the way in. It
+// appears if the connection is there and stays away if it is not: the game is
+// a page that plays perfectly well with no network at all, and it must not
+// look broken to somebody who has none.
+const onlineLine = document.querySelector("#online");
+let onlineCount = null;
+
+function showOnline() {
+  if (!onlineLine) return;
+  if (onlineCount === null) { onlineLine.setAttribute("hidden", ""); return; }
+  onlineLine.textContent = onlineCount === 1
+    ? t("online.one") : t("online.count", { n: onlineCount });
+  onlineLine.removeAttribute("hidden");
 }
 
 applyStaticText();
+attend(here => { onlineCount = here; showOnline(); });
 
 document.querySelectorAll("[data-side]").forEach(button => {
   button.addEventListener("click", () => {
