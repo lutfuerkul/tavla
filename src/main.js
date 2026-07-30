@@ -2848,7 +2848,11 @@ function replayThrow(colour, values, stale, tries = 0) {
   replayOwed = false;
   replayingFor = colour;
   forcedRoll = values.slice();
-  throwDice(-AWAY);
+  // Away from whoever is throwing it, not always towards us. Their throw
+  // crosses the board this way; ours — which is what the clock throws when we
+  // are too slow — has to leave from our own side, or the dice come at us out
+  // of the opposite corner as though somebody else had made our throw.
+  throwDice(colour === HUMAN ? AWAY : -AWAY);
 }
 
 // A line of news, up long enough to read. It is taken down on a timer rather
