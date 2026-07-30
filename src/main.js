@@ -2839,14 +2839,19 @@ const OPEN_SECONDS = 30, ROLL_SECONDS = 20, MOVE_SECONDS = 60;
 const clockBox = document.querySelector("#sayac");
 let clockUntil = 0;
 
-// How long this board has, if it is the one being waited on. Counted from the
-// word arriving rather than from the timestamp on it: the two agree closely
-// enough, and a number that jumps backwards because two machines disagree
-// about the time is worse than one that is a moment late.
-function ourClock(state) {
+// How long whoever is being waited on has left — shown on both boards, not
+// just theirs. Two people playing across a network are each waiting on the
+// other, and a game where you can watch your own time run out but not your
+// opponent's is only half a clock. Whose it is needs no saying: the panel
+// above it is already the turn.
+//
+// Counted from the word arriving rather than from the timestamp on it: the two
+// agree closely enough, and a number that jumps backwards because two machines
+// disagree about the time is worse than one that is a moment late.
+function runningClock(state) {
   if (mode !== "online" || !state || state.over) return 0;
-  if (state.phase === "opening") return state.waitingOn === HUMAN ? OPEN_SECONDS : 0;
-  if (state.turn !== HUMAN) return 0;
+  if (state.phase === "opening") return state.waitingOn ? OPEN_SECONDS : 0;
+  if (!state.turn) return 0;
   return state.dice ? MOVE_SECONDS : ROLL_SECONDS;
 }
 
@@ -2910,7 +2915,7 @@ function applyServerState(state) {
   const settle = () => {
     // The clock starts again on every word from the server, since every word
     // is the server starting it again.
-    const seconds = ourClock(state);
+    const seconds = runningClock(state);
     clockUntil = seconds ? performance.now() + seconds * 1000 : 0;
     showClock();
     game.phase = state.phase;
