@@ -488,10 +488,30 @@ resumeButton?.addEventListener("click", () => {
   location.reload();
 });
 
+// A match that has been won is not one to go back to. The board is allowed to
+// read its own match, so it asks before offering the way in — and forgets the
+// match while it is there, since nothing will ever make it worth returning to.
+async function forgetIfFinished(id) {
+  let stop = null, done = false;
+  const decide = state => {
+    if (done) return;
+    done = true;
+    if (state.matchOver) {
+      localStorage.removeItem(MATCH_KEY);
+      resumeButton?.setAttribute("hidden", "");
+    }
+    stop?.();
+  };
+  stop = await follow("matches", id, decide);
+  if (done) stop?.();
+}
+
 function showLobby() {
   const online = mode === "online";
   lobby?.toggleAttribute("hidden", !online);
-  resumeButton?.toggleAttribute("hidden", !(online && localStorage.getItem(MATCH_KEY)));
+  const waiting = online && localStorage.getItem(MATCH_KEY);
+  resumeButton?.toggleAttribute("hidden", !waiting);
+  if (waiting) forgetIfFinished(waiting).catch(() => {});
   // Your colour comes from the room, so it is not asked for here.
   document.querySelector("#colours")?.toggleAttribute("hidden", online);
   refreshStart();
@@ -2895,11 +2915,11 @@ function replayThrow(colour, values, stale, tries = 0) {
 // A line of news, up long enough to read. It is taken down on a timer rather
 // than by the next redraw: the panel is drawn on events, and in a game the
 // computer is playing there may not be another one for minutes.
-function announce(word) {
+function announce(word, ms = NEWS_SHOWN_MS) {
   newsWord = word;
-  newsUntil = performance.now() + NEWS_SHOWN_MS;
+  newsUntil = performance.now() + ms;
   notice(t(word));
-  setTimeout(() => { if (performance.now() >= newsUntil) notice(""); }, NEWS_SHOWN_MS);
+  setTimeout(() => { if (performance.now() >= newsUntil) notice(""); }, ms);
 }
 
 // Long enough to look at two dice and see which is the higher. Counted from
@@ -2970,13 +2990,19 @@ function applyServerState(state) {
   game.waitingOn = state.waitingOn ?? null;
   watchSeats(state.players);
   // Said once the server has given up on them: three minutes of an empty seat.
-  const goneNow = state.gone === Rules.other(HUMAN);
+  // The moment the chair opposite empties and the computer picks the checkers
+  // up, rather than the three minutes it takes to give up on them. Waiting was
+  // the wrong way round: the news is worth most while you are still wondering
+  // what has happened, and by three minutes you have worked it out.
+  const goneNow = state.away === Rules.other(HUMAN);
   if (goneNow !== opponentGone) {
     opponentGone = goneNow;
     // Both halves of the same piece of news. The return is only ever mentioned
     // to somebody who was told about the leaving, since this only runs on a
     // change and the leaving is what changed it.
-    announce(goneNow ? "away.gone" : "away.back");
+    // Longer for the leaving than for the coming back: one is a thing to take
+    // in and the other is a relief.
+    announce(goneNow ? "away.gone" : "away.back", goneNow ? 10000 : 5000);
   }
   // The running score of the match belongs to the server too.
   match.ivory = state.score.ivory;
