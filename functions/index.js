@@ -77,6 +77,11 @@ function freshMatch(players) {
     required: 0,
     played: 0,
     lastMoves: [],
+    // Who played them. Whose turn it is is not enough to tell: a game is won
+    // on the winner's own turn and the turn stays with them, so a client
+    // reading "their turn, and moves on the board" would replay the winner's
+    // own moves back at them in the other colour.
+    lastBy: null,
     score: { ivory: 0, black: 0 },
     target: MATCH_TARGET,
     over: null,
@@ -235,6 +240,7 @@ export const zarAt = onCall(settings, async request => {
       required: legal[0].length,
       played: 0,
       lastMoves: [],
+      lastBy: null,
       updatedAt: now(),
       seq: match.seq + 1,
     });
@@ -289,6 +295,7 @@ export const turuOyna = onCall(settings, async request => {
     const patch = {
       pos: packPosition(pos),
       lastMoves: moves,
+      lastBy: mine,
       dice: null,
       remaining: [],
       required: 0,
@@ -339,6 +346,7 @@ export const yeniOyun = onCall(settings, async request => {
       required: 0,
       played: 0,
       lastMoves: [],
+      lastBy: null,
       over: null,
       updatedAt: now(),
       seq: match.seq + 1,

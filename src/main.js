@@ -240,16 +240,24 @@ function sitDown() {
   }
 }
 
-// Picking the board that is already on the table just opens the door. Picking
-// the other one has to reload, because the two differ in the geometry of the
-// points and that is settled before the scene is built.
-// The door. A mode, a table and a colour, and then it opens — and it stays
-// shut until the table and the checkers have both been picked, because those
-// two are what get built and there is no sensible default to build without
-// being asked.
-let pickedBoard = null;
-let pickedColour = null;
-let pickedSide = null;
+// The door. One question is asked and the rest are offered: who you are
+// playing has no sensible default, so nothing opens until it has been chosen,
+// while the table, the checkers and the side you gather on all start at
+// Otomatik and are settled by a coin if they are left there. Somebody who
+// wants a particular walnut board on the right can say so; somebody who just
+// wants to play presses one button.
+const SETTINGS = [
+  { key: "board", label: "setting.board",
+    options: [["auto", "option.auto"], ["eski", "board.eski"],
+              ["klasik", "board.klasik"], ["star", "board.star"]] },
+  { key: "colour", label: "setting.colour",
+    options: [["auto", "option.auto"], ["black", "colour.black"], ["ivory", "colour.ivory"]] },
+  { key: "side", label: "setting.side",
+    options: [["auto", "option.auto"], ["sol", "side.left"], ["sag", "side.right"]] },
+];
+
+let pickedMode = null;
+const picked = { board: "auto", colour: "auto", side: "auto" };
 const startButton = document.querySelector("#start");
 
 function markChosen(attribute, value) {
@@ -262,37 +270,124 @@ function refreshStart() {
   // Online has no "start" of its own — the lobby does that, and the colour
   // belongs to the room rather than to the player.
   startButton.toggleAttribute("hidden", mode === "online");
-  startButton.disabled = !(pickedBoard && pickedColour && pickedSide);
+  startButton.disabled = !pickedMode;
 }
 
 document.querySelectorAll("[data-mode]").forEach(button => {
   button.addEventListener("click", () => {
-    mode = button.dataset.mode;
+    pickedMode = mode = button.dataset.mode;
     localStorage.setItem(MODE_KEY, mode);
     markChosen("mode", mode);
     showLobby();
+    refreshStart();
     // Changing this does not reload the page, and it decides where the camera
     // sits, so the seat is taken again here rather than only at startup.
     fitCamera();
   });
 });
-markChosen("mode", mode);
 
-document.querySelectorAll("[data-board]").forEach(button => {
-  button.addEventListener("click", () => {
-    pickedBoard = button.dataset.board;
-    markChosen("board", pickedBoard);
-    refreshStart();
-  });
-});
+// Each setting is a box with what it is set to written in it. Clicking it
+// drops the choices underneath; clicking one of those takes it. Only one is
+// ever open, and anything else pressed anywhere closes it.
+const settingsBox = document.querySelector("#settings");
+const drawers = [];
 
-document.querySelectorAll("[data-colour]").forEach(button => {
-  button.addEventListener("click", () => {
-    pickedColour = button.dataset.colour;
-    markChosen("colour", pickedColour);
-    refreshStart();
-  });
-});
+function closeDrawers(except) {
+  for (const drawer of drawers) if (drawer !== except) drawer.close();
+}
+
+function buildSettings() {
+  if (!settingsBox) return;
+  for (const setting of SETTINGS) {
+    const row = document.createElement("div");
+    row.className = "setting";
+
+    const name = document.createElement("span");
+    name.className = "setting-name";
+    name.dataset.i18n = setting.label;
+    row.append(name);
+
+    const box = document.createElement("div");
+    box.className = "setting-box";
+
+    const face = document.createElement("button");
+    face.type = "button";
+    face.className = "setting-value";
+    face.setAttribute("aria-haspopup", "listbox");
+    face.setAttribute("aria-expanded", "false");
+    box.append(face);
+
+    const list = document.createElement("div");
+    list.className = "setting-list";
+    list.setAttribute("role", "listbox");
+    list.hidden = true;
+
+    const drawer = {
+      close: () => {
+        list.hidden = true;
+        face.setAttribute("aria-expanded", "false");
+        box.classList.remove("open");
+      },
+    };
+    drawers.push(drawer);
+
+    for (const [value, label] of setting.options) {
+      const choice = document.createElement("button");
+      choice.type = "button";
+      choice.className = "setting-choice";
+      choice.dataset[setting.key] = value;
+      choice.dataset.i18n = label;
+      choice.setAttribute("role", "option");
+      choice.addEventListener("click", () => {
+        picked[setting.key] = value;
+        drawer.close();
+        applyStaticText();
+      });
+      list.append(choice);
+    }
+
+    face.addEventListener("click", () => {
+      const opening = list.hidden;
+      closeDrawers(drawer);
+      if (!opening) return drawer.close();
+      list.hidden = false;
+      face.setAttribute("aria-expanded", "true");
+      box.classList.add("open");
+    });
+
+    box.append(list);
+    row.append(box);
+    settingsBox.append(row);
+    setting.face = face;
+  }
+}
+
+buildSettings();
+
+// A press anywhere that is not inside an open box shuts it.
+addEventListener("pointerdown", event => {
+  if (!event.target.closest?.(".setting-box")) closeDrawers();
+}, true);
+
+// What each box says it is set to, and which line in it is ticked. Written
+// here rather than at the moment of choosing so that changing language
+// rewrites them along with everything else.
+function showSettings() {
+  for (const setting of SETTINGS) {
+    const value = picked[setting.key];
+    const label = setting.options.find(([v]) => v === value)?.[1];
+    if (setting.face && label) setting.face.textContent = t(label);
+    markChosen(setting.key, value);
+  }
+}
+
+// Otomatik, decided. A coin rather than a preference: the game has no opinion
+// about which board is nicer or which colour wins more, and there is nothing
+// to gain by leaning one way, so each is drawn evenly.
+const anyOf = list => list[Math.floor(Math.random() * list.length)];
+const settle = key => picked[key] === "auto"
+  ? anyOf(SETTINGS.find(s => s.key === key).options.slice(1).map(([v]) => v))
+  : picked[key];
 
 // The languages. Every line the game says is looked up at the moment it is
 // written, so choosing one here rewrites the door and the board on the spot —
@@ -328,6 +423,7 @@ function applyStaticText() {
   intro?.setAttribute("aria-label", t("door.title"));
   langBar?.setAttribute("aria-label", t("aria.langs"));
   markChosen("lang", language());
+  showSettings();
   showOnline();
 }
 
@@ -386,8 +482,11 @@ function sitDownTo(id, colour) {
   localStorage.setItem(MATCH_KEY, id);
   localStorage.setItem(COLOUR_KEY, colour);
   localStorage.setItem(MODE_KEY, "online");
-  if (pickedBoard) localStorage.setItem(BOARD_KEY, pickedBoard);
-  if (pickedSide) localStorage.setItem(SIDE_KEY, pickedSide);
+  // The table and the side are still the player's own: two people across a
+  // network need not be looking at the same walnut, and each gathers on the
+  // side they gather on. Only the colour comes from the room.
+  localStorage.setItem(BOARD_KEY, settle("board"));
+  localStorage.setItem(SIDE_KEY, settle("side"));
   sessionStorage.setItem("tavla.sitOnLoad", "1");
   say("lobby.found");
   location.reload();
@@ -433,25 +532,20 @@ joinButton?.addEventListener("click", async () => {
 
 showLobby();
 
-document.querySelectorAll("[data-side]").forEach(button => {
-  button.addEventListener("click", () => {
-    pickedSide = button.dataset.side;
-    markChosen("side", pickedSide);
-    refreshStart();
-  });
-});
-
 // The table, the colour and the side are all settled before the scene is built
 // — the first lays out the points, the other two decide where the camera sits
-// and which way round the numbering runs — so picking something other than
-// what is already standing there means starting the page again.
+// and which way round the numbering runs — so anything other than what is
+// already standing there means starting the page again. Otomatik is drawn
+// here, at the last moment, so pressing the button twice can give two
+// different tables rather than the same one it happened to pick on the way in.
 const sideName = SIDE === -1 ? "sag" : "sol";
 startButton?.addEventListener("click", () => {
-  if (!pickedBoard || !pickedColour || !pickedSide) return;
-  if (pickedBoard === boardName && pickedColour === HUMAN && pickedSide === sideName) return sitDown();
-  localStorage.setItem(BOARD_KEY, pickedBoard);
-  localStorage.setItem(COLOUR_KEY, pickedColour);
-  localStorage.setItem(SIDE_KEY, pickedSide);
+  if (!pickedMode) return;
+  const board = settle("board"), colour = settle("colour"), side = settle("side");
+  if (board === boardName && colour === HUMAN && side === sideName) return sitDown();
+  localStorage.setItem(BOARD_KEY, board);
+  localStorage.setItem(COLOUR_KEY, colour);
+  localStorage.setItem(SIDE_KEY, side);
   sessionStorage.setItem("tavla.sitOnLoad", "1");
   location.reload();
 });
@@ -2528,23 +2622,38 @@ function playRemoteTurn(colour, moves, done) {
   game.thinking = true;
   updateHud();
   let i = 0;
+  const finish = () => {
+    game.thinking = false;
+    game.lifted = null;
+    done();
+  };
   const step = () => {
-    if (i >= moves.length) {
-      game.thinking = false;
-      done();
-      return;
-    }
+    if (i >= moves.length) return finish();
     const move = moves[i++];
-    const { fromKey, from, to } = seatOfMove(colour, move);
-    game.lifted = { key: fromKey };
-    renderPieces();
-    slideChecker(colour, from, to, () => {
-      game.lifted = null;
-      game.pos = Rules.applyMove(game.pos, colour, move);
+    // Watching is a courtesy; the server's word for where the board ended up
+    // is not. If a move cannot be walked through here for any reason, the
+    // walk is abandoned and the position taken as given, so a turn that
+    // cannot be animated can never leave the board stranded half way.
+    try {
+      const { fromKey, from, to } = seatOfMove(colour, move);
+      game.lifted = { key: fromKey };
       renderPieces();
-      updateHud();
-      setTimeout(step, 260);
-    });
+      slideChecker(colour, from, to, () => {
+        game.lifted = null;
+        try {
+          game.pos = Rules.applyMove(game.pos, colour, move);
+        } catch (reason) {
+          console.info("tavla: hamle oynatılamadı —", reason?.message ?? reason);
+          return finish();
+        }
+        renderPieces();
+        updateHud();
+        setTimeout(step, 260);
+      });
+    } catch (reason) {
+      console.info("tavla: hamle oynatılamadı —", reason?.message ?? reason);
+      finish();
+    }
   };
   setTimeout(step, 380);
 }
@@ -2594,9 +2703,14 @@ function applyServerState(state) {
   };
 
   // Something they played since we last looked: watch it happen, then take
-  // the server's word for where the board ended up.
-  const theirs = state.lastMoves?.length && state.turn === HUMAN;
-  if (theirs) playRemoteTurn(Rules.other(HUMAN), state.lastMoves, settle);
+  // the server's word for where the board ended up. Who played it has to be
+  // asked rather than worked out from whose turn it is — a game is won on the
+  // winner's own turn and the turn stays with them, so reading it off the turn
+  // had the winner watching their own winning moves played back at them in the
+  // other colour, which is not a thing the rules allow and left the board
+  // stuck half way through with no result ever shown.
+  const theirs = state.lastMoves?.length && state.lastBy && state.lastBy !== HUMAN;
+  if (theirs) playRemoteTurn(state.lastBy, state.lastMoves, settle);
   else settle();
 }
 

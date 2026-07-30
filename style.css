@@ -68,13 +68,57 @@ button:hover { background: #edbb69; }
    the way the Latin labels space their capitals only breaks the words up. */
 body.ideographic .eyebrow, body.ideographic .mode-pick, body.ideographic .board-pick,
 body.ideographic .colour-pick, body.ideographic .side-pick, body.ideographic #start,
+body.ideographic .setting-name, body.ideographic .setting-value,
+body.ideographic .setting-choice,
 body.ideographic #undo, body.ideographic #done, body.ideographic #menu,
 body.ideographic .confirm-actions button, body.ideographic #notice,
 body.ideographic #hud span, body.ideographic #hud strong {
   text-transform: none; letter-spacing: .02em; }
 
-/* Two boards to choose from at the door. */
-#boards { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+/* The three settings under the modes: a name on the left, a box on the right
+   saying what it is set to. Clicking the box drops its choices underneath it.
+   They are stacked, one to a line, and the boxes line up with each other
+   however long the names are. */
+/* On a panel of its own, because behind the door is a lit board: a label the
+   colour of aged brass reads perfectly against felt and disappears entirely
+   over a stack of ivory checkers. */
+#settings { display: grid; gap: .6rem; justify-content: center;
+  margin: .4rem auto 1.8rem; padding: 1.1rem 1.3rem;
+  background: rgba(9,7,5,.82); border: 1px solid rgba(229,173,84,.18);
+  border-radius: .7rem; box-shadow: 0 20px 50px rgba(0,0,0,.5); }
+.setting { display: grid; grid-template-columns: 9.5rem 12rem; gap: .9rem;
+  align-items: center; text-align: left; }
+.setting-name { font-size: .74rem; letter-spacing: .1em; text-transform: uppercase;
+  color: #cdbb9a; }
+.setting-box { position: relative; }
+.setting-value { display: block; width: 100%; justify-self: stretch; text-align: left;
+  padding: .68rem 2.1rem .68rem 1rem;
+  font: 500 .8rem/1 "DM Mono", monospace; letter-spacing: .08em; text-transform: uppercase;
+  color: #e7dcc4; background: rgba(20,15,10,.85);
+  border: 1px solid rgba(229,173,84,.32); border-radius: .45rem; box-shadow: none;
+  cursor: pointer; transition: color .2s ease, border-color .2s ease, background .2s ease; }
+.setting-value:hover { border-color: rgba(229,173,84,.75); color: #f6ecd6;
+  background: rgba(36,26,16,.92); }
+/* The little wedge that says the box opens. It turns over when it has. */
+.setting-value::after { content: ""; position: absolute; right: .9rem; top: 50%;
+  width: .42rem; height: .42rem; margin-top: -.28rem; border-right: 1px solid #c9a163;
+  border-bottom: 1px solid #c9a163; transform: rotate(45deg);
+  transition: transform .2s ease; }
+.setting-box.open .setting-value { border-color: #e5ad54; color: #f6ecd6; }
+.setting-box.open .setting-value::after { transform: rotate(-135deg); margin-top: -.1rem; }
+.setting-list { position: absolute; z-index: 3; left: 0; right: 0; top: calc(100% + .3rem);
+  display: flex; flex-direction: column; padding: .25rem;
+  background: rgba(14,10,7,.97); border: 1px solid rgba(229,173,84,.45);
+  border-radius: .45rem; box-shadow: 0 18px 40px rgba(0,0,0,.65); }
+.setting-list[hidden] { display: none; }
+.setting-choice { width: 100%; justify-self: stretch; text-align: left;
+  padding: .55rem .8rem; font: 500 .78rem/1 "DM Mono", monospace;
+  letter-spacing: .08em; text-transform: uppercase; color: #cbbfa6;
+  background: transparent; border: 0; border-radius: .3rem; box-shadow: none;
+  cursor: pointer; transition: color .15s ease, background .15s ease; }
+.setting-choice:hover { color: #f6ecd6; background: rgba(229,173,84,.16); }
+.setting-choice.chosen { color: #0d0a06; background: #e5ad54; }
+
 /* The three rows of the door are the same kind of choice, so they are the same
    button: dark until it is picked, gold once it is, with no doubt about which
    of them has been. */
@@ -186,9 +230,14 @@ body.ideographic #hud span, body.ideographic #hud strong {
     justify-content: center; gap: .3rem; margin-bottom: 1rem; }
   .lang-pick { width: auto; font-size: .66rem; padding: .3rem .5rem; }
   #modes { margin: 1.1rem 0 .9rem; }
-  #boards, #colours, #sides { gap: .55rem; }
-  #colours, #sides { margin-top: .8rem; }
   .mode-pick, .board-pick, .colour-pick, .side-pick { padding: .62rem 1.05rem; font-size: .78rem; }
+  /* A phone is not wide enough for a name and a box side by side without one
+     of them being squeezed, so the name goes above its box. */
+  #settings { gap: .7rem; margin: .2rem auto 1.2rem; padding: .9rem 1rem;
+    width: 100%; max-width: 20rem; }
+  .setting { grid-template-columns: 1fr; gap: .25rem; }
+  .setting-name { font-size: .66rem; }
+  .setting-value { padding: .6rem 2rem .6rem .85rem; font-size: .76rem; }
   #start { margin-top: 1.3rem; padding: .78rem 2.2rem; }
 }
 
@@ -204,7 +253,8 @@ body.ideographic #hud span, body.ideographic #hud strong {
   h1 { font-size: clamp(1.8rem, 4.4vw, 2.6rem); }
   .eyebrow { margin-bottom: .5rem; }
   #modes { margin: .7rem 0 0; }
-  #colours, #sides { margin-top: .6rem; }
+  #settings { gap: .35rem; margin: .6rem auto .4rem; padding: .7rem .9rem; }
+  .setting-value { padding: .5rem 1.9rem .5rem .8rem; }
   #start { margin-top: .8rem; padding: .6rem 2rem; }
   .board-pick { padding: .55rem 1rem; }
 }
