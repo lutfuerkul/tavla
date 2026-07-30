@@ -2660,6 +2660,12 @@ let shownOpening = null;
 let theirSeat = null;
 let watchingSeat = false;
 let opponentGone = false;
+// Long enough to read and no longer. It is news, not a state of the board:
+// once it has been said there is nothing to be done about it, and a line that
+// stays put is a line that is still there covering something else an hour
+// later.
+const GONE_SHOWN_MS = 5000;
+let goneUntil = 0;
 let asking = false;
 
 // Whoever the match is waiting on, from what the board last heard. Only the
@@ -2807,7 +2813,14 @@ function applyServerState(state) {
   const goneNow = state.gone === Rules.other(HUMAN);
   if (goneNow !== opponentGone) {
     opponentGone = goneNow;
-    if (goneNow) notice(t("away.gone"));
+    if (goneNow) {
+      goneUntil = performance.now() + GONE_SHOWN_MS;
+      notice(t("away.gone"));
+      // The panel is redrawn by events, and there may not be another one for
+      // minutes, so taking the line down is put on a timer rather than left to
+      // whatever happens next.
+      setTimeout(() => { if (performance.now() >= goneUntil) notice(""); }, GONE_SHOWN_MS);
+    }
   }
   // The running score of the match belongs to the server too.
   match.ivory = state.score.ivory;
@@ -3130,7 +3143,7 @@ function updateHud() {
         ? (game.dice ? nameOf(game.turn) : t("turn.hotThrow", { name: nameOf(game.turn) }))
         : t(game.dice ? "turn.you" : "turn.youThrow");
   }
-  notice(opponentGone ? t("away.gone") : "");
+  notice(performance.now() < goneUntil ? t("away.gone") : "");
   if (roll && !game.dice) roll.textContent = "—";
   if (undoButton) {
     undoButton.disabled = !game.history.length || !!game.over ||
