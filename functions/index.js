@@ -484,10 +484,19 @@ export const sure = onCall(settings, async request => {
       if (!it.awaySince?.[waiting.colour]) {
         patch.awaySince = { ...(it.awaySince ?? {}), [waiting.colour]: now() };
       }
-    } else {
-      patch.away = null;
-      patch.gone = null;
-      patch.awaySince = {};
+    } else if (it.away === waiting.colour || it.gone === waiting.colour
+               || it.awaySince?.[waiting.colour]) {
+      // Only ever our own mark. Clearing it outright said "they are back" about
+      // whoever happened to be marked, and the player being acted for here is
+      // usually the one still sitting there — so every turn the clock played
+      // for them withdrew the news about their absent opponent, and the next
+      // turn put it back. The board opposite watched them leave and return and
+      // leave again while they had not moved.
+      patch.away = it.away === waiting.colour ? null : (it.away ?? null);
+      patch.gone = it.gone === waiting.colour ? null : (it.gone ?? null);
+      const since = { ...(it.awaySince ?? {}) };
+      delete since[waiting.colour];
+      patch.awaySince = since;
     }
     tx.update(ref, patch);
     return { acted: true, by: waiting.colour, seated };
