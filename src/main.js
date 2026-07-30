@@ -477,9 +477,21 @@ function say(key, code) {
   }
 }
 
+// A match this browser is already sitting at. Closing the tab drops the seat
+// but not the match — it is written down here, and without a way back the
+// player was stranded at the door with a game of theirs still on the table.
+const resumeButton = document.querySelector("#resume");
+
+resumeButton?.addEventListener("click", () => {
+  // The same door the lobby goes through when a room is matched.
+  sessionStorage.setItem("tavla.sitOnLoad", "1");
+  location.reload();
+});
+
 function showLobby() {
   const online = mode === "online";
   lobby?.toggleAttribute("hidden", !online);
+  resumeButton?.toggleAttribute("hidden", !(online && localStorage.getItem(MATCH_KEY)));
   // Your colour comes from the room, so it is not asked for here.
   document.querySelector("#colours")?.toggleAttribute("hidden", online);
   refreshStart();
