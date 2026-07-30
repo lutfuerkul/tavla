@@ -2683,6 +2683,11 @@ let asking = false;
 // other side is worth asking about: our own clock is ours to run down.
 function waitingOnThem() {
   if (mode !== "online" || !game || game.over) return false;
+  // With the chair opposite empty there is nobody left to ask on our behalf,
+  // and a game with one player in it would stop where it stood — so the board
+  // asks whoever's turn it is. The server checks the empty chair itself before
+  // it agrees to anything, so this is a nudge rather than a claim.
+  if (theirSeat === false) return true;
   if (game.phase === "opening") return game.waitingOn && game.waitingOn !== HUMAN;
   return game.turn !== HUMAN;
 }
@@ -2826,6 +2831,43 @@ function announce(word) {
 // word, since a die that is still tumbling has not been read yet.
 const OPENING_HELD_MS = 3500;
 
+// What the server allows, written down again here so it can be counted out on
+// the panel. Nothing is decided by these — the clock that matters runs on the
+// server and is read by the other board — but a turn that can be taken away
+// without warning is a turn taken away unfairly, so it is shown.
+const OPEN_SECONDS = 30, ROLL_SECONDS = 20, MOVE_SECONDS = 60;
+const clockBox = document.querySelector("#sayac");
+let clockUntil = 0;
+
+// How long this board has, if it is the one being waited on. Counted from the
+// word arriving rather than from the timestamp on it: the two agree closely
+// enough, and a number that jumps backwards because two machines disagree
+// about the time is worse than one that is a moment late.
+function ourClock(state) {
+  if (mode !== "online" || !state || state.over) return 0;
+  if (state.phase === "opening") return state.waitingOn === HUMAN ? OPEN_SECONDS : 0;
+  if (state.turn !== HUMAN) return 0;
+  return state.dice ? MOVE_SECONDS : ROLL_SECONDS;
+}
+
+// Written as a clock rather than as a bare number of seconds: under a row of
+// dice a lone "18" reads as a die, and this way it needs no words in any of
+// the eight languages.
+function showClock() {
+  if (!clockBox) return;
+  const left = clockUntil - performance.now();
+  if (left <= 0) {
+    clockBox.textContent = "";
+    clockBox.classList.remove("running", "nearly");
+    return;
+  }
+  const seconds = Math.ceil(left / 1000);
+  clockBox.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+  clockBox.classList.add("running");
+  clockBox.classList.toggle("nearly", seconds <= 5);
+}
+setInterval(showClock, 250);
+
 function holdTheOpening(done, waited = 0) {
   const rolling = replayingFor || replayOwed || thrown || heldDice || pending;
   // Not for ever: a throw that never lands must not strand the game.
@@ -2866,6 +2908,11 @@ function applyServerState(state) {
   if (ours) { updateHud(); return; }
 
   const settle = () => {
+    // The clock starts again on every word from the server, since every word
+    // is the server starting it again.
+    const seconds = ourClock(state);
+    clockUntil = seconds ? performance.now() + seconds * 1000 : 0;
+    showClock();
     game.phase = state.phase;
     game.pos = unpackServerPosition(state.pos);
     game.turn = state.turn;

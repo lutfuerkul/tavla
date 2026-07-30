@@ -44,6 +44,17 @@ button:hover { background: #edbb69; }
 #hud div { min-width: 7.2rem; padding: .7rem .8rem; border-left: 1px solid rgba(231,182,102,.75); background: linear-gradient(90deg, rgba(8,6,4,.7), transparent); }
 #hud span { display: block; color: #ad9470; font-size: .55rem; letter-spacing: .15em; margin-bottom: .3rem; }
 #hud strong { color: #eee3ce; font-size: .72rem; letter-spacing: .06em; }
+/* The clock the server is keeping, under the dice it is counting for. It sits
+   in the same box rather than in one of its own so that the panel stays three
+   readings wide, and it holds its line whether or not there is a number in it
+   — a row that grows and shrinks as the turn changes is worse to sit in front
+   of than one that is sometimes blank. Warmer than the label above it while it
+   runs on, and red once there is very little of it left. */
+#hud small { display: block; min-height: .9rem; margin-top: .3rem;
+  font: 500 .62rem/1.45 "DM Mono", monospace; letter-spacing: .1em;
+  color: #ad9470; font-variant-numeric: tabular-nums; }
+#hud small.running { color: #e5ad54; }
+#hud small.nearly { color: #e08a5c; }
 #crosshair { position: fixed; z-index: 1; top: 50%; left: 50%; width: 8px; height: 8px; margin: -4px; border: 1px solid rgba(247,235,207,.8); border-radius: 50%; opacity: 0; transition: opacity .35s; }
 #crosshair.visible { opacity: .8; }
 @media (max-width: 600px) {
