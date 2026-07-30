@@ -8,6 +8,7 @@
 // sure the copy has not drifted, and firebase.json runs it before every deploy.
 
 import { initializeApp } from "firebase-admin/app";
+import { getDatabase } from "firebase-admin/database";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { randomInt } from "node:crypto";
@@ -21,6 +22,14 @@ const REGION = "europe-west1";
 const settings = { region: REGION, cors: true };
 
 const MATCH_TARGET = 3;
+// How long somebody who is sitting there may take. A player who is present
+// but not playing is given room to think; one who is not there at all is not
+// waited for at all — the computer takes their checkers the moment their seat
+// is empty and gives them straight back when they sit down again.
+const ROLL_SECONDS = 20;
+const MOVE_SECONDS = 60;
+// And how long before the other player is told they are not coming back.
+const GONE_SECONDS = 180;
 // Long enough that two rooms are never open on the same code, short enough to
 // read down a telephone. I, O, 0 and 1 are left out: they are the letters
 // people get wrong.
@@ -317,6 +326,174 @@ export const turuOyna = onCall(settings, async request => {
 
     tx.update(ref, patch);
     return { ok: true, over: patch.over ?? null };
+  });
+});
+
+// --- the clock ---------------------------------------------------------
+//
+// Nothing here runs on its own: a function is only awake while it is being
+// called. That is enough, because the one person who minds that the game has
+// stopped is the other player, and they are sitting in front of it. Their
+// board asks; this decides. Asking is not a claim — who is where and how long
+// it has been are both read here, so a client cannot talk the computer into
+// taking its opponent's checkers.
+const rtdb = () => getDatabase();
+
+async function isSeated(matchId, uid) {
+  const seat = await rtdb().ref(`masalar/${matchId}/${uid}`).get();
+  return seat.exists();
+}
+
+// Whoever the match is waiting on, and how long they have had.
+function waitingFor(match) {
+  if (match.over) return null;
+  if (match.phase === "opening") return { colour: match.waitingOn, seconds: ROLL_SECONDS };
+  if (!match.turn) return null;
+  return { colour: match.turn, seconds: match.dice ? MOVE_SECONDS : ROLL_SECONDS };
+}
+
+// One thing the absent or idle player would have done. Rolling and playing are
+// separate steps so the other board sees the dice land before the checkers
+// move, exactly as it would if a person were doing it.
+function actFor(match, colour) {
+  if (match.phase === "opening") {
+    const value = d6();
+    const opening = { ...match.opening, [colour]: value };
+    const patch = { opening, updatedAt: now(), seq: match.seq + 1 };
+    if (opening.ivory === null || opening.black === null) {
+      patch.waitingOn = opening.black === null ? "black" : "ivory";
+    } else if (opening.ivory === opening.black) {
+      patch.opening = { ivory: null, black: null };
+      patch.waitingOn = "black";
+    } else {
+      patch.phase = "play";
+      patch.waitingOn = null;
+      patch.turn = opening.black > opening.ivory ? "black" : "ivory";
+      patch.dice = null;
+      patch.remaining = [];
+    }
+    return patch;
+  }
+
+  const pos = unpackPosition(match.pos);
+  if (!match.dice) {
+    const dice = [d6(), d6()];
+    const remaining = Rules.diceFor(dice[0], dice[1]);
+    return {
+      dice, remaining,
+      required: Rules.legalSequences(pos, colour, remaining)[0].length,
+      played: 0, lastMoves: [], lastBy: null,
+      updatedAt: now(), seq: match.seq + 1,
+    };
+  }
+
+  // The dice are on the board and nobody is playing them, so the same engine
+  // the computer plays by picks the turn.
+  const moves = Rules.chooseSequence(pos, colour, match.remaining) ?? [];
+  let after = pos;
+  for (const move of moves) after = Rules.applyMove(after, colour, move);
+
+  const patch = {
+    pos: packPosition(after),
+    lastMoves: moves,
+    lastBy: colour,
+    dice: null,
+    remaining: [],
+    required: 0,
+    played: 0,
+    updatedAt: now(),
+    seq: match.seq + 1,
+  };
+  const won = Rules.winner(after);
+  if (won) {
+    const value = Rules.gameValue(after);
+    const score = { ...match.score, [won]: match.score[won] + value };
+    patch.score = score;
+    patch.over = { winner: won, value };
+    patch.matchOver = score[won] >= match.target ? won : null;
+  } else {
+    patch.turn = Rules.other(colour);
+  }
+  return patch;
+}
+
+// "The other side has stopped playing." Called by the player who is waiting,
+// as often as they like; it does nothing at all unless it should.
+export const sure = onCall(settings, async request => {
+  const uid = whoIsAsking(request);
+  const id = String(request.data?.matchId ?? "");
+  const ref = db.collection("matches").doc(id);
+
+  const found = await ref.get();
+  if (!found.exists) throw new HttpsError("not-found", "Maç bulunamadı.");
+  const match = found.data();
+  const mine = colourOf(match, uid);
+  if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
+
+  const waiting = waitingFor(match);
+  // Nobody is being waited for, or it is the caller — you cannot run your own
+  // clock down and hand your checkers to the computer.
+  if (!waiting || waiting.colour === mine) return { acted: false };
+
+  const theirUid = match.players[waiting.colour];
+  const seated = await isSeated(id, theirUid);
+  const since = match.updatedAt?.toDate?.() ?? new Date(0);
+  const waited = (Date.now() - since.getTime()) / 1000;
+
+  // Somebody sitting there is given their time to think. An empty seat is not
+  // waited for: the computer takes over at once and gives the checkers back
+  // the moment they sit down again.
+  if (seated && waited < waiting.seconds) return { acted: false, seated: true };
+
+  return db.runTransaction(async tx => {
+    const fresh = await tx.get(ref);
+    const it = fresh.data();
+    // It has moved on since it was read; whoever moved it is playing.
+    if (it.seq !== match.seq) return { acted: false };
+
+    const patch = actFor(it, waiting.colour);
+    // How long the seat has been empty, so the other board can say why the
+    // computer is playing rather than leaving them to guess.
+    if (!seated) {
+      const emptyFor = it.awaySince?.[waiting.colour]
+        ? (Date.now() - it.awaySince[waiting.colour].toDate().getTime()) / 1000
+        : 0;
+      patch.away = waiting.colour;
+      patch.gone = emptyFor >= GONE_SECONDS ? waiting.colour : (it.gone ?? null);
+      if (!it.awaySince?.[waiting.colour]) {
+        patch.awaySince = { ...(it.awaySince ?? {}), [waiting.colour]: now() };
+      }
+    } else {
+      patch.away = null;
+      patch.gone = null;
+      patch.awaySince = {};
+    }
+    tx.update(ref, patch);
+    return { acted: true, by: waiting.colour, seated };
+  });
+});
+
+// The player is back at the table: whatever was said about them being gone is
+// withdrawn, and the computer stops playing their checkers.
+export const geriGeldim = onCall(settings, async request => {
+  const uid = whoIsAsking(request);
+  const id = String(request.data?.matchId ?? "");
+  const ref = db.collection("matches").doc(id);
+  return db.runTransaction(async tx => {
+    const found = await tx.get(ref);
+    if (!found.exists) throw new HttpsError("not-found", "Maç bulunamadı.");
+    const match = found.data();
+    const mine = colourOf(match, uid);
+    if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
+    if (match.away !== mine && match.gone !== mine) return { ok: true };
+    tx.update(ref, {
+      away: match.away === mine ? null : match.away ?? null,
+      gone: match.gone === mine ? null : match.gone ?? null,
+      awaySince: {},
+      updatedAt: now(),
+      seq: match.seq + 1,
+    });
+    return { ok: true };
   });
 });
 

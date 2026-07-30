@@ -5,7 +5,7 @@ const canvas = document.querySelector("#scene");
 import * as Rules from "./rules.js";
 import { LANGS, language, setLanguage, t, isIdeographic } from "./i18n.js";
 import { localSession, onlineSession } from "./session.js";
-import { attend, ask, follow } from "./firebase.js";
+import { attend, ask, follow, sitAt } from "./firebase.js";
 
 // Where the turns come from. Everything the board cannot decide by itself goes
 // through here, so a game against a server can be a different session rather
@@ -239,6 +239,7 @@ scene.environmentIntensity = BOARD.room.env;
 function sitDown() {
   intro.classList.add("hidden");
   hud.classList.add("visible");
+  guardBack();
   // Sitting at an online table is where the session changes hands: from here
   // the dice and the turns come from the server, and the match is watched.
   // Not before — at the door there is no board to put anything on.
@@ -1427,11 +1428,16 @@ function dice(x, z, face) {
 // Where the pair sits before anybody has thrown: both in one half of the
 // board, the way they land after a throw. A new game puts them back here.
 const DICE_HOME = [[-4.1, .35, 5], [-3.0, -.5, 4]];
+// The opening is thrown with one die, passed between the two players, and the
+// other one waits off the board where it cannot be picked up by mistake. It
+// comes back to the felt when the game itself starts.
+const DICE_REST = [FIELD_HALF_X + 1.9, 1.4, 3];
 
 function resetDice() {
+  const parked = game?.phase === "opening";
   diceMeshes.forEach((die, i) => {
-    const [x, z, face] = DICE_HOME[i] ?? DICE_HOME[0];
-    die.position.set(x, FELT_Y + DIE_SIZE / 2, z);
+    const [x, z, face] = parked && i === 1 ? DICE_REST : (DICE_HOME[i] ?? DICE_HOME[0]);
+    die.position.set(parked && i === 1 ? MIRROR * x : x, FELT_Y + DIE_SIZE / 2, z);
     die.quaternion.setFromEuler(FACE_UP[face]);
     Object.assign(die.userData.die, {
       mode: "rest", value: face, still: 0, touching: false, offContact: 0, cocked: false,
@@ -1516,10 +1522,17 @@ function wakeDie(die) {
 function showDiceValues() {
   const readout = hud.querySelectorAll("strong")[1];
   if (!readout) return;
-  const rolling = diceMeshes.some(d => d.userData.die.mode !== "rest");
-  readout.textContent = rolling
-    ? "…"
-    : diceMeshes.map(d => d.userData.die.value).join(" · ");
+  if (diceMeshes.some(d => d.userData.die.mode !== "rest")) { readout.textContent = "…"; return; }
+  if (!game) { readout.textContent = "—"; return; }
+  // The opening is read out a die at a time with a name against each, which
+  // is the panel's business rather than this one's.
+  if (game.phase === "opening") return updateHud();
+  // Dice lying where they were left are not a roll. The game used to open
+  // with the panel reading out whatever faces the pair happened to be resting
+  // on, before anybody had touched them — a roll nobody had made.
+  readout.textContent = game.dice
+    ? diceMeshes.map(d => d.userData.die.value).join(" · ")
+    : "—";
 }
 
 // Each die is a rigid body: mass, inertia, a linear velocity and an angular
@@ -2226,6 +2239,11 @@ function resetState() {
     over: null,
     thinking: false,
   };
+  // Which puts one die off the board and leaves the other in the middle,
+  // because the game opens with a single die passed between the players. At
+  // the very first call there are no dice yet — they are built further down —
+  // and the pair is placed again once there are.
+  if (diceMeshes.length) resetDice();
 }
 
 // What the player may do with the dice still on the table. Empty means the
@@ -2238,15 +2256,20 @@ function movesNow() {
 // One die each in the opening, the pair once the game is under way. Yours is
 // the first, the opponent's the second, so the two never share a die.
 function diceInHand(colour) {
-  if (game.phase !== "opening") return diceMeshes;
-  return [colour === HUMAN ? diceMeshes[0] : diceMeshes[1]];
+  // One die opens the game, whoever is throwing it: it is passed between the
+  // two of them the way it is at a table, so both boards watch the same die
+  // land in the same order rather than each keeping one of a pair.
+  return game.phase === "opening" ? [diceMeshes[0]] : diceMeshes;
 }
 
 // Whose throw it is. In the opening that is whoever is being waited on rather
 // than whose turn it is — the turn has not been settled yet, and two people
 // sharing a screen both throw before it has been.
 function thrower() {
-  return game.phase === "opening" ? game.waitingOn : game.turn;
+  // Online, the other player's die is thrown here after the server has already
+  // moved on to waiting for us, so who is being waited on is the wrong answer
+  // while that replay is in the air. Whoever the board is throwing for wins.
+  return replayingFor ?? (game.phase === "opening" ? game.waitingOn : game.turn);
 }
 
 const pointKey = point => String(point);
@@ -2390,6 +2413,7 @@ function finishIfWon() {
 // the board being redrawn after the computer's turn handed you the faces the
 // computer had just played.
 let thrown = false;
+let thrownDice = null;
 
 function onDiceSettled() {
   if (!game || game.over || !thrown) return;
@@ -2397,7 +2421,7 @@ function onDiceSettled() {
 
   // A die leaning on a wall or standing on a checker is not a roll. It goes
   // back in the hand and is thrown again by whoever threw it.
-  const rolled = diceInHand(thrower() || game.turn);
+  const rolled = thrownDice ?? diceInHand(thrower() || game.turn);
   // The numbers the session named are the numbers of this throw, whatever the
   // dice happen to have come to rest on.
   if (wanted && wanted.length === rolled.length) {
@@ -2418,16 +2442,22 @@ function onDiceSettled() {
     // already named, so it goes again to the same numbers rather than asking
     // for new ones. With nothing to replay there is nothing to re-throw.
     if (mode === "online") {
-      if (!game.dice?.length) return;
-      forcedRoll = game.dice.slice();
+      const again = game.phase === "opening"
+        ? (shownOpening === null ? [] : [shownOpening])
+        : (game.dice ?? []);
+      if (!again.length) { replayingFor = null; return; }
+      forcedRoll = again.slice();
     }
     setTimeout(() => throwDice(-AWAY), 1400);
     return;
   }
+  // The throw stood, so the board is nobody's proxy any more.
+  replayingFor = null;
   game.cocked = false;
+  thrownDice = null;
   if (game.phase === "opening") return openingSettled();
   if (game.dice) return;
-  const values = diceMeshes.map(d => d.userData.die.value);
+  const values = rolled.map(d => d.userData.die.value);
   if (values.length < 2 || values.some(v => !v)) return;
   game.dice = values;
   game.remaining = Rules.diceFor(values[0], values[1]);
@@ -2524,8 +2554,11 @@ function openingSettled() {
   }
 
   // The opening die only settles who goes first. Whoever it is throws their
-  // own pair for the turn rather than playing the two opening dice as they lie.
+  // own pair for the turn rather than playing the opening die as it lies, so
+  // the pair is put back in the middle of the board together — including the
+  // one that has been waiting off it since the game opened.
   game.phase = "play";
+  resetDice();
   startTurn(mine > theirs ? HUMAN : COMPUTER);
   updateHud();
 }
@@ -2615,6 +2648,65 @@ function undoMove() {
 let remoteSeq = -1;
 let forcedRoll = null;
 let handedOver = false;
+// The other player's opening die, thrown on this board so it can be seen
+// landing rather than appearing as a number in the panel. What has already
+// been shown is remembered, because the same snapshot arrives more than once
+// and a tie wipes the opening and starts it again.
+let replayingFor = null;
+let shownOpening = null;
+// The other player's seat: whether anybody is in it, and whether the server
+// has given up on them coming back. Nothing here decides anything — it asks,
+// and the server reads the seat itself before it acts.
+let theirSeat = null;
+let watchingSeat = false;
+let opponentGone = false;
+// Long enough to read and no longer. Both of these are news, not states of
+// the board: once either has been said there is nothing to be done about it,
+// and a line that stays put is a line still covering something else an hour
+// later.
+const NEWS_SHOWN_MS = 5000;
+let newsUntil = 0, newsWord = null;
+let asking = false;
+
+// Whoever the match is waiting on, from what the board last heard. Only the
+// other side is worth asking about: our own clock is ours to run down.
+function waitingOnThem() {
+  if (mode !== "online" || !game || game.over) return false;
+  if (game.phase === "opening") return game.waitingOn && game.waitingOn !== HUMAN;
+  return game.turn !== HUMAN;
+}
+
+// Asked while the other side is the one to move, and answered by the server
+// with silence unless something is genuinely wrong. It is deliberately dull:
+// a client that could decide this could hand its opponent's checkers to the
+// computer whenever it felt like it.
+async function askAboutThem() {
+  if (asking || !matchId || !waitingOnThem()) return;
+  asking = true;
+  try { await ask("sure", { matchId }); }
+  catch (reason) { console.info("tavla: saat sorulamadı —", reason?.message ?? reason); }
+  finally { asking = false; }
+}
+
+setInterval(askAboutThem, 5000);
+
+// Claims this seat for as long as the page is open, and watches the one
+// opposite. Firebase clears the claim itself when the connection goes, so a
+// closed tab and a tunnel look the same from the other side.
+function watchSeats(players) {
+  if (watchingSeat || !players || !matchId) return;
+  const theirs = players[Rules.other(HUMAN)];
+  if (!theirs) return;
+  watchingSeat = true;
+  sitAt(matchId, theirs, here => {
+    theirSeat = here;
+    // Empty seat, their move: the computer may take it now rather than in a
+    // minute, and the server checks the seat itself before it does.
+    if (!here) askAboutThem();
+  });
+  // And if it was this browser that went away, it is back.
+  ask("geriGeldim", { matchId }).catch(() => {});
+}
 
 function unpackServerPosition(packed) {
   const points = Array.from({ length: 25 }, () => null);
@@ -2666,8 +2758,59 @@ function playRemoteTurn(colour, moves, done) {
   setTimeout(step, 380);
 }
 
+// The other player's opening die, thrown on this board so it can be watched
+// landing rather than appearing as a number in the panel. The server wrote
+// down what it said the moment it was asked and moved straight on to waiting
+// for us, so the board has to be told whose throw it is showing — see
+// thrower(). What has already been shown is remembered, because the same
+// value would otherwise be thrown again on the next snapshot.
+function showTheirOpening(state) {
+  const theirs = Rules.other(HUMAN);
+  const value = state.opening?.[theirs] ?? null;
+  // Two equal dice wipe the opening and it starts again, so what was shown is
+  // forgotten along with it and the same number may be thrown a second time.
+  if (value === null) { shownOpening = null; return; }
+  if (shownOpening === value) return;
+  shownOpening = value;
+  // An opening die does not go stale when the server says something new — it
+  // goes stale when the opening itself is wiped or thrown again. Judging it by
+  // the snapshot meant the first player to throw never saw the second die: it
+  // arrives in the same breath as the start of the game, the player who won
+  // the opening throws their pair a moment later, and that newer word threw
+  // the waiting replay away.
+  replayThrow(theirs, [value], () => shownOpening !== value);
+}
+
+// The other side's throw, shown on this board. One at a time, and never on
+// top of one of our own: if anything is in the air, in a hand, or still being
+// searched for, theirs waits its turn rather than being dropped — a die that
+// is never thrown is a number that never appears, since the panel reads the
+// dice on the felt. It gives up if the board moves on while it is waiting.
+function replayThrow(colour, values, stale, tries = 0) {
+  if (stale()) return;
+  if (thrown || heldDice || pending) {
+    if (tries > 40) return;
+    setTimeout(() => replayThrow(colour, values, stale, tries + 1), 400);
+    return;
+  }
+  replayingFor = colour;
+  forcedRoll = values.slice();
+  throwDice(-AWAY);
+}
+
+// A line of news, up long enough to read. It is taken down on a timer rather
+// than by the next redraw: the panel is drawn on events, and in a game the
+// computer is playing there may not be another one for minutes.
+function announce(word) {
+  newsWord = word;
+  newsUntil = performance.now() + NEWS_SHOWN_MS;
+  notice(t(word));
+  setTimeout(() => { if (performance.now() >= newsUntil) notice(""); }, NEWS_SHOWN_MS);
+}
+
 function applyServerState(state) {
   if (!game || state.seq <= remoteSeq) return;
+  const wasOpening = game.phase === "opening";
   const ours = !state.over && !handedOver
     && state.turn === HUMAN && game.history.length && state.phase === "play";
   remoteSeq = state.seq;
@@ -2675,6 +2818,16 @@ function applyServerState(state) {
   game.phase = state.phase;
   game.opening = { ...state.opening };
   game.waitingOn = state.waitingOn ?? null;
+  watchSeats(state.players);
+  // Said once the server has given up on them: three minutes of an empty seat.
+  const goneNow = state.gone === Rules.other(HUMAN);
+  if (goneNow !== opponentGone) {
+    opponentGone = goneNow;
+    // Both halves of the same piece of news. The return is only ever mentioned
+    // to somebody who was told about the leaving, since this only runs on a
+    // change and the leaving is what changed it.
+    announce(goneNow ? "away.gone" : "away.back");
+  }
   // The running score of the match belongs to the server too.
   match.ivory = state.score.ivory;
   match.black = state.score.black;
@@ -2690,8 +2843,15 @@ function applyServerState(state) {
     game.played = 0;
     game.history = [];
     // A turn with no dice on it yet is a turn waiting to be thrown, whoever's
-    // it is. Locally startTurn says so; here the server does.
-    if (state.phase === "play") thrown = !!state.dice;
+    // it is. Locally startTurn says so; here the server does. Only the empty
+    // case may be written: this flag means "a throw is in the air", and
+    // setting it because the server has numbers is setting it before anything
+    // has been thrown — which is exactly what stopped the other player's dice
+    // from ever being thrown on this board.
+    if (state.phase === "play" && !state.dice) thrown = false;
+    // The opening is over: the pair goes back to the middle together, the one
+    // that was waiting off the board along with it.
+    if (wasOpening && state.phase === "play") resetDice();
     game.over = state.over ?? null;
     if (game.over) setTimeout(showResult, 1100);
     // Only one of the two presses "another game"; the other finds out here,
@@ -2703,11 +2863,15 @@ function applyServerState(state) {
     // Their dice, thrown here so they can be seen landing rather than simply
     // appearing. The numbers are the server's; the tumble is found the same
     // way ours is.
-    if (state.phase !== "play" || !state.dice) return;
-    if (state.turn !== HUMAN && !thrown) {
-      forcedRoll = state.dice.slice();
-      throwDice(-AWAY);
-    }
+    // Their opening die arrives in the same write that ends the opening — the
+    // server settles both at once — so it is looked for whether or not the
+    // phase has moved on. Reading only the opening phase left the second of
+    // the two dice unthrown on the board that was waiting to see it.
+    if (state.opening) showTheirOpening(state);
+    if (state.phase === "opening" || !state.dice) return;
+    // A turn's dice, on the other hand, are only worth showing while they are
+    // still the turn's dice.
+    if (state.turn !== HUMAN) replayThrow(state.turn, state.dice, () => remoteSeq !== state.seq);
   };
 
   // Something they played since we last looked: watch it happen, then take
@@ -2781,6 +2945,31 @@ confirmBox?.addEventListener("click", event => {
 });
 addEventListener("keydown", event => {
   if (event.key === "Escape") closeConfirm();
+});
+
+// On a phone or a tablet the back button is the way out of everything, and
+// here it was the way out of the game: one press and the board was gone, mid
+// throw, with nothing asked. It cannot be refused outright — a page may not
+// hold somebody against their will, and browsers are right about that — but a
+// spare entry can be put on the history when the board opens. The first press
+// then spends that entry and comes back here as a popstate instead of leaving
+// the page; the question is asked and the entry put back, so the press after
+// it is caught too. Pressing back again with the question already up takes it
+// as Vazgeç, which is what a back button ought to mean.
+//
+// Only where there is a back button to press. A desktop's is a browser
+// control rather than a thumb's reflex, and quietly disarming it is not this
+// game's business.
+function guardBack() {
+  if (!HANDHELD) return;
+  history.pushState({ tavla: "masa" }, "");
+}
+
+addEventListener("popstate", () => {
+  if (!HANDHELD || !intro.classList.contains("hidden")) return;
+  guardBack();
+  if (confirmBox?.hasAttribute("hidden")) confirmBox.removeAttribute("hidden");
+  else closeConfirm();
 });
 
 // The end of a game is not the end of the match, so it asks: another game, or
@@ -2894,6 +3083,17 @@ function notice(text) {
   noticeBox.classList.toggle("visible", !!text);
 }
 
+// The opening, a die each with a name against it: two people round one device
+// are named, and across a network or against the computer it is you and them.
+function openingLine() {
+  const mine = game.opening[HUMAN], theirs = game.opening[COMPUTER];
+  if (mine == null && theirs == null) return "—";
+  const [ours, others] = mode === "hotseat"
+    ? [nameOf(HUMAN), nameOf(COMPUTER)]
+    : [t("you"), t("opponent")];
+  return `${ours} ${mine ?? "—"} · ${others} ${theirs ?? "—"}`;
+}
+
 function updateHud() {
   const [side, roll, score] = hud.querySelectorAll("strong");
   // The score and the camera stand whatever else the panel is saying, so they
@@ -2919,12 +3119,24 @@ function updateHud() {
           ? (mode === "hotseat"
               ? t("turn.openHot", { name: nameOf(game.waitingOn) }) : t("turn.openThrow"))
           : t("turn.openWait");
-      if (roll) {
-        const a = game.opening[HUMAN], b = game.opening[COMPUTER];
-        roll.textContent = a || b ? `${a ?? "—"} · ${b ?? "—"}` : "—";
-      }
+      if (roll) roll.textContent = openingLine();
       if (doneButton) doneButton.disabled = true;
       if (undoButton) undoButton.disabled = true;
+      return;
+    }
+    // The opening is settled but nothing has been thrown for the turn yet:
+    // the two dice stay on the panel with their names against them, and the
+    // one they gave the game to is said outright rather than left to be
+    // worked out from which of the numbers is bigger.
+    if (!game.over && game.phase === "play" && !game.dice && !thrown
+        && game.opening[HUMAN] != null && game.opening[COMPUTER] != null) {
+      side.textContent = mode === "hotseat"
+        ? t("open.startsHot", { name: nameOf(game.turn) })
+        : t(game.turn === HUMAN ? "open.youStart" : "open.theyStart");
+      if (roll) roll.textContent = openingLine();
+      if (doneButton) doneButton.disabled = true;
+      if (undoButton) undoButton.disabled = true;
+      notice("");
       return;
     }
     side.textContent = game.over
@@ -2937,7 +3149,7 @@ function updateHud() {
         ? (game.dice ? nameOf(game.turn) : t("turn.hotThrow", { name: nameOf(game.turn) }))
         : t(game.dice ? "turn.you" : "turn.youThrow");
   }
-  notice("");
+  notice(performance.now() < newsUntil ? t(newsWord) : "");
   if (roll && !game.dice) roll.textContent = "—";
   if (undoButton) {
     undoButton.disabled = !game.history.length || !!game.over ||
@@ -3033,7 +3245,12 @@ function stepHeldDice(dt) {
     applySpin(die, entry.shakeSpin, dt);
   });
 
-  if (heldDice.released && elapsed >= MIN_SHAKE_MS && !heldDice.launching) {
+  // Two seconds in the hand and they go, whether or not the finger has come
+  // off them. Holding on used to keep them there for as long as you liked,
+  // which made every throw a different length and let somebody sit on the
+  // dice; now the shake is the same two seconds for everybody, in every mode,
+  // and letting go early does not shorten it either.
+  if (elapsed >= MIN_SHAKE_MS && !heldDice.launching) {
     heldDice.launching = true;
     launchDice();
   }
@@ -3041,13 +3258,13 @@ function stepHeldDice(dt) {
 
 // The frame loop is the natural place to fire the throw, but on a machine
 // that is only managing a frame every second or two the dice would sit in the
-// hand well past the shake. A timer armed at release keeps the throw on time
-// regardless; whichever gets there first wins.
+// hand well past the shake. A timer armed when they are picked up keeps the
+// throw on time regardless; whichever gets there first wins.
 function armThrow() {
   const remaining = MIN_SHAKE_MS - (performance.now() - heldDice.startedAt);
   const token = heldDice;
   setTimeout(() => {
-    if (heldDice === token && heldDice.released && !heldDice.launching) {
+    if (heldDice === token && !heldDice.launching) {
       heldDice.launching = true;
       launchDice();
     }
@@ -3320,6 +3537,11 @@ function launchDice() {
 function releasePending() {
   if (!pending?.ready) return;
   const { dice, aim, seed, want } = pending;
+  // Which dice actually left the hand. A roll is those and nothing else —
+  // asking the board again once they have landed gives the wrong answer when
+  // a single opening die comes to rest after the server has already ended the
+  // opening, because by then the board says both dice are in play.
+  thrownDice = dice;
   restoreDice(pending.from);
   armLaunch(dice, aim, seed ?? Math.imul(pending.tried, 2654435761));
   wanted = want;
@@ -3366,7 +3588,9 @@ canvas.addEventListener("pointerdown", (e) => {
 
   // Dice sit on top of everything, so they get first claim on the pointer.
   // Grabbing either one scoops up the whole pair.
-  const dieHit = raycaster.intersectObjects(diceMeshes, false);
+  // The die waiting off the board is not there to be picked up.
+  const reachable = game.phase === "opening" ? [diceMeshes[0]] : diceMeshes;
+  const dieHit = raycaster.intersectObjects(reachable, false);
   const canThrow = game.phase === "opening"
     ? isHuman(game.waitingOn)
     : isHuman(game.turn) && !game.dice;
@@ -3405,6 +3629,9 @@ canvas.addEventListener("pointerdown", (e) => {
     };
     canvas.setPointerCapture?.(e.pointerId);
     canvas.style.cursor = "grabbing";
+    // Armed the moment they are picked up rather than when they are let go
+    // of: two seconds is two seconds whether or not the finger comes off.
+    armThrow();
     showDiceValues();
     return;
   }
@@ -3594,6 +3821,8 @@ addBoard();
 resetState();
 renderPieces();
 DICE_HOME.forEach(([x, z, face]) => dice(x, z, face));
+// Now that they exist, they can be put where the opening wants them.
+resetDice();
 showDiceValues();
 // The dice on the table at the start are scenery, not a roll: the game waits
 // for you to pick them up and throw them.

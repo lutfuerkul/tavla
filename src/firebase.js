@@ -93,6 +93,38 @@ export function connect() {
   return opening;
 }
 
+// The same claim, but for a seat at one match rather than for the lobby. It is
+// what tells the other player that somebody is still sitting opposite: when it
+// goes, the server may hand their checkers to the computer until it comes back.
+//
+// `watch` is called with true or false every time the other player's claim
+// appears or disappears, and never called at all without a connection.
+export async function sitAt(matchId, theirUid, watch) {
+  const live = await connect();
+  if (!live) return () => {};
+  const { database, db, uid } = live;
+  const { ref, onValue, onDisconnect, set, remove, serverTimestamp } = database;
+
+  const mine = ref(db, `masalar/${matchId}/${uid}`);
+  const theirs = ref(db, `masalar/${matchId}/${theirUid}`);
+
+  // Re-made every time the connection comes back, with the standing
+  // instruction to clear it re-lodged along with it.
+  const stopConnected = onValue(ref(db, ".info/connected"), snapshot => {
+    if (snapshot.val() !== true) return;
+    onDisconnect(mine).remove();
+    set(mine, { at: serverTimestamp() });
+  });
+
+  const stopThem = onValue(theirs, snapshot => watch(snapshot.exists()));
+
+  return () => {
+    stopConnected();
+    stopThem();
+    remove(mine);
+  };
+}
+
 // Says this browser is here for as long as it is, and takes it back the moment
 // it is not. The server does the taking back: onDisconnect is a standing
 // instruction left with it, so a closed tab, a dead battery or a tunnel are all
