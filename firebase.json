@@ -1,0 +1,21 @@
+{
+  "functions": {
+    "source": "functions",
+    "codebase": "default",
+    "predeploy": ["node functions/kural-esitligi.mjs"]
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "database": {
+    "rules": "firebase/database.rules.json"
+  },
+  "emulators": {
+    "auth": { "port": 9099 },
+    "functions": { "port": 5001 },
+    "firestore": { "port": 8181 },
+    "database": { "port": 9000 },
+    "ui": { "enabled": false },
+    "singleProjectMode": true
+  }
+}

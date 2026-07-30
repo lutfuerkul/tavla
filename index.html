@@ -12,34 +12,23 @@
       <section id="intro" aria-label="Oyun başlangıcı">
         <nav id="langs" aria-label="Dil"></nav>
         <p class="eyebrow" data-i18n="eyebrow">3B TAVLA</p>
-        <h1 data-i18n="door.title">Masa ve taş seçimi</h1>
+        <h1 data-i18n="door.title">Ayarlar</h1>
         <div id="modes">
           <button class="mode-pick" data-mode="solo" data-i18n="mode.solo">Bilgisayara karşı</button>
           <button class="mode-pick" data-mode="hotseat" data-i18n="mode.hotseat">İki kişi · aynı cihaz</button>
+          <button class="mode-pick" data-mode="online" data-i18n="mode.online">Çevrimiçi</button>
         </div>
-        <div id="boards">
-          <button class="board-pick" data-board="eski">
-            <span class="board-name" data-i18n="board.eski">Ahşap kaplama</span>
-          </button>
-          <button class="board-pick" data-board="klasik">
-            <span class="board-name" data-i18n="board.klasik">Klasik masa</span>
-          </button>
-          <button class="board-pick" data-board="star">
-            <span class="board-name" data-i18n="board.star">Ceviz kaplama masa</span>
-          </button>
+        <div id="lobby" hidden>
+          <div class="lobby-row">
+            <button id="host" data-i18n="lobby.host">Oda kur</button>
+            <span class="lobby-or" data-i18n="lobby.or">ya da</span>
+            <input id="code" inputmode="latin" autocapitalize="characters"
+                   autocomplete="off" spellcheck="false" maxlength="5" placeholder="ABC12" />
+            <button id="join" data-i18n="lobby.join">Katıl</button>
+          </div>
+          <p id="lobby-said"></p>
         </div>
-        <div id="colours">
-          <button class="colour-pick" data-colour="black">
-            <span class="chip chip-black" aria-hidden="true"></span><span data-i18n="colour.black">Siyah</span>
-          </button>
-          <button class="colour-pick" data-colour="ivory">
-            <span class="chip chip-ivory" aria-hidden="true"></span><span data-i18n="colour.ivory">Kemik</span>
-          </button>
-        </div>
-        <div id="sides">
-          <button class="side-pick" data-side="sol" data-i18n="side.left">Sol tarafa topla</button>
-          <button class="side-pick" data-side="sag" data-i18n="side.right">Sağ tarafa topla</button>
-        </div>
+        <div id="settings"></div>
         <button id="start" data-i18n="start" disabled>Oyuna başla</button>
         <p id="online" hidden></p>
       </section>

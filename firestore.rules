@@ -1,0 +1,28 @@
+rules_version = '2';
+
+// Nobody writes. Every change to a room or a match goes through a function,
+// which is the only place the rules of tavla are enforced and the only place
+// the dice are thrown — a client that could write here could deal itself a
+// double six and move its checkers anywhere it liked.
+//
+// Reading is narrow too: a match is readable by the two people playing it, and
+// a room by anyone who knows its code, which is the whole point of a code.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /rooms/{code} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    match /matches/{id} {
+      allow read: if request.auth != null
+        && request.auth.uid in resource.data.players.values();
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
