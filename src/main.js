@@ -1428,11 +1428,16 @@ function dice(x, z, face) {
 // Where the pair sits before anybody has thrown: both in one half of the
 // board, the way they land after a throw. A new game puts them back here.
 const DICE_HOME = [[-4.1, .35, 5], [-3.0, -.5, 4]];
+// The opening is thrown with one die, passed between the two players, and the
+// other one waits off the board where it cannot be picked up by mistake. It
+// comes back to the felt when the game itself starts.
+const DICE_REST = [FIELD_HALF_X + 1.9, 1.4, 3];
 
 function resetDice() {
+  const parked = game?.phase === "opening";
   diceMeshes.forEach((die, i) => {
-    const [x, z, face] = DICE_HOME[i] ?? DICE_HOME[0];
-    die.position.set(x, FELT_Y + DIE_SIZE / 2, z);
+    const [x, z, face] = parked && i === 1 ? DICE_REST : (DICE_HOME[i] ?? DICE_HOME[0]);
+    die.position.set(parked && i === 1 ? MIRROR * x : x, FELT_Y + DIE_SIZE / 2, z);
     die.quaternion.setFromEuler(FACE_UP[face]);
     Object.assign(die.userData.die, {
       mode: "rest", value: face, still: 0, touching: false, offContact: 0, cocked: false,
@@ -2234,6 +2239,9 @@ function resetState() {
     over: null,
     thinking: false,
   };
+  // Which puts one die off the board and leaves the other in the middle,
+  // because the game opens with a single die passed between the players.
+  resetDice();
 }
 
 // What the player may do with the dice still on the table. Empty means the
@@ -2246,8 +2254,10 @@ function movesNow() {
 // One die each in the opening, the pair once the game is under way. Yours is
 // the first, the opponent's the second, so the two never share a die.
 function diceInHand(colour) {
-  if (game.phase !== "opening") return diceMeshes;
-  return [colour === HUMAN ? diceMeshes[0] : diceMeshes[1]];
+  // One die opens the game, whoever is throwing it: it is passed between the
+  // two of them the way it is at a table, so both boards watch the same die
+  // land in the same order rather than each keeping one of a pair.
+  return game.phase === "opening" ? [diceMeshes[0]] : diceMeshes;
 }
 
 // Whose throw it is. In the opening that is whoever is being waited on rather
@@ -2542,8 +2552,11 @@ function openingSettled() {
   }
 
   // The opening die only settles who goes first. Whoever it is throws their
-  // own pair for the turn rather than playing the two opening dice as they lie.
+  // own pair for the turn rather than playing the opening die as it lies, so
+  // the pair is put back in the middle of the board together — including the
+  // one that has been waiting off it since the game opened.
   game.phase = "play";
+  resetDice();
   startTurn(mine > theirs ? HUMAN : COMPUTER);
   updateHud();
 }
@@ -2732,6 +2745,7 @@ function replayThrow(colour, values, stale, tries = 0) {
 
 function applyServerState(state) {
   if (!game || state.seq <= remoteSeq) return;
+  const wasOpening = game.phase === "opening";
   const ours = !state.over && !handedOver
     && state.turn === HUMAN && game.history.length && state.phase === "play";
   remoteSeq = state.seq;
@@ -2760,6 +2774,9 @@ function applyServerState(state) {
     // has been thrown — which is exactly what stopped the other player's dice
     // from ever being thrown on this board.
     if (state.phase === "play" && !state.dice) thrown = false;
+    // The opening is over: the pair goes back to the middle together, the one
+    // that was waiting off the board along with it.
+    if (wasOpening && state.phase === "play") resetDice();
     game.over = state.over ?? null;
     if (game.over) setTimeout(showResult, 1100);
     // Only one of the two presses "another game"; the other finds out here,
@@ -3496,7 +3513,9 @@ canvas.addEventListener("pointerdown", (e) => {
 
   // Dice sit on top of everything, so they get first claim on the pointer.
   // Grabbing either one scoops up the whole pair.
-  const dieHit = raycaster.intersectObjects(diceMeshes, false);
+  // The die waiting off the board is not there to be picked up.
+  const reachable = game.phase === "opening" ? [diceMeshes[0]] : diceMeshes;
+  const dieHit = raycaster.intersectObjects(reachable, false);
   const canThrow = game.phase === "opening"
     ? isHuman(game.waitingOn)
     : isHuman(game.turn) && !game.dice;
