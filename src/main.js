@@ -2542,15 +2542,7 @@ function openingSettled() {
   // being waited for now would put our own throw down in their name. Who
   // throws next, whether it was a tie and who ends up starting all arrive on
   // the next snapshot; the other player's die is thrown on their own board.
-  //
-  // What is written down is only that this die has been seen landing here, so
-  // that the server's word about it is not thrown a second time on top of it.
-  // A die the clock throws for us is never marked, and so it does get thrown.
-  if (mode === "online") {
-    const die = diceMeshes[0]?.userData.die;
-    if (die?.mode === "rest" && die.value && !replayingFor) shownOpening[HUMAN] = die.value;
-    return;
-  }
+  if (mode === "online") return;
 
   const who = game.waitingOn;
   if (!who) return;
@@ -2825,13 +2817,19 @@ function playRemoteTurn(colour, moves, done) {
 // An opening die does not go stale when the server says something new — it
 // goes stale when the opening itself is wiped, which is what a tie does.
 function showOpening(state) {
-  for (const colour of [Rules.other(HUMAN), HUMAN]) {
-    const value = state.opening?.[colour] ?? null;
-    if (value === null) { shownOpening[colour] = null; continue; }
-    if (shownOpening[colour] === value) continue;
-    shownOpening[colour] = value;
-    replayThrow(colour, [value], () => shownOpening[colour] !== value);
-  }
+  // Theirs only. Ours is thrown here by hand and there is nothing left to
+  // show — and trying to show it anyway threw it twice: the server writes the
+  // number down the moment it is asked for, which is a couple of seconds
+  // before the die it named comes to rest on this felt, so the word arrives
+  // while the throw it describes is still in the air and looks like one that
+  // never happened. Nothing throws our opening die for us any more, since the
+  // opening keeps no time, so there is no case left that wanted it.
+  const theirs = Rules.other(HUMAN);
+  const value = state.opening?.[theirs] ?? null;
+  if (value === null) { shownOpening[theirs] = null; return; }
+  if (shownOpening[theirs] === value) return;
+  shownOpening[theirs] = value;
+  replayThrow(theirs, [value], () => shownOpening[theirs] !== value);
 }
 
 // The other side's throw, shown on this board. One at a time, and never on
