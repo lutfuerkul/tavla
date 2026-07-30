@@ -2443,7 +2443,8 @@ function onDiceSettled() {
     // for new ones. With nothing to replay there is nothing to re-throw.
     if (mode === "online") {
       const again = game.phase === "opening"
-        ? (shownOpening === null ? [] : [shownOpening])
+        ? (shownOpening[replayingFor ?? game.waitingOn] == null
+            ? [] : [shownOpening[replayingFor ?? game.waitingOn]])
         : (game.dice ?? []);
       if (!again.length) { replayingFor = null; return; }
       forcedRoll = again.slice();
@@ -2527,7 +2528,15 @@ function openingSettled() {
   // being waited for now would put our own throw down in their name. Who
   // throws next, whether it was a tie and who ends up starting all arrive on
   // the next snapshot; the other player's die is thrown on their own board.
-  if (mode === "online") return;
+  //
+  // What is written down is only that this die has been seen landing here, so
+  // that the server's word about it is not thrown a second time on top of it.
+  // A die the clock throws for us is never marked, and so it does get thrown.
+  if (mode === "online") {
+    const die = diceMeshes[0]?.userData.die;
+    if (die?.mode === "rest" && die.value && !replayingFor) shownOpening[HUMAN] = die.value;
+    return;
+  }
 
   const who = game.waitingOn;
   if (!who) return;
@@ -2666,7 +2675,11 @@ let replayingFor = null;
 // either: it ends with two of them tumbling across the felt on somebody
 // else's behalf.
 let replayOwed = false;
-let shownOpening = null;
+// What each side's opening die has already been shown as on this board, kept
+// per colour rather than only for the opponent: when the clock throws for you,
+// the die is yours and it still has to be thrown here, or the number simply
+// appears out of nowhere.
+let shownOpening = { black: null, ivory: null };
 // The other player's seat: whether anybody is in it, and whether the server
 // has given up on them coming back. Nothing here decides anything — it asks,
 // and the server reads the seat itself before it acts.
@@ -2788,21 +2801,23 @@ function playRemoteTurn(colour, moves, done) {
 // for us, so the board has to be told whose throw it is showing — see
 // thrower(). What has already been shown is remembered, because the same
 // value would otherwise be thrown again on the next snapshot.
-function showTheirOpening(state) {
-  const theirs = Rules.other(HUMAN);
-  const value = state.opening?.[theirs] ?? null;
-  // Two equal dice wipe the opening and it starts again, so what was shown is
-  // forgotten along with it and the same number may be thrown a second time.
-  if (value === null) { shownOpening = null; return; }
-  if (shownOpening === value) return;
-  shownOpening = value;
-  // An opening die does not go stale when the server says something new — it
-  // goes stale when the opening itself is wiped or thrown again. Judging it by
-  // the snapshot meant the first player to throw never saw the second die: it
-  // arrives in the same breath as the start of the game, the player who won
-  // the opening throws their pair a moment later, and that newer word threw
-  // the waiting replay away.
-  replayThrow(theirs, [value], () => shownOpening !== value);
+// Every opening die this board has not already seen land, whoever threw it.
+// Ours is normally thrown here by hand and marked as seen the moment it comes
+// to rest — but when the clock runs out the server throws it for us, and then
+// nothing on this board has moved. Watching only the other player's die meant
+// the one person who most needed to see it, the one whose turn was taken, was
+// the only one who never did.
+//
+// An opening die does not go stale when the server says something new — it
+// goes stale when the opening itself is wiped, which is what a tie does.
+function showOpening(state) {
+  for (const colour of [Rules.other(HUMAN), HUMAN]) {
+    const value = state.opening?.[colour] ?? null;
+    if (value === null) { shownOpening[colour] = null; continue; }
+    if (shownOpening[colour] === value) continue;
+    shownOpening[colour] = value;
+    replayThrow(colour, [value], () => shownOpening[colour] !== value);
+  }
 }
 
 // The other side's throw, shown on this board. One at a time, and never on
@@ -2965,11 +2980,19 @@ function applyServerState(state) {
     // server settles both at once — so it is looked for whether or not the
     // phase has moved on. Reading only the opening phase left the second of
     // the two dice unthrown on the board that was waiting to see it.
-    if (state.opening) showTheirOpening(state);
+    if (state.opening) showOpening(state);
     if (state.phase === "opening" || !state.dice) return;
     // A turn's dice, on the other hand, are only worth showing while they are
     // still the turn's dice.
-    if (state.turn !== HUMAN) replayThrow(state.turn, state.dice, () => remoteSeq !== state.seq);
+    //
+    // Whose they are does not decide whether they need throwing here — whether
+    // they are already lying on this felt does. Ours, thrown by hand, are
+    // sitting there showing exactly these numbers and want nothing. Ours,
+    // thrown by the clock because we were too slow, are not, and the numbers
+    // would otherwise appear on the panel without a die ever having moved.
+    const onFelt = diceMeshes.map(d => d.userData.die.value).slice().sort().join();
+    const named = state.dice.slice().sort().join();
+    if (onFelt !== named) replayThrow(state.turn, state.dice, () => remoteSeq !== state.seq);
   };
 
   // Something they played since we last looked: watch it happen, then take
@@ -2987,7 +3010,7 @@ function applyServerState(state) {
   // first was over before it could be read. Their die is thrown here, and the
   // game does not start until it has come to rest and been left there a while.
   else if (wasOpening && state.phase === "play") {
-    if (state.opening) showTheirOpening(state);
+    if (state.opening) showOpening(state);
     holdTheOpening(settle);
   }
   else settle();
