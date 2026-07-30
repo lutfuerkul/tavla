@@ -12,7 +12,7 @@ body { background: #090807; color: #f3ead7; font-family: "DM Mono", monospace; }
 #scene { display: block; touch-action: none; user-select: none; -webkit-user-select: none;
   -webkit-touch-callout: none; }
 body { overscroll-behavior: none; }
-#intro { position: fixed; z-index: 2; inset: 0; display: grid; place-content: start center; text-align: center; overflow: auto; padding: max(1.6rem, min(calc(50vh - 2.4rem), calc(100vh - 28rem))) 2rem 2rem; background: radial-gradient(circle at center, transparent 0 20%, rgba(4,3,2,.75) 90%); transition: opacity .55s ease, visibility .55s ease; }
+#intro { position: fixed; z-index: 2; inset: 0; display: grid; place-content: start center; text-align: center; overflow: auto; padding: max(1.6rem, min(calc(50vh - 2.4rem), calc(100vh - 27.5rem))) 2rem 2rem; background: radial-gradient(circle at center, transparent 0 20%, rgba(4,3,2,.75) 90%); transition: opacity .55s ease, visibility .55s ease; }
 #intro.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
 /* Up in the black above the board, where there is nothing else to read it
    against. In the middle of the door it landed on the felt with an ivory
@@ -87,7 +87,7 @@ body.ideographic #hud span, body.ideographic #hud strong {
    colour of aged brass reads perfectly against felt and disappears entirely
    over a stack of ivory checkers. */
 #settings { display: grid; gap: .6rem; justify-content: center;
-  margin: .4rem auto 1.8rem; padding: 1.1rem 1.3rem;
+  margin: .4rem auto .5rem; padding: 1.1rem 1.3rem;
   background: rgba(9,7,5,.82); border: 1px solid rgba(229,173,84,.18);
   border-radius: .7rem; box-shadow: 0 20px 50px rgba(0,0,0,.5); }
 .setting { display: grid; grid-template-columns: 9.5rem 12rem; gap: .9rem;
@@ -205,7 +205,7 @@ body.ideographic #hud span, body.ideographic #hud strong {
 .chip-black { background: radial-gradient(circle at 35% 30%, #4a4a4e, #131316 70%); }
 .chip-ivory { background: radial-gradient(circle at 35% 30%, #f2e4bd, #cbb079 70%); }
 
-#start { margin: 2.2rem auto 0; padding: .85rem 2.6rem; font: inherit; font-size: .82rem;
+#start { margin: .75rem auto 0; padding: .85rem 2.6rem; font: inherit; font-size: .82rem;
   letter-spacing: .16em; text-transform: uppercase; color: #0d0a06; background: #e5ad54;
   border: 0; border-radius: .4rem; cursor: pointer; transition: background .2s ease; }
 #start:disabled { background: #3a3229; color: #8b8073; cursor: default; }
