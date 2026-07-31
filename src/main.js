@@ -274,15 +274,12 @@ const SETTINGS = [
     options: [["auto", "option.auto"], ["black", "colour.black"], ["ivory", "colour.ivory"]] },
   { key: "side", label: "setting.side",
     options: [["auto", "option.auto"], ["sol", "side.left"], ["sag", "side.right"]] },
-  // No Otomatik on this one. The other three are matters of taste with nothing
-  // to choose between them, so a coin is a fair answer; which pieces are on the
-  // table is a thing somebody has decided and should stay decided.
   { key: "piece", label: "setting.piece",
-    options: [["ince", "piece.thin"], ["kalin", "piece.thick"]] },
+    options: [["auto", "option.auto"], ["ince", "piece.thin"], ["kalin", "piece.thick"]] },
 ];
 
 let pickedMode = null;
-const picked = { board: "auto", colour: "auto", side: "auto", piece: pieceType };
+const picked = { board: "auto", colour: "auto", side: "auto", piece: "auto" };
 const startButton = document.querySelector("#start");
 
 function markChosen(attribute, value) {
@@ -553,6 +550,7 @@ async function forgetIfFinished(id) {
 function showLobby() {
   const online = mode === "online";
   lobby?.toggleAttribute("hidden", !online);
+  if (codeBox) codeBox.hidden = true;
   const waiting = online && localStorage.getItem(MATCH_KEY);
   resumeButton?.toggleAttribute("hidden", !waiting);
   if (waiting) forgetIfFinished(waiting).catch(() => {});
@@ -681,7 +679,20 @@ hostButton?.addEventListener("click", async () => {
   }
 });
 
+// Two presses rather than one: the first opens the box to type the code into,
+// the second takes the code. A field standing there empty beside three buttons
+// is a question nobody asked — most people are looking for the other two ways
+// in, and whoever has been given a code knows what to do with it.
+function askForCode() {
+  if (!codeBox || !codeBox.hidden) return false;
+  codeBox.hidden = false;
+  codeBox.value = "";
+  codeBox.focus();
+  return true;
+}
+
 joinButton?.addEventListener("click", async () => {
+  if (askForCode()) return;
   const wanted = (codeBox?.value ?? "").trim().toUpperCase();
   if (!/^[A-Z2-9]{5}$/.test(wanted)) return say("lobby.badCode");
   hostButton.disabled = joinButton.disabled = true;
@@ -696,6 +707,10 @@ joinButton?.addEventListener("click", async () => {
     lobbySaid.textContent = reason?.message ?? t("lobby.offline");
     hostButton.disabled = joinButton.disabled = false;
   }
+});
+
+codeBox?.addEventListener("keydown", event => {
+  if (event.key === "Enter") joinButton?.click();
 });
 
 showLobby();

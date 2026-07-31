@@ -187,6 +187,19 @@ body.ideographic #hud span, body.ideographic #hud strong {
 
 /* Playing somebody who is not in the room: make a room and read the code out,
    or take one you have been given. */
+/* How many people are at a table right now, beside the way in to a game with
+   one of them. It appears if the connection is there and stays away if it is
+   not: the game plays perfectly well with no network at all and must not look
+   broken to somebody who has none. */
+#online { align-self: center; display: flex; align-items: center; gap: .45rem;
+  padding: .32rem .65rem; font: 500 .68rem/1 "DM Mono", monospace;
+  letter-spacing: .08em; text-transform: uppercase; color: #ad9470;
+  background: rgba(12,9,6,.55); border: 1px solid rgba(229,173,84,.22);
+  border-radius: .35rem; white-space: nowrap; }
+#online[hidden] { display: none; }
+#online::before { content: ""; width: .42rem; height: .42rem; border-radius: 50%;
+  background: #6fbf73; box-shadow: 0 0 .4rem rgba(111,191,115,.7); }
+
 #lobby { margin: 1.2rem 0 0; }
 #lobby[hidden] { display: none; }
 .lobby-row { display: flex; gap: .6rem; align-items: center; justify-content: center;
@@ -204,7 +217,7 @@ body.ideographic #hud span, body.ideographic #hud strong {
 /* Being found a game, above the two ways of arranging one yourself. Outlined
    rather than filled: it is the ordinary way in, not an interruption like a
    match already waiting for you. */
-#find { display: block; margin: 0 auto 1rem; padding: .68rem 1.6rem;
+#find, #host, #join { padding: .68rem 1.4rem;
   font: 500 .78rem/1 "DM Mono", monospace; letter-spacing: .12em;
   text-transform: uppercase; color: #d8ccb4; background: rgba(20,15,10,.78);
   border: 1px solid rgba(229,173,84,.4); border-radius: .45rem; box-shadow: none;
@@ -217,13 +230,9 @@ body.ideographic #hud span, body.ideographic #hud strong {
 .lobby-or { font: 500 .78rem/1 "DM Mono", monospace; letter-spacing: .12em;
   color: #d8ccb4; text-transform: uppercase;
   text-shadow: 0 1px 3px rgba(0,0,0,.85), 0 0 10px rgba(0,0,0,.7); }
-#host, #join { padding: .68rem 1.4rem; font: 500 .78rem/1 "DM Mono", monospace;
-  letter-spacing: .12em; text-transform: uppercase; color: #d8ccb4;
-  background: rgba(20,15,10,.78); border: 1px solid rgba(229,173,84,.4);
-  border-radius: .45rem; box-shadow: none; cursor: pointer;
-  transition: color .2s ease, border-color .2s ease, background .2s ease; }
 #host:hover, #join:hover { border-color: #e5ad54; color: #f6ecd6; background: rgba(36,26,16,.9); }
 #host:disabled, #join:disabled { color: #7d7466; border-color: rgba(229,173,84,.2); cursor: default; }
+#code[hidden] { display: none; }
 #code { width: 6.4rem; padding: .68rem .6rem; text-align: center;
   font: 500 .9rem/1 "DM Mono", monospace; letter-spacing: .22em; text-transform: uppercase;
   color: #f3ead7; background: rgba(8,6,4,.8); border: 1px solid rgba(229,173,84,.4);
@@ -250,14 +259,6 @@ body.ideographic #hud span, body.ideographic #hud strong {
   border: 0; border-radius: .4rem; cursor: pointer; transition: background .2s ease; }
 #start:disabled { background: #3a3229; color: #8b8073; cursor: default; }
 
-/* Who else is at a table right now. Quiet, under the way in, and simply not
-   there when there is nothing to say — see firebase.js. */
-#online { margin: 1.1rem 0 0; display: flex; align-items: center; justify-content: center;
-  gap: .45rem; font: 500 .68rem/1 "DM Mono", monospace; letter-spacing: .08em;
-  color: #9b907e; }
-#online[hidden] { display: none; }
-#online::before { content: ""; width: .42rem; height: .42rem; border-radius: 50%;
-  background: #6fbf73; box-shadow: 0 0 .4rem rgba(111,191,115,.7); }
 #start:not(:disabled):hover { background: #f0bd68; }
 
 /* On a phone the door is five rows tall and the window is narrow enough that
