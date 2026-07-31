@@ -744,6 +744,24 @@ export const sure = onCall(settings, async request => {
     return { acted: false, closed: true };
   }
 
+  // Back in the chair, and read from the chair rather than taken on trust.
+  // This is the only thing that withdraws the news for somebody whose page
+  // never went anywhere: a signal that dropped and came back with the tab
+  // still open leaves nothing to say "I am back" — the board that lost it was
+  // never reloaded — and the mark would have stood there counting down to a
+  // table closed on a player sitting in front of it.
+  if (match.away === theirs || match.awaySince?.[theirs]) {
+    const since = { ...(match.awaySince ?? {}) };
+    delete since[theirs];
+    await ref.update({
+      away: match.away === theirs ? null : (match.away ?? null),
+      awaySince: since,
+      updatedAt: now(),
+      seq: match.seq + 1,
+    });
+    return { acted: false, back: theirs };
+  }
+
   // Somebody sitting there and taking their time is a different matter, and
   // the only one the clock is for: a game must not be stallable for ever by a
   // player who will not move. Your own clock is never yours to run down — a
