@@ -3568,7 +3568,13 @@ function tableClosed() {
   // Nobody is being waited for any more: whatever was counting down opposite
   // stops here, or it would go on writing over the one line that matters.
   awayUntil = 0;
-  announce("table.closed", CLOSED_SHOWN_MS);
+  // Two boards hear the same silence when a table goes, but they are not in
+  // the same position and must not be told the same thing. A board that has
+  // been counting down an empty chair knows perfectly well who left; a board
+  // that has this second come back through the code — and found the table
+  // closed behind it, on its own second absence — knows nothing of the kind,
+  // and was being told its opponent had walked off.
+  announce(opponentGone ? "table.left" : "table.closed", CLOSED_SHOWN_MS);
   setTimeout(() => {
     sessionStorage.removeItem("tavla.sitOnLoad");
     localStorage.removeItem(MATCH_KEY);
