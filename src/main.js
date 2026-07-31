@@ -1364,14 +1364,17 @@ const THICK_PROFILE = [
   mm(.467, 10),
   mm(.42, 10),          // flat top
   mm(.2083, 10),
-  // And the saucer in the middle of it: 15mm across and two tenths of a
-  // millimetre deep. A spherical cap, so the curve is one smooth sweep from
-  // its edge to the middle rather than a lens with a seam round it.
-  mm(.175, 9.941),
-  mm(.140, 9.890),
-  mm(.100, 9.846),
-  mm(.050, 9.812),
-  mm(0, 9.800),
+  // And the bowl in the middle of it: 15mm across on a 36mm piece and 2mm
+  // deep, a fifth of the thickness. A spherical cap, so the curve is one
+  // smooth sweep from its edge to the middle rather than a lens with a seam
+  // round it. Shallower than this and it was not there to look at — a fifth of
+  // a millimetre of curve on a piece the size of a fingernail catches no light
+  // at all, and on the cream ones it disappeared altogether.
+  mm(.175, 9.411),
+  mm(.140, 8.903),
+  mm(.100, 8.461),
+  mm(.050, 8.115),
+  mm(0, 8.0),
 ];
 
 // Ninety-six segments turn a checker that is an inch across on a desktop. On a
