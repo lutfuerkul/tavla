@@ -125,6 +125,26 @@ function freshMatch(players) {
   };
 }
 
+// Whose turn it is after this one. Ordinarily the other player's, but a player
+// shut out on the bar — every point they could come in on held against them —
+// is passed over: no number brings them in, so a turn spent throwing for them
+// is a turn spent on nothing. Both boards are told they were passed over, so
+// the turn going by without anything happening is not a mystery.
+//
+// Only ever one turn is skipped. Both of them shut out at once is a position
+// nothing can move on from, and it must not become two turns handed back and
+// forth for ever.
+function handOver(pos, from, patch) {
+  const next = Rules.other(from);
+  if (Rules.shutOut(pos, next) && !Rules.shutOut(pos, from)) {
+    patch.turn = from;
+    patch.skipped = next;
+    return;
+  }
+  patch.turn = next;
+  patch.skipped = null;
+}
+
 const colourOf = (match, uid) =>
   match.players.black === uid ? "black" : match.players.ivory === uid ? "ivory" : null;
 
@@ -461,7 +481,7 @@ export const turuOyna = onCall(settings, async request => {
       patch.matchOver = score[won] >= match.target ? won : null;
       if (patch.matchOver) patch.silinecek = SWEPT_SOON();
     } else {
-      patch.turn = Rules.other(mine);
+      handOver(pos, mine, patch);
     }
 
     tx.update(ref, patch);
@@ -554,7 +574,7 @@ function actFor(match, colour) {
     patch.matchOver = score[won] >= match.target ? won : null;
     if (patch.matchOver) patch.silinecek = SWEPT_SOON();
   } else {
-    patch.turn = Rules.other(colour);
+    handOver(after, colour, patch);
   }
   return patch;
 }
