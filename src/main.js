@@ -3899,6 +3899,14 @@ function lands(outcome, want) {
 
 function stepSearch(frameDt = 1 / 60) {
   if (!pending) return;
+  // What the dice are showing right now, to be put back when this frame's
+  // share of the search is done. Every attempt starts them again from the pose
+  // the throw will leave from, and leaving them there is what made the shake
+  // stop dead for a moment before the dice flew: the hand went on swirling
+  // them round but each frame put the tumble back where it began, so they hung
+  // there unturning until the search found its throw. Nobody watching that
+  // knows the board is looking for anything — they see the dice stop.
+  const shown = diceSnapshot(pending.dice);
   const budget = Math.min(SEARCH_CEILING_MS,
     Math.max(SEARCH_FLOOR_MS, frameDt * 1000 * SEARCH_SHARE));
   const until = performance.now() + budget;
@@ -3910,7 +3918,7 @@ function stepSearch(frameDt = 1 / 60) {
       break;
     }
   }
-  restoreDice(pending.from);
+  restoreDice(shown);
   for (const die of pending.dice) {
     const s = die.userData.die;
     s.mode = "held";
