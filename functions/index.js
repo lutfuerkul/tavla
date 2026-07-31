@@ -37,11 +37,11 @@ const MOVE_SECONDS = 60;
 // An empty chair is a different matter and is still covered: somebody who has
 // gone would otherwise leave the opening unfinished for good.
 const OPEN_SECONDS = Infinity;
-// And how long a seat is held for somebody who has gone. A dropped connection
-// is not the same as leaving: the computer covers the empty chair and the seat
-// waits. Past this the match is over — it is deleted, and both boards are told
-// — because a table nobody is coming back to is a table that sits there for
-// hours and turns up again in somebody's next game.
+// How long an empty chair is waited for before the computer sits down in it.
+// A dropped connection is not the same as walking off: the other board is told
+// straight away and a minute is counted out, and nothing is played in it. Come
+// back inside the minute and the game carries on as though nothing happened;
+// past it, the computer takes the checkers and the game goes on without them.
 const HELD_SECONDS = 60;
 // Long enough that two rooms are never open on the same code, short enough to
 // read down a telephone. I, O, 0 and 1 are left out: they are the letters
@@ -636,6 +636,7 @@ export const sure = onCall(settings, async request => {
       && (match.lastThrowSeq ?? -1) > match.returnedAt) {
     await ref.update({
       away: null,
+      covered: null,
       awaySince: {},
       returnedAt: null,
       updatedAt: now(),
@@ -644,10 +645,28 @@ export const sure = onCall(settings, async request => {
     return { acted: false, handedBack: true };
   }
 
-  // Somebody sitting there is given their time to think. An empty seat is not
-  // waited for: the computer takes over at once, and keeps the checkers until
-  // the handover above rather than dropping them the moment a seat is claimed.
+  // Somebody sitting there is given their time to think.
   if (seated && !returning && waited < waiting.seconds) return { acted: false, seated: true };
+
+  // And an empty chair is given a minute. Nothing is played in it: the other
+  // board is told the moment the seat goes, counts the minute out on the same
+  // clock it counts turns with, and waits. Whoever it is may simply be
+  // reloading a page or walking through a tunnel.
+  if (!seated && !returning) {
+    const startedAt = match.awaySince?.[waiting.colour]?.toDate?.();
+    if (!startedAt) {
+      await ref.update({
+        away: waiting.colour,
+        awaySince: { ...(match.awaySince ?? {}), [waiting.colour]: now() },
+        updatedAt: now(),
+        seq: match.seq + 1,
+      });
+      return { acted: false, holding: true };
+    }
+    if ((Date.now() - startedAt.getTime()) / 1000 < HELD_SECONDS) {
+      return { acted: false, holding: true };
+    }
+  }
 
   return db.runTransaction(async tx => {
     const fresh = await tx.get(ref);
@@ -655,23 +674,13 @@ export const sure = onCall(settings, async request => {
     // It has moved on since it was read; whoever moved it is playing.
     if (it.seq !== match.seq) return { acted: false };
 
-    // How long the seat has been empty. A minute of it and the seat is not
-    // being held any more: the match is deleted where it stands and both
-    // boards hear it in the only way there is left to hear it — the record
-    // they are watching stops being there.
-    const emptyFor = !seated && it.awaySince?.[waiting.colour]
-      ? (Date.now() - it.awaySince[waiting.colour].toDate().getTime()) / 1000
-      : 0;
-    if (emptyFor >= HELD_SECONDS) {
-      tx.delete(ref);
-      return { acted: false, closed: true };
-    }
-
     const patch = actFor(it, waiting.colour);
-    // Said so the other board can say why the computer is playing rather than
-    // leaving them to guess.
+    // The minute is up and the computer is taking the checkers. Said out loud
+    // once, so the board opposite knows the difference between a game that has
+    // stopped and a game that is being played by something else.
     if (!seated) {
       patch.away = waiting.colour;
+      patch.covered = waiting.colour;
       if (!it.awaySince?.[waiting.colour]) {
         patch.awaySince = { ...(it.awaySince ?? {}), [waiting.colour]: now() };
       }
@@ -683,6 +692,7 @@ export const sure = onCall(settings, async request => {
       // turn put it back. The board opposite watched them leave and return and
       // leave again while they had not moved.
       patch.away = it.away === waiting.colour ? null : (it.away ?? null);
+      patch.covered = it.covered === waiting.colour ? null : (it.covered ?? null);
       const since = { ...(it.awaySince ?? {}) };
       delete since[waiting.colour];
       patch.awaySince = since;
