@@ -15,6 +15,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Your own place in the queue, so the board can watch for the match that
+    // gets written onto it. Only yours: the queue is not a list of who is
+    // looking for a game, it is a way of being found.
+    match /sira/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
     match /matches/{id} {
       allow read: if request.auth != null
         && request.auth.uid in resource.data.players.values();

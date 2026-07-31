@@ -197,6 +197,16 @@ body.ideographic #hud span, body.ideographic #hud strong {
   cursor: pointer; transition: background .2s ease, border-color .2s ease; }
 #resume:hover { background: #f0c079; border-color: #f0c079; }
 #resume[hidden] { display: none; }
+/* Being found a game, above the two ways of arranging one yourself. Outlined
+   rather than filled: it is the ordinary way in, not an interruption like a
+   match already waiting for you. */
+#find { display: block; margin: 0 auto 1rem; padding: .68rem 1.6rem;
+  font: 500 .78rem/1 "DM Mono", monospace; letter-spacing: .12em;
+  text-transform: uppercase; color: #d8ccb4; background: rgba(20,15,10,.78);
+  border: 1px solid rgba(229,173,84,.4); border-radius: .45rem; box-shadow: none;
+  cursor: pointer; transition: color .2s ease, border-color .2s ease, background .2s ease; }
+#find:hover { border-color: #e5ad54; color: #f6ecd6; background: rgba(36,26,16,.9); }
+#find.looking { color: #17110a; background: #e5ad54; border-color: #e5ad54; }
 .lobby-or { font-size: .7rem; letter-spacing: .1em; color: #9b907e; text-transform: uppercase; }
 #host, #join { padding: .68rem 1.4rem; font: 500 .78rem/1 "DM Mono", monospace;
   letter-spacing: .12em; text-transform: uppercase; color: #d8ccb4;

@@ -5,7 +5,7 @@ const canvas = document.querySelector("#scene");
 import * as Rules from "./rules.js";
 import { LANGS, language, setLanguage, t, isIdeographic } from "./i18n.js";
 import { localSession, onlineSession } from "./session.js";
-import { attend, ask, follow, sitAt } from "./firebase.js";
+import { attend, ask, connect, follow, seatTaken, sitAt } from "./firebase.js";
 
 // Where the turns come from. Everything the board cannot decide by itself goes
 // through here, so a game against a server can be a different session rather
@@ -482,7 +482,36 @@ function say(key, code) {
 // player was stranded at the door with a game of theirs still on the table.
 const resumeButton = document.querySelector("#resume");
 
-resumeButton?.addEventListener("click", () => {
+// The match as it stands, read once and let go of.
+function matchOnce(id) {
+  return new Promise(async resolve => {
+    let stop = null, done = false;
+    const take = state => { if (done) return; done = true; resolve(state); stop?.(); };
+    stop = await follow("matches", id, take);
+    if (done) stop?.();
+  });
+}
+
+resumeButton?.addEventListener("click", async () => {
+  const id = localStorage.getItem(MATCH_KEY);
+  if (!id) return;
+  resumeButton.disabled = true;
+  // Nobody opposite is nobody to play, and sitting down at an abandoned table
+  // only puts you where the computer will play both sides. The seat is asked
+  // after rather than assumed: a match can be waiting for somebody who left
+  // and is not coming back.
+  const state = await matchOnce(id);
+  const theirs = state?.players?.[Rules.other(HUMAN)];
+  const there = theirs ? await seatTaken(id, theirs) : null;
+  // `null` is not knowing — the question failed to arrive — and that is no
+  // reason to keep somebody from their own match.
+  if (there === false) {
+    say("lobby.closed");
+    localStorage.removeItem(MATCH_KEY);
+    resumeButton.setAttribute("hidden", "");
+    resumeButton.disabled = false;
+    return;
+  }
   // The same door the lobby goes through when a room is matched.
   sessionStorage.setItem("tavla.sitOnLoad", "1");
   location.reload();
@@ -492,18 +521,10 @@ resumeButton?.addEventListener("click", () => {
 // read its own match, so it asks before offering the way in — and forgets the
 // match while it is there, since nothing will ever make it worth returning to.
 async function forgetIfFinished(id) {
-  let stop = null, done = false;
-  const decide = state => {
-    if (done) return;
-    done = true;
-    if (state.matchOver) {
-      localStorage.removeItem(MATCH_KEY);
-      resumeButton?.setAttribute("hidden", "");
-    }
-    stop?.();
-  };
-  stop = await follow("matches", id, decide);
-  if (done) stop?.();
+  const state = await matchOnce(id);
+  if (!state?.matchOver) return;
+  localStorage.removeItem(MATCH_KEY);
+  resumeButton?.setAttribute("hidden", "");
 }
 
 function showLobby() {
@@ -532,6 +553,75 @@ function sitDownTo(id, colour) {
   say("lobby.found");
   location.reload();
 }
+
+// Being found a game rather than arranging one. Either somebody is already
+// waiting, in which case the server pairs the two at once, or this browser
+// takes the waiting place and watches it: whoever arrives next writes the
+// match onto it.
+const findButton = document.querySelector("#find");
+let watchingQueue = null, looking = false, stillHere = null;
+
+async function stopLooking() {
+  looking = false;
+  clearInterval(stillHere);
+  watchingQueue?.();
+  watchingQueue = null;
+  findButton.textContent = t("lobby.find");
+  findButton.classList.remove("looking");
+  hostButton.disabled = joinButton.disabled = false;
+  if (lobbySaid) lobbySaid.textContent = "";
+  ask("siradanCik", {}).catch(() => {});
+}
+
+findButton?.addEventListener("click", async () => {
+  if (looking) return stopLooking();
+  looking = true;
+  findButton.textContent = t("lobby.stop");
+  findButton.classList.add("looking");
+  hostButton.disabled = joinButton.disabled = true;
+  say("lobby.searching");
+  try {
+    const answer = await ask("eslesmeyeGir", {});
+    if (!looking) return;
+    if (answer?.matchId) return sitDownTo(answer.matchId, answer.colour ?? "ivory");
+    // Waiting to be found. Our own place in the queue is the only thing we can
+    // read, and it is the thing the next arrival writes to.
+    const live = await connect();
+    watchingQueue?.();
+    watchingQueue = await follow("sira", live?.uid ?? "", entry => {
+      if (looking && entry.matchId) sitDownTo(entry.matchId, entry.colour ?? "black");
+    });
+    // Saying we are still here, over and over, so a place left behind by a
+    // closed tab stops being one somebody can be sent to. It looks again on
+    // the way past, which is also how two people who sat down to wait in the
+    // same breath find each other rather than waiting for a third.
+    const every = Math.max(10, Math.round((answer?.refresh ?? 45) / 3)) * 1000;
+    clearInterval(stillHere);
+    stillHere = setInterval(async () => {
+      if (!looking) return clearInterval(stillHere);
+      try {
+        const again = await ask("eslesmeyeGir", {});
+        if (looking && again?.matchId) sitDownTo(again.matchId, again.colour ?? "ivory");
+      } catch (reason) {
+        console.info("tavla: sırada kalınamadı —", reason?.message ?? reason);
+      }
+    }, every);
+  } catch (reason) {
+    console.info("tavla: eşleşme aranamadı —", reason?.message ?? reason);
+    looking = false;
+    findButton.textContent = t("lobby.find");
+    findButton.classList.remove("looking");
+    hostButton.disabled = joinButton.disabled = false;
+    say("lobby.offline");
+  }
+});
+
+// Leaving the page while waiting should not leave a place in the queue behind
+// for somebody to be sent to. Best effort — a queue entry nobody is behind is
+// checked for on the other side too.
+addEventListener("pagehide", () => {
+  if (looking) ask("siradanCik", {}).catch(() => {});
+});
 
 hostButton?.addEventListener("click", async () => {
   hostButton.disabled = joinButton.disabled = true;
@@ -2746,6 +2836,7 @@ let shownOpening = { black: null, ivory: null };
 let theirSeat = null;
 let watchingSeat = false;
 let opponentGone = false;
+let weWereAway = false;
 // True between the opening being settled and the first dice of the game being
 // thrown. The panel says who won the opening in that gap, and it was saying it
 // on every later turn too: the opening numbers stay on the match for the whole
@@ -2994,6 +3085,15 @@ function applyServerState(state) {
   // up, rather than the three minutes it takes to give up on them. Waiting was
   // the wrong way round: the news is worth most while you are still wondering
   // what has happened, and by three minutes you have worked it out.
+  // The table coming back to us. While the computer is covering, the server
+  // keeps us marked away however plainly we are sitting here — so the mark
+  // lifting is the handover itself, and it is worth saying, since until then
+  // nothing we did to the board had any effect.
+  const heldForUs = state.away === HUMAN;
+  if (heldForUs !== weWereAway) {
+    weWereAway = heldForUs;
+    if (!heldForUs) announce("away.yours", 5000);
+  }
   const goneNow = state.away === Rules.other(HUMAN);
   if (goneNow !== opponentGone) {
     opponentGone = goneNow;
@@ -3370,7 +3470,11 @@ function updateHud() {
         ? (game.dice ? nameOf(game.turn) : t("turn.hotThrow", { name: nameOf(game.turn) }))
         : t(game.dice ? "turn.you" : "turn.youThrow");
   }
-  notice(performance.now() < newsUntil ? t(newsWord) : "");
+  // While the computer is still covering for us the line stays up, because
+  // the board looks exactly as it would if we had the table and nothing we do
+  // to it has any effect. News comes and goes; this is a condition.
+  notice(weWereAway ? t("away.waiting")
+    : performance.now() < newsUntil ? t(newsWord) : "");
   if (roll && !game.dice) roll.textContent = "—";
   if (undoButton) {
     undoButton.disabled = !game.history.length || !!game.over ||

@@ -200,6 +200,80 @@ export const odayaBak = onCall(settings, async request => {
   return { status: it.status, matchId: it.matchId ?? null };
 });
 
+// --- being found a game -----------------------------------------------
+//
+// A room and a code is two people who already know each other. This is the
+// other way in: you say you would like a game, and either somebody is already
+// waiting — in which case you are put opposite them at once — or you are the
+// one waiting, and the next person along finds you.
+//
+// The queue is one document per player, named by their own uid, so nobody can
+// hold two places in it and coming back twice is not two entries.
+
+// A queue entry outlives the tab that wrote it: a closed browser leaves it
+// behind, and somebody sat down opposite it waits for a player who is not
+// coming. So an entry says when it was made and the board that is waiting says
+// so again every little while; one that has stopped saying so is not somebody
+// to be found.
+//
+// Judged by the entry itself rather than by the presence kept for the lobby
+// count. Tying the two together meant that anything wrong with presence — and
+// it is a separate system, on a separate database — showed up here as nobody
+// in the world ever being matched with anybody, silently.
+const QUEUE_FRESH_SECONDS = 45;
+
+const stale = entry => {
+  const at = entry.at?.toDate?.();
+  return !at || (Date.now() - at.getTime()) / 1000 > QUEUE_FRESH_SECONDS;
+};
+
+export const eslesmeyeGir = onCall(settings, async request => {
+  const uid = whoIsAsking(request);
+  const queue = db.collection("sira");
+
+  // The longest wait is served first; ten is plenty to look through, since
+  // anybody past that has been waiting long enough to be a stale entry.
+  const waiting = await queue.orderBy("at").limit(10).get();
+  for (const entry of waiting.docs) {
+    if (entry.id === uid || entry.data().matchId) continue;
+    if (stale(entry.data())) {
+      await entry.ref.delete().catch(() => {});
+      continue;
+    }
+
+    const match = db.collection("matches").doc();
+    const paired = await db.runTransaction(async tx => {
+      const found = await tx.get(entry.ref);
+      // Somebody else reached them first between the search and here.
+      if (!found.exists || found.data().matchId) return null;
+      // The one who waited takes black, and black opens — the small courtesy
+      // of throwing first goes to whoever sat there longest.
+      tx.set(match, freshMatch({ black: entry.id, ivory: uid }));
+      tx.update(entry.ref, { matchId: match.id, colour: "black" });
+      return { matchId: match.id, colour: "ivory" };
+    });
+    if (paired) {
+      await queue.doc(uid).delete().catch(() => {});
+      return paired;
+    }
+  }
+
+  // Nobody to be found, so wait to be the one found. The entry is watched by
+  // the board that wrote it: whoever arrives next writes the match onto it.
+  // Asking again is how a board says it is still there, and it re-reads the
+  // queue on the way past — so two people who arrived in the same breath and
+  // both sat down to wait find each other on their next ask rather than
+  // waiting for a third.
+  await queue.doc(uid).set({ at: now(), matchId: null });
+  return { waiting: true, refresh: QUEUE_FRESH_SECONDS };
+});
+
+export const siradanCik = onCall(settings, async request => {
+  const uid = whoIsAsking(request);
+  await db.collection("sira").doc(uid).delete().catch(() => {});
+  return { ok: true };
+});
+
 // --- the turn ---------------------------------------------------------
 
 // One die each to open, the pair once somebody has started. The numbers are
@@ -255,6 +329,9 @@ export const zarAt = onCall(settings, async request => {
     tx.update(ref, {
       dice,
       remaining,
+      // When this throw happened, so a player coming back can be told whether
+      // the turn they are watching started before them or after.
+      lastThrowSeq: match.seq + 1,
       required: legal[0].length,
       played: 0,
       lastMoves: [],
@@ -392,6 +469,7 @@ function actFor(match, colour) {
       dice, remaining,
       required: Rules.legalSequences(pos, colour, remaining)[0].length,
       played: 0, lastMoves: [], lastBy: null,
+      lastThrowSeq: match.seq + 1,
       updatedAt: now(), seq: match.seq + 1,
     };
   }
@@ -461,10 +539,34 @@ export const sure = onCall(settings, async request => {
   const since = match.updatedAt?.toDate?.() ?? new Date(0);
   const waited = (Date.now() - since.getTime()) / 1000;
 
+  // Somebody who has come back but not yet been handed the table. They are
+  // sitting there, so the seat says they are fine; the computer keeps playing
+  // for them anyway until there is a clean place to stop.
+  const returning = (match.returnedAt ?? null) !== null && match.away === waiting.colour;
+
+  // That place is the start of a turn of their own, and not the first one that
+  // comes along: the other player has to have played a whole turn they were
+  // here to watch. The throw that opens a turn is stamped, so a turn that was
+  // already under way when they sat down is one they did not see the start of
+  // and does not count. Landing in the middle of one is exactly what makes a
+  // mess of the dice.
+  if (returning && match.turn === waiting.colour && !match.dice
+      && (match.lastThrowSeq ?? -1) > match.returnedAt) {
+    await ref.update({
+      away: null,
+      gone: null,
+      awaySince: {},
+      returnedAt: null,
+      updatedAt: now(),
+      seq: match.seq + 1,
+    });
+    return { acted: false, handedBack: true };
+  }
+
   // Somebody sitting there is given their time to think. An empty seat is not
-  // waited for: the computer takes over at once and gives the checkers back
-  // the moment they sit down again.
-  if (seated && waited < waiting.seconds) return { acted: false, seated: true };
+  // waited for: the computer takes over at once, and keeps the checkers until
+  // the handover above rather than dropping them the moment a seat is claimed.
+  if (seated && !returning && waited < waiting.seconds) return { acted: false, seated: true };
 
   return db.runTransaction(async tx => {
     const fresh = await tx.get(ref);
@@ -516,14 +618,18 @@ export const geriGeldim = onCall(settings, async request => {
     const mine = colourOf(match, uid);
     if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
     if (match.away !== mine && match.gone !== mine) return { ok: true };
+    // Being back is not the same as being handed the table. Sitting down in
+    // the middle of a turn — dice already thrown, a throw still landing — is
+    // how a returning player ends up in the middle of something they never
+    // saw, and the board makes a mess of it. So the return is written down and
+    // the computer keeps the checkers until there is a clean place to stop:
+    // see `sure`, which does the handing over.
     tx.update(ref, {
-      away: match.away === mine ? null : match.away ?? null,
-      gone: match.gone === mine ? null : match.gone ?? null,
-      awaySince: {},
+      returnedAt: match.seq + 1,
       updatedAt: now(),
       seq: match.seq + 1,
     });
-    return { ok: true };
+    return { ok: true, waiting: true };
   });
 });
 
