@@ -112,6 +112,11 @@ function freshMatch(players) {
     required: 0,
     played: 0,
     lastMoves: [],
+    // Which write they were made on. Every later word about the match carries
+    // the moves along untouched — a chair emptying, a clock running — and a
+    // board with no way of telling the two apart watched the same turn played
+    // out again on every one of them.
+    lastMoveSeq: 0,
     // Who played them. Whose turn it is is not enough to tell: a game is won
     // on the winner's own turn and the turn stays with them, so a client
     // reading "their turn, and moves on the board" would replay the winner's
@@ -432,6 +437,7 @@ export const zarAt = onCall(settings, async request => {
       required: legal[0].length,
       played: 0,
       lastMoves: [],
+      lastMoveSeq: 0,
       lastBy: null,
       updatedAt: now(),
       seq: match.seq + 1,
@@ -488,6 +494,7 @@ export const turuOyna = onCall(settings, async request => {
     const patch = {
       pos: packPosition(pos),
       lastMoves: moves,
+      lastMoveSeq: match.seq + 1,
       lastBy: mine,
       dice: null,
       remaining: [],
@@ -567,7 +574,7 @@ function actFor(match, colour) {
     return {
       dice, remaining,
       required: Rules.legalSequences(pos, colour, remaining)[0].length,
-      played: 0, lastMoves: [], lastBy: null,
+      played: 0, lastMoves: [], lastMoveSeq: 0, lastBy: null,
       lastThrowSeq: match.seq + 1,
       updatedAt: now(), seq: match.seq + 1,
     };
@@ -582,6 +589,7 @@ function actFor(match, colour) {
   const patch = {
     pos: packPosition(after),
     lastMoves: moves,
+    lastMoveSeq: match.seq + 1,
     lastBy: colour,
     dice: null,
     remaining: [],
@@ -781,6 +789,7 @@ export const yeniOyun = onCall(settings, async request => {
       required: 0,
       played: 0,
       lastMoves: [],
+      lastMoveSeq: 0,
       lastBy: null,
       over: null,
       updatedAt: now(),
