@@ -3305,6 +3305,12 @@ function applyServerState(state) {
   // Moving it early meant the board could be in the play phase while it still
   // thought the turn belonged to whoever held it last, and the play phase is
   // what decides that picking the dice up picks up both of them.
+  // Whether this board had any opening numbers before this word arrived. Two
+  // dice going back to nothing is how a tie is announced — but it is also how
+  // every match starts, and a game where nobody has thrown yet looks exactly
+  // the same. Told apart by what was there a moment ago.
+  const hadOpening = game.opening
+    && (game.opening.ivory != null || game.opening.black != null);
   game.opening = { ...state.opening };
   game.waitingOn = state.waitingOn ?? null;
   watchSeats(state.players);
@@ -3317,6 +3323,10 @@ function applyServerState(state) {
   // keeps us marked away however plainly we are sitting here — so the mark
   // lifting is the handover itself, and it is worth saying, since until then
   // nothing we did to the board had any effect.
+  // A table that has been closed rather than one that has gone. The record is
+  // still there for an hour so that it can say who closed it, which a record
+  // that simply vanishes cannot.
+  if (state.closed) { tableClosed(state.closedBy ?? null); return; }
   if (codePanel && state.code) {
     codePanel.querySelector("strong").textContent = state.code;
     codePanel.removeAttribute("hidden");
@@ -3381,11 +3391,23 @@ function applyServerState(state) {
     // it was holding the throw it had already made — so nothing could be picked
     // up on the side that threw first, and the other player's die, waiting for
     // a clear hand before it could be shown, was never shown either.
-    if (state.phase === "opening" && state.opening
+    // Two equal opening dice: the server clears both and asks for them again
+    // from the top. Only when there was something to clear — this is the same
+    // shape as a match nobody has thrown in yet, and taking one for the other
+    // pulled the dice out of the air in the middle of the very first throw.
+    // The throw never landed, so it never counted, so it was made again.
+    if (hadOpening && state.phase === "opening" && state.opening
         && state.opening.ivory === null && state.opening.black === null) {
-      thrown = false;
       shownOpening = { black: null, ivory: null };
-      resetDice();
+      // Not while the die that tied it is still crossing the felt. The server
+      // settles the tie the moment it is asked for the second number, which is
+      // a second or two before that die comes to rest here — and sweeping the
+      // board then took the throw out of the air, so the two dice that had to
+      // be equal for any of this to happen were never seen to be equal. It
+      // lands, it is left there long enough to read, and then the board clears.
+      const clear = () => { thrown = false; resetDice(); updateHud(); };
+      if (thrown || heldDice || replayingFor || replayOwed || pending) holdTheOpening(clear);
+      else clear();
     }
     // The opening is over: the pair goes back to the middle together, the one
     // that was waiting off the board along with it.
@@ -3562,13 +3584,25 @@ let tableGone = false;
 // only word about it there is going to be. Nothing on this board can be played
 // any more, and a board that looks playable and is not is worse than one that
 // says so: it is said plainly, and then the door.
-function tableClosed() {
+function tableClosed(by) {
   if (tableGone) return;
   tableGone = true;
   // Nobody is being waited for any more: whatever was counting down opposite
   // stops here, or it would go on writing over the one line that matters.
   awayUntil = 0;
-  announce("table.closed", CLOSED_SHOWN_MS);
+  // Two boards hear the same silence when a table goes, but they are not in
+  // the same position and must not be told the same thing. A board that has
+  // been counting down an empty chair knows perfectly well who left; a board
+  // that has this second come back through the code — and found the table
+  // closed behind it, on its own second absence — knows nothing of the kind,
+  // and was being told its opponent had walked off.
+  // Who closed it, if the server managed to say so before the record went.
+  // Failing that, a board that has been counting down an empty chair knows
+  // perfectly well who left; a board that has this second come back through
+  // the code knows nothing of the kind, and was being told its opponent had
+  // walked off when the opponent was itself.
+  const theirDoing = by ? by !== HUMAN : opponentGone;
+  announce(theirDoing ? "table.left" : "table.closed", CLOSED_SHOWN_MS);
   setTimeout(() => {
     sessionStorage.removeItem("tavla.sitOnLoad");
     localStorage.removeItem(MATCH_KEY);
