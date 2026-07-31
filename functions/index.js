@@ -37,8 +37,12 @@ const MOVE_SECONDS = 60;
 // An empty chair is a different matter and is still covered: somebody who has
 // gone would otherwise leave the opening unfinished for good.
 const OPEN_SECONDS = Infinity;
-// And how long before the other player is told they are not coming back.
-const GONE_SECONDS = 180;
+// How long an empty chair is waited for before the computer sits down in it.
+// A dropped connection is not the same as walking off: the other board is told
+// straight away and a minute is counted out, and nothing is played in it. Come
+// back inside the minute and the game carries on as though nothing happened;
+// past it, the computer takes the checkers and the game goes on without them.
+const HELD_SECONDS = 60;
 // Long enough that two rooms are never open on the same code, short enough to
 // read down a telephone. I, O, 0 and 1 are left out: they are the letters
 // people get wrong.
@@ -337,10 +341,11 @@ export const masayiBirak = onCall(settings, async request => {
   if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
   if (match.closed) return { ok: true, closed: true };
 
-  if (await isSeated(id, match.players[Rules.other(mine)])) return { ok: true, closed: false };
-  // Closed means gone. There is nothing left to read: no player, no game to
-  // carry on, nobody to come back — so the record is not marked and kept, it
-  // is deleted here and now. The boards watching it are told by its going.
+  // Getting up is final, and it closes the table on both of them. A game
+  // across a network is two people; one of them leaving on purpose does not
+  // leave a game behind for the computer to finish. The other board is told
+  // by the record going — there is nothing left to read: no player, no game
+  // to carry on, nobody to come back.
   await ref.delete();
   return { ok: true, closed: true };
 });
@@ -631,7 +636,7 @@ export const sure = onCall(settings, async request => {
       && (match.lastThrowSeq ?? -1) > match.returnedAt) {
     await ref.update({
       away: null,
-      gone: null,
+      covered: null,
       awaySince: {},
       returnedAt: null,
       updatedAt: now(),
@@ -640,10 +645,28 @@ export const sure = onCall(settings, async request => {
     return { acted: false, handedBack: true };
   }
 
-  // Somebody sitting there is given their time to think. An empty seat is not
-  // waited for: the computer takes over at once, and keeps the checkers until
-  // the handover above rather than dropping them the moment a seat is claimed.
+  // Somebody sitting there is given their time to think.
   if (seated && !returning && waited < waiting.seconds) return { acted: false, seated: true };
+
+  // And an empty chair is given a minute. Nothing is played in it: the other
+  // board is told the moment the seat goes, counts the minute out on the same
+  // clock it counts turns with, and waits. Whoever it is may simply be
+  // reloading a page or walking through a tunnel.
+  if (!seated && !returning) {
+    const startedAt = match.awaySince?.[waiting.colour]?.toDate?.();
+    if (!startedAt) {
+      await ref.update({
+        away: waiting.colour,
+        awaySince: { ...(match.awaySince ?? {}), [waiting.colour]: now() },
+        updatedAt: now(),
+        seq: match.seq + 1,
+      });
+      return { acted: false, holding: true };
+    }
+    if ((Date.now() - startedAt.getTime()) / 1000 < HELD_SECONDS) {
+      return { acted: false, holding: true };
+    }
+  }
 
   return db.runTransaction(async tx => {
     const fresh = await tx.get(ref);
@@ -652,19 +675,16 @@ export const sure = onCall(settings, async request => {
     if (it.seq !== match.seq) return { acted: false };
 
     const patch = actFor(it, waiting.colour);
-    // How long the seat has been empty, so the other board can say why the
-    // computer is playing rather than leaving them to guess.
+    // The minute is up and the computer is taking the checkers. Said out loud
+    // once, so the board opposite knows the difference between a game that has
+    // stopped and a game that is being played by something else.
     if (!seated) {
-      const emptyFor = it.awaySince?.[waiting.colour]
-        ? (Date.now() - it.awaySince[waiting.colour].toDate().getTime()) / 1000
-        : 0;
       patch.away = waiting.colour;
-      patch.gone = emptyFor >= GONE_SECONDS ? waiting.colour : (it.gone ?? null);
+      patch.covered = waiting.colour;
       if (!it.awaySince?.[waiting.colour]) {
         patch.awaySince = { ...(it.awaySince ?? {}), [waiting.colour]: now() };
       }
-    } else if (it.away === waiting.colour || it.gone === waiting.colour
-               || it.awaySince?.[waiting.colour]) {
+    } else if (it.away === waiting.colour || it.awaySince?.[waiting.colour]) {
       // Only ever our own mark. Clearing it outright said "they are back" about
       // whoever happened to be marked, and the player being acted for here is
       // usually the one still sitting there — so every turn the clock played
@@ -672,7 +692,7 @@ export const sure = onCall(settings, async request => {
       // turn put it back. The board opposite watched them leave and return and
       // leave again while they had not moved.
       patch.away = it.away === waiting.colour ? null : (it.away ?? null);
-      patch.gone = it.gone === waiting.colour ? null : (it.gone ?? null);
+      patch.covered = it.covered === waiting.colour ? null : (it.covered ?? null);
       const since = { ...(it.awaySince ?? {}) };
       delete since[waiting.colour];
       patch.awaySince = since;
@@ -694,7 +714,7 @@ export const geriGeldim = onCall(settings, async request => {
     const match = found.data();
     const mine = colourOf(match, uid);
     if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
-    if (match.away !== mine && match.gone !== mine) return { ok: true };
+    if (match.away !== mine) return { ok: true };
     // Being back is not the same as being handed the table. Sitting down in
     // the middle of a turn — dice already thrown, a throw still landing — is
     // how a returning player ends up in the middle of something they never

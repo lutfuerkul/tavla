@@ -3014,6 +3014,7 @@ let shownOpening = { black: null, ivory: null };
 let theirSeat = null;
 let watchingSeat = false;
 let opponentGone = false;
+let opponentCovered = false;
 let weWereAway = false;
 // True between the opening being settled and the first dice of the game being
 // thrown. The panel says who won the opening in that gap, and it was saying it
@@ -3203,6 +3204,8 @@ const OPENING_HELD_MS = 3500;
 // server and is read by the other board — but a turn that can be taken away
 // without warning is a turn taken away unfairly, so it is shown.
 const ROLL_SECONDS = 20, MOVE_SECONDS = 60;
+// The same minute the server holds an empty chair for.
+const HELD_SECONDS = 60;
 const clockBox = document.querySelector("#sayac");
 let clockUntil = 0;
 
@@ -3210,12 +3213,20 @@ let clockUntil = 0;
 // own time and plays to it; watching the other's run down is somebody else's
 // business, and a number on the panel that is not about you is a number to
 // misread.
+// How long is left, and counted from when. Two things are ever counted: your
+// own turn, and the minute an empty chair is waited for — which is the one
+// number worth having on the screen while nothing at all is happening.
 function runningClock(state) {
   if (mode !== "online" || !state || state.over) return 0;
+  const gone = state.away && state.away !== HUMAN && !state.covered;
+  if (gone) {
+    const since = state.awaySince?.[state.away]?.toMillis?.();
+    return since ? { seconds: HELD_SECONDS, from: since } : 0;
+  }
   // The opening keeps no time, so there is nothing to count out.
   if (state.phase === "opening") return 0;
   if (state.turn !== HUMAN) return 0;
-  return state.dice ? MOVE_SECONDS : ROLL_SECONDS;
+  return { seconds: state.dice ? MOVE_SECONDS : ROLL_SECONDS, from: null };
 }
 
 // Written as a clock rather than as a bare number of seconds: under a row of
@@ -3275,6 +3286,12 @@ function applyServerState(state) {
     if (!heldForUs) announce("away.yours", 5000);
   }
   const goneNow = state.away === Rules.other(HUMAN);
+  // And the computer sitting down in the empty chair, which is a different
+  // piece of news from the chair emptying: one is a game waiting, the other is
+  // a game going on without them.
+  const coveredNow = state.covered === Rules.other(HUMAN);
+  if (coveredNow && !opponentCovered) announce("away.covered", 10000);
+  opponentCovered = coveredNow;
   if (goneNow !== opponentGone) {
     opponentGone = goneNow;
     // Both halves of the same piece of news. The return is only ever mentioned
@@ -3303,9 +3320,10 @@ function applyServerState(state) {
     // heard about it. The two boards sit down at different times and would
     // otherwise be counting from different places — one of them showing a
     // number while the other had already run out, for the same turn.
-    const seconds = runningClock(state);
-    const from = state.updatedAt?.toMillis?.() ?? Date.now();
-    clockUntil = seconds ? from + seconds * 1000 : 0;
+    const counting = runningClock(state);
+    const from = counting && counting.from !== null
+      ? counting.from : (state.updatedAt?.toMillis?.() ?? Date.now());
+    clockUntil = counting ? from + counting.seconds * 1000 : 0;
     showClock();
     game.phase = state.phase;
     game.pos = unpackServerPosition(state.pos);
@@ -3450,9 +3468,10 @@ function leaveTable() {
   const leaving = matchId ?? localStorage.getItem(MATCH_KEY);
   sessionStorage.removeItem("tavla.sitOnLoad");
   localStorage.removeItem(MATCH_KEY);
-  // Said out loud, so the table can close behind the last one out: two empty
-  // chairs are not a game anybody should be able to come back to. Which chair
-  // is empty is the server's to read — this only tells it somebody stood up.
+  // Said out loud, because getting up closes the table. A game across a
+  // network is two people, and one of them leaving on purpose does not leave
+  // a game behind for the computer to finish — the other board is told by the
+  // record going.
   //
   // Not waited on for long. The door is where this player is going whatever
   // the answer, and a slow line is no reason to keep them at a game they have
