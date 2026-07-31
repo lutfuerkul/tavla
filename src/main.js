@@ -476,12 +476,17 @@ const lobby = document.querySelector("#lobby");
 const hostButton = document.querySelector("#host");
 const joinButton = document.querySelector("#join");
 const codeBox = document.querySelector("#code");
+const codeHint = document.querySelector("#code-hint");
 const lobbySaid = document.querySelector("#lobby-said");
-let watchingRoom = null;
+const cancelButton = document.querySelector("#cancel");
+let watchingRoom = null, openRoom = null;
 
 function say(key, code) {
   if (!lobbySaid) return;
   lobbySaid.textContent = t(key);
+  // A line with a code on it is read out to somebody else, so it is set louder
+  // than the rest of the running commentary that goes through here.
+  lobbySaid.classList.toggle("loud", !!code);
   if (code) {
     const shown = document.createElement("span");
     shown.className = "kod";
@@ -551,6 +556,7 @@ function showLobby() {
   const online = mode === "online";
   lobby?.toggleAttribute("hidden", !online);
   if (codeBox) codeBox.hidden = true;
+  if (codeHint) codeHint.hidden = true;
   const waiting = online && localStorage.getItem(MATCH_KEY);
   resumeButton?.toggleAttribute("hidden", !waiting);
   if (waiting) forgetIfFinished(waiting).catch(() => {});
@@ -656,6 +662,10 @@ findButton?.addEventListener("click", async () => {
 // checked for on the other side too.
 addEventListener("pagehide", () => {
   if (looking) ask("siradanCik", {}).catch(() => {});
+  // The same for a room left open: closing the tab is giving up on it too. A
+  // room that has already been matched is refused on the other side, so the
+  // reload that follows two people finding each other is not caught by this.
+  if (openRoom) ask("odayiKapat", { code: openRoom }).catch(() => {});
 });
 
 hostButton?.addEventListener("click", async () => {
@@ -663,13 +673,17 @@ hostButton?.addEventListener("click", async () => {
   try {
     const room = await ask("odaKur", { colour: "black" });
     say("lobby.made", room.code);
+    openRoom = room.code;
+    // Nothing under the code saying it is being waited on — that much is plain
+    // from standing there with a code in your hand. What was missing was the
+    // way back out, so that is what goes there instead.
+    cancelButton?.removeAttribute("hidden");
     // The guest's arrival is written on the room, so it is watched rather than
     // asked after.
     watchingRoom?.();
     watchingRoom = await follow("rooms", room.code, it => {
       if (it.status === "matched" && it.matchId) sitDownTo(it.matchId, room.colour);
     });
-    lobbySaid.append(document.createTextNode(" · " + t("lobby.waiting")));
   } catch (reason) {
     // Nothing here is worth alarming anybody with: either there is a
     // connection or there is not, and the rest of the game does not need one.
@@ -679,6 +693,22 @@ hostButton?.addEventListener("click", async () => {
   }
 });
 
+// Giving up on a room nobody came to. The code is closed on the server rather
+// than left to run out on its own: a code still standing is one a friend can
+// walk into an hour later, and there would be nobody on the other side of it.
+async function dropRoom() {
+  const closing = openRoom;
+  openRoom = null;
+  watchingRoom?.();
+  watchingRoom = null;
+  cancelButton?.setAttribute("hidden", "");
+  if (lobbySaid) { lobbySaid.textContent = ""; lobbySaid.classList.remove("loud"); }
+  hostButton.disabled = joinButton.disabled = false;
+  if (closing) await ask("odayiKapat", { code: closing }).catch(() => {});
+}
+
+cancelButton?.addEventListener("click", () => { dropRoom(); });
+
 // Two presses rather than one: the first opens the box to type the code into,
 // the second takes the code. A field standing there empty beside three buttons
 // is a question nobody asked — most people are looking for the other two ways
@@ -686,6 +716,7 @@ hostButton?.addEventListener("click", async () => {
 function askForCode() {
   if (!codeBox || !codeBox.hidden) return false;
   codeBox.hidden = false;
+  if (codeHint) codeHint.hidden = false;
   codeBox.value = "";
   codeBox.focus();
   return true;

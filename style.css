@@ -187,11 +187,13 @@ body.ideographic #hud span, body.ideographic #hud strong {
 
 /* Playing somebody who is not in the room: make a room and read the code out,
    or take one you have been given. */
-/* How many people are at a table right now, beside the way in to a game with
-   one of them. It appears if the connection is there and stays away if it is
-   not: the game plays perfectly well with no network at all and must not look
-   broken to somebody who has none. */
-#online { align-self: center; display: flex; align-items: center; gap: .45rem;
+/* How many people are at a table right now, under the name of the game up in
+   the black above the board — the first thing read on the way in rather than
+   something noticed beside a button. It appears if the connection is there and
+   stays away if it is not: the game plays perfectly well with no network at
+   all and must not look broken to somebody who has none. */
+#online { position: absolute; top: 4.4rem; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: .45rem;
   padding: .32rem .65rem; font: 500 .68rem/1 "DM Mono", monospace;
   letter-spacing: .08em; text-transform: uppercase; color: #ad9470;
   background: rgba(12,9,6,.55); border: 1px solid rgba(229,173,84,.22);
@@ -238,11 +240,34 @@ body.ideographic #hud span, body.ideographic #hud strong {
   color: #f3ead7; background: rgba(8,6,4,.8); border: 1px solid rgba(229,173,84,.4);
   border-radius: .45rem; }
 #code::placeholder { color: #6b6153; letter-spacing: .22em; }
+/* Beside the box the moment it opens. A field standing there with nothing but
+   a grey placeholder in it says what shape the answer is, not what is being
+   asked for. */
+#code-hint { font: 500 .78rem/1 "DM Mono", monospace; letter-spacing: .1em;
+  text-transform: uppercase; color: #e5ad54; white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0,0,0,.85), 0 0 10px rgba(0,0,0,.7); }
+#code-hint[hidden] { display: none; }
 #lobby-said { margin: .9rem 0 0; min-height: 1.2rem; font-size: .74rem; letter-spacing: .06em;
   color: #d2c8b4; }
+/* The line that carries the code is not a caption like the others on it: it is
+   the whole point of the room, and it is being read down a telephone to
+   somebody in another town. */
+#lobby-said.loud { font: 600 1rem/1.5 "DM Mono", monospace; letter-spacing: .08em;
+  color: #f6ecd6; text-transform: uppercase;
+  text-shadow: 0 1px 3px rgba(0,0,0,.85), 0 0 10px rgba(0,0,0,.7); }
 #lobby-said .kod { display: inline-block; margin-left: .35rem; padding: .12rem .5rem;
   font-size: 1.05rem; letter-spacing: .3em; color: #0d0a06; background: #e5ad54;
   border-radius: .3rem; }
+#lobby-said.loud .kod { margin-left: .55rem; padding: .2rem .75rem; font-size: 1.4rem; }
+/* Giving up on a room nobody came to. Outlined and quiet: it is the way back
+   out, not the thing to press. */
+#cancel { display: block; margin: .9rem auto 0; padding: .55rem 1.4rem;
+  font: 500 .72rem/1 "DM Mono", monospace; letter-spacing: .12em;
+  text-transform: uppercase; color: #d8ccb4; background: rgba(20,15,10,.78);
+  border: 1px solid rgba(229,173,84,.4); border-radius: .45rem; box-shadow: none;
+  cursor: pointer; transition: color .2s ease, border-color .2s ease, background .2s ease; }
+#cancel:hover { border-color: #e5ad54; color: #f6ecd6; background: rgba(36,26,16,.9); }
+#cancel[hidden] { display: none; }
 
 /* Which checkers are yours, and the door handle. */
 #colours { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin: 1.1rem 0 0; }
@@ -276,6 +301,7 @@ body.ideographic #hud span, body.ideographic #hud strong {
   /* No black band above the board on a phone — the languages are up there —
      so it goes back into the door where it came from. */
   .eyebrow { position: static; transform: none; margin: 0 0 .6rem; }
+  #online { position: static; transform: none; justify-self: center; margin: 0 0 .9rem; }
   .lang-pick { width: auto; font-size: .66rem; padding: .3rem .5rem; }
   #modes { margin: 1.1rem 0 .9rem; }
   .mode-pick, .board-pick, .colour-pick, .side-pick { padding: .62rem 1.05rem; font-size: .78rem; }

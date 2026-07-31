@@ -225,6 +225,26 @@ export const odayaKatil = onCall(settings, async request => {
   return answer;
 });
 
+// A room the host has given up on. Deleted rather than left to run out: a code
+// still standing is a code a friend can walk into an hour later, and walking
+// into a room nobody is watching any more seats them at a table on their own.
+// Only the host's to close, and only while nobody has come through it — a room
+// that has already been matched belongs to the match now.
+export const odayiKapat = onCall(settings, async request => {
+  const uid = whoIsAsking(request);
+  const wanted = String(request.data?.code ?? "").trim().toUpperCase();
+  if (!/^[A-Z2-9]{5}$/.test(wanted)) return { closed: false };
+  const room = db.collection("rooms").doc(wanted);
+  return await db.runTransaction(async tx => {
+    const found = await tx.get(room);
+    if (!found.exists) return { closed: false };
+    const it = found.data();
+    if (it.host !== uid || it.status === "matched") return { closed: false };
+    tx.delete(room);
+    return { closed: true };
+  });
+});
+
 // The host waits on their own room rather than polling: the client listens to
 // the room document and this is what tells it which match to open. Kept as a
 // call as well so a client that has lost its listener can ask outright.
