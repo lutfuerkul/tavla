@@ -3899,6 +3899,14 @@ function lands(outcome, want) {
 
 function stepSearch(frameDt = 1 / 60) {
   if (!pending) return;
+  // What the dice are showing right now, to be put back when this frame's
+  // share of the search is done. Every attempt starts them again from the pose
+  // the throw will leave from, and leaving them there is what made the shake
+  // stop dead for a moment before the dice flew: the hand went on swirling
+  // them round but each frame put the tumble back where it began, so they hung
+  // there unturning until the search found its throw. Nobody watching that
+  // knows the board is looking for anything — they see the dice stop.
+  const shown = diceSnapshot(pending.dice);
   const budget = Math.min(SEARCH_CEILING_MS,
     Math.max(SEARCH_FLOOR_MS, frameDt * 1000 * SEARCH_SHARE));
   const until = performance.now() + budget;
@@ -3910,7 +3918,7 @@ function stepSearch(frameDt = 1 / 60) {
       break;
     }
   }
-  restoreDice(pending.from);
+  restoreDice(shown);
   for (const die of pending.dice) {
     const s = die.userData.die;
     s.mode = "held";
@@ -3948,6 +3956,25 @@ function launchDice() {
   // reach the far rail, come back off it and keep tumbling.
   const aim = new THREE.Vector3(sideways, 0, towards).normalize();
   const dice = heldDice.entries.map(entry => entry.die);
+
+  // Off the network, the throw decides. The dice leave the hand as they are,
+  // roll where the felt and the walls send them, and whatever they come to
+  // rest on is the roll — nothing is named in advance and nothing is searched
+  // for, so they go the moment the shake is over.
+  //
+  // This is only open to a game with one board in it. Two boards across a
+  // network have to be looking at the same dice, and the only way that holds
+  // is for the numbers to come from the one place both of them are reading.
+  if (!session.online && !forcedRoll) {
+    thrownDice = dice;
+    armLaunch(dice, aim, (Math.random() * 0xffffffff) | 0);
+    wanted = null;
+    heldDice = null;
+    thrown = true;
+    canvas.style.cursor = "grab";
+    showDiceValues();
+    return;
+  }
 
   // The numbers first, then a tumble that produces them. Asking for them takes
   // no time locally and a round trip online, and either way the dice carry on

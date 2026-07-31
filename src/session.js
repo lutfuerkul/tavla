@@ -58,10 +58,12 @@ export function onlineSession({ matchId, colour, ask, follow }) {
 export function localSession() {
   return {
     online: false,
-    // A throw's numbers, decided before the dice are let go of. The board is
-    // free to take as long as it likes finding a tumble that lands on them.
-    // How many are asked for is how many are in the hand: the opening is one
-    // die each, and the game after it is the pair.
+    // A throw's numbers, decided before the dice are let go of. The board no
+    // longer asks a local game for these — with one board in the room the dice
+    // are simply thrown and read where they stop, which is the same question
+    // answered by the felt instead of by a generator. It is kept because a
+    // session is these two answers, and a game that cannot give the first one
+    // is not one; anything that needs numbers up front can still ask.
     roll: (count = 2) => Promise.resolve(Array.from({ length: count }, d6)),
     // A turn, as the sequence of moves that made it. There is nobody to check
     // it against here — the board has already played it against the same rules

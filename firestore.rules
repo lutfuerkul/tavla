@@ -10,8 +10,17 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // The two people playing in it, and nobody else. A code is a thing you say
+    // out loud to one person; it was readable by anybody signed in, and a rule
+    // that allows a document to be read allows the collection to be listed —
+    // so every open room and its code could simply be asked for, and a stranger
+    // could take the seat the code was said for. The guest never reads the room
+    // anyway: they hand the code to a function, which is where knowing it is
+    // checked. This is only the host, watching their own room for somebody to
+    // arrive, and the guest afterwards.
     match /rooms/{code} {
-      allow read: if request.auth != null;
+      allow read: if request.auth != null
+        && (request.auth.uid == resource.data.host || request.auth.uid == resource.data.guest);
       allow write: if false;
     }
 
