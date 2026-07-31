@@ -2437,6 +2437,51 @@ function keyFor(colour, place) {
   return place === "bar" ? barKey(colour) : pointKey(place);
 }
 
+// Which way a checker leaves the board when it is borne off.
+//
+// On a desktop it goes out to the side, past the end wall beyond the home
+// boards, which is where the tray sits on a real board — and there is room to
+// show it there, because a window wider than it is tall fits the board by its
+// height and has width to spare.
+//
+// A phone or a tablet held upright has that the other way round: the width is
+// what the board is fitted to and the spare room is above and below, so a pile
+// out past the ends is a pile off the screen. In the hand they come off
+// towards the players instead — yours over the near rail and theirs over the
+// far one, which is also the direction the hand is already carrying them.
+const OFF_TO_THE_SIDE = !HANDHELD;
+
+// Whose rail is whose, when they come off towards the players: the near one is
+// yours whoever you are, and two people round one tablet sit either side of it.
+const offEdge = colour => (colour === HUMAN ? -AWAY : AWAY);
+
+// How many go in a row out there before the next one starts. Five is a hand
+// of them: a glance counts a row of five without counting, and three rows is
+// the whole game.
+const OFF_IN_A_ROW = 5;
+
+// Where the nth checker of a colour sits once it is off.
+function offSeat(colour, standing = 0) {
+  if (OFF_TO_THE_SIDE) {
+    return {
+      x: MIRROR * (CASE_HALF_X + 1.75),
+      y: FELT_Y + standing * (CHECKER_H + .004),
+      z: colour === "black" ? FIELD_HALF * .55 : -FIELD_HALF * .55,
+    };
+  }
+  // Laid out flat rather than piled up, in rows of five. The board is being
+  // looked straight down at here, and from up there a pile of fifteen is one
+  // checker and a long shadow. Five is what a glance counts without counting —
+  // three full rows is the game — and each row sits further out from the rail
+  // than the last, clear of the board rather than against it.
+  const row = Math.floor(standing / OFF_IN_A_ROW), place = standing % OFF_IN_A_ROW;
+  return {
+    x: MIRROR * (FIELD_HALF_X * .55 + (place - (OFF_IN_A_ROW - 1) / 2) * CHECKER_D * 1.15),
+    y: FELT_Y,
+    z: offEdge(colour) * (CASE_HALF_Z + 1 + row * CHECKER_D * 1.2),
+  };
+}
+
 const piecesGroup = new THREE.Group();
 scene.add(piecesGroup);
 let pieceMeshes = [];
@@ -2457,17 +2502,16 @@ function renderPieces() {
     if (game.pos.bar[colour]) stacks.push([barKey(colour), colour, game.pos.bar[colour]]);
   }
 
-  // Checkers that have been borne off are piled outside the right-hand wall,
-  // each colour off the end of its own home board, so the race can be read at
-  // a glance.
+  // Checkers that have been borne off are piled outside the wall, each colour
+  // off its own end of the board, so the race can be read at a glance.
   for (const colour of Rules.COLOURS) {
     const taken = game.pos.off[colour];
     if (!taken) continue;
     const material = colour === "ivory" ? ivory : black;
-    const z = colour === "black" ? FIELD_HALF * .55 : -FIELD_HALF * .55;
     for (let i = 0; i < taken; i++) {
+      const seat = offSeat(colour, i);
       const body = new THREE.Mesh(checkerGeometry, material);
-      body.position.set(MIRROR * (CASE_HALF_X + 1.75), FELT_Y + i * (CHECKER_H + .004), z);
+      body.position.set(seat.x, seat.y, seat.z);
       body.rotation.y = (Math.random() - .5) * .3;
       body.castShadow = true;
       body.receiveShadow = true;
@@ -2679,7 +2723,14 @@ function seatOfMove(colour, move) {
     : game.pos.points[move.from].count;
   const from = checkerSeat(fromKey, standing - 1);
   if (move.to === "off") {
-    return { fromKey, from, to: { x: MIRROR * (FIELD_HALF_X + 1.4), y: CASE_TOP, z: from.z } };
+    // Over the rail it leaves by, at the height of the wall it clears: to the
+    // side on a desktop, towards whoever is playing it in the hand.
+    return {
+      fromKey, from,
+      to: OFF_TO_THE_SIDE
+        ? { x: MIRROR * (FIELD_HALF_X + 1.4), y: CASE_TOP, z: from.z }
+        : { x: from.x, y: CASE_TOP, z: offEdge(colour) * (FIELD_HALF_Z + 1) },
+    };
   }
   const target = game.pos.points[move.to];
   const seated = target && target.colour === colour ? target.count : 0;
@@ -4118,10 +4169,15 @@ addEventListener("pointerup", (e) => {
   raycaster.setFromCamera(pointer, camera);
   const hit = new THREE.Vector3();
   if (raycaster.ray.intersectPlane(dragPlane, hit)) {
-    // Carried past the wall on the home side is an attempt to bear off. Both
-    // home boards are on the same side of the board as each other, and which
-    // side of the screen that is depends on which colour is being played.
-    if (hit.x * MIRROR > FIELD_HALF_X) {
+    // Carried past the wall it comes off by is an attempt to bear off. On a
+    // desktop that is the end wall past the home boards — both of them are on
+    // the same side of the board, and which side of the screen that is depends
+    // on which colour is being played. In the hand it is the near rail, the
+    // one the checkers are being carried towards anyway.
+    const past = OFF_TO_THE_SIDE
+      ? hit.x * MIRROR > FIELD_HALF_X
+      : hit.z * offEdge(game.turn) > FIELD_HALF_Z;
+    if (past) {
       game.lifted = null;
       tryMove(dragging.from, "off");
       scene.remove(dragging.mesh);
