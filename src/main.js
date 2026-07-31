@@ -3957,6 +3957,25 @@ function launchDice() {
   const aim = new THREE.Vector3(sideways, 0, towards).normalize();
   const dice = heldDice.entries.map(entry => entry.die);
 
+  // Off the network, the throw decides. The dice leave the hand as they are,
+  // roll where the felt and the walls send them, and whatever they come to
+  // rest on is the roll — nothing is named in advance and nothing is searched
+  // for, so they go the moment the shake is over.
+  //
+  // This is only open to a game with one board in it. Two boards across a
+  // network have to be looking at the same dice, and the only way that holds
+  // is for the numbers to come from the one place both of them are reading.
+  if (!session.online && !forcedRoll) {
+    thrownDice = dice;
+    armLaunch(dice, aim, (Math.random() * 0xffffffff) | 0);
+    wanted = null;
+    heldDice = null;
+    thrown = true;
+    canvas.style.cursor = "grab";
+    showDiceValues();
+    return;
+  }
+
   // The numbers first, then a tumble that produces them. Asking for them takes
   // no time locally and a round trip online, and either way the dice carry on
   // being shaken until the answer and a matching throw are both in hand.
