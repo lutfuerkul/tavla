@@ -46,6 +46,18 @@ const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 5;
 const ROOM_MINUTES = 20;
 
+// How long a record is kept before Firestore sweeps it up. Nothing here is
+// worth storing for ever: a match nobody can return to is a few kilobytes of
+// a game that finished, and a place in the queue is stale after a minute. The
+// dates are written on the documents themselves; the sweeping is a TTL policy
+// on the field, set on the project rather than in code.
+const KEPT_DAYS = 3;
+const KEPT_AFTER_CLOSING_HOURS = 1;
+const KEPT_IN_QUEUE_MINUTES = 5;
+const sweptIn = ms => new Date(Date.now() + ms);
+const KEPT = () => sweptIn(KEPT_DAYS * 24 * 60 * 60 * 1000);
+const SWEPT_SOON = () => sweptIn(KEPT_AFTER_CLOSING_HOURS * 60 * 60 * 1000);
+
 const now = () => FieldValue.serverTimestamp();
 const d6 = () => randomInt(1, 7);
 
@@ -106,6 +118,9 @@ function freshMatch(players) {
     seq: 0,
     createdAt: now(),
     updatedAt: now(),
+    // Swept up three days after it was laid out. A match still being played
+    // three days later is not one anybody is coming back to.
+    silinecek: KEPT(),
   };
 }
 
@@ -249,7 +264,13 @@ export const eslesmeyeGir = onCall(settings, async request => {
       // The one who waited takes black, and black opens — the small courtesy
       // of throwing first goes to whoever sat there longest.
       tx.set(match, freshMatch({ black: entry.id, ivory: uid }));
-      tx.update(entry.ref, { matchId: match.id, colour: "black" });
+      // Read by the board that is waiting and then of no further use — but it
+      // is written to rather than deleted, since deleting it is how the board
+      // watching it is told nothing at all. So it is left with a date on it.
+      tx.update(entry.ref, {
+        matchId: match.id, colour: "black",
+        silinecek: sweptIn(KEPT_IN_QUEUE_MINUTES * 60 * 1000),
+      });
       return { matchId: match.id, colour: "ivory" };
     });
     if (paired) {
@@ -264,7 +285,7 @@ export const eslesmeyeGir = onCall(settings, async request => {
   // queue on the way past — so two people who arrived in the same breath and
   // both sat down to wait find each other on their next ask rather than
   // waiting for a third.
-  await queue.doc(uid).set({ at: now(), matchId: null });
+  await queue.doc(uid).set({ at: now(), matchId: null, silinecek: sweptIn(KEPT_IN_QUEUE_MINUTES * 60 * 1000) });
   return { waiting: true, refresh: QUEUE_FRESH_SECONDS };
 });
 
@@ -296,7 +317,11 @@ export const masayiBirak = onCall(settings, async request => {
   if (match.closed) return { ok: true, closed: true };
 
   if (await isSeated(id, match.players[Rules.other(mine)])) return { ok: true, closed: false };
-  await ref.update({ closed: true, updatedAt: now(), seq: (match.seq ?? 0) + 1 });
+  await ref.update({
+    closed: true, updatedAt: now(), seq: (match.seq ?? 0) + 1,
+    // Nobody is coming back to it, so it does not wait out the three days.
+    silinecek: SWEPT_SOON(),
+  });
   return { ok: true, closed: true };
 });
 
@@ -434,6 +459,7 @@ export const turuOyna = onCall(settings, async request => {
       patch.score = score;
       patch.over = { winner: won, value };
       patch.matchOver = score[won] >= match.target ? won : null;
+      if (patch.matchOver) patch.silinecek = SWEPT_SOON();
     } else {
       patch.turn = Rules.other(mine);
     }
@@ -526,6 +552,7 @@ function actFor(match, colour) {
     patch.score = score;
     patch.over = { winner: won, value };
     patch.matchOver = score[won] >= match.target ? won : null;
+    if (patch.matchOver) patch.silinecek = SWEPT_SOON();
   } else {
     patch.turn = Rules.other(colour);
   }
