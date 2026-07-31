@@ -274,6 +274,32 @@ export const siradanCik = onCall(settings, async request => {
   return { ok: true };
 });
 
+// Getting up from the table, said out loud. A player leaving while the other
+// is still sitting there is an ordinary thing — the computer covers for them
+// and they can come back. Both of them leaving is not: the table closes behind
+// the last one out, and a closed table is played at by nobody and returned to
+// by nobody.
+//
+// Which chair is empty is read here rather than taken from the caller, and it
+// is the other one that is looked at: the one asking is on their way out by
+// definition.
+export const masayiBirak = onCall(settings, async request => {
+  const uid = whoIsAsking(request);
+  const id = String(request.data?.matchId ?? "");
+  const ref = db.collection("matches").doc(id);
+
+  const found = await ref.get();
+  if (!found.exists) return { ok: true, closed: false };
+  const match = found.data();
+  const mine = colourOf(match, uid);
+  if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
+  if (match.closed) return { ok: true, closed: true };
+
+  if (await isSeated(id, match.players[Rules.other(mine)])) return { ok: true, closed: false };
+  await ref.update({ closed: true, updatedAt: now(), seq: (match.seq ?? 0) + 1 });
+  return { ok: true, closed: true };
+});
+
 // --- the turn ---------------------------------------------------------
 
 // One die each to open, the pair once somebody has started. The numbers are
@@ -290,6 +316,7 @@ export const zarAt = onCall(settings, async request => {
     const match = found.data();
     const mine = colourOf(match, uid);
     if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
+    if (match.closed) throw new HttpsError("failed-precondition", "Masa kapandı.");
     if (match.over) throw new HttpsError("failed-precondition", "Maç bitti.");
 
     if (match.phase === "opening") {
@@ -360,6 +387,7 @@ export const turuOyna = onCall(settings, async request => {
     const match = found.data();
     const mine = colourOf(match, uid);
     if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
+    if (match.closed) throw new HttpsError("failed-precondition", "Masa kapandı.");
     if (match.over) throw new HttpsError("failed-precondition", "Maç bitti.");
     if (match.phase !== "play") throw new HttpsError("failed-precondition", "Sıra açılışta.");
     if (match.turn !== mine) throw new HttpsError("failed-precondition", "Sıra sende değil.");
@@ -516,6 +544,8 @@ export const sure = onCall(settings, async request => {
   const match = found.data();
   const mine = colourOf(match, uid);
   if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
+  // Nobody is covered for at a table nobody is at.
+  if (match.closed) return { acted: false, closed: true };
 
   const waiting = waitingFor(match);
   if (!waiting) return { acted: false };
@@ -645,6 +675,7 @@ export const yeniOyun = onCall(settings, async request => {
     if (!found.exists) throw new HttpsError("not-found", "Maç bulunamadı.");
     const match = found.data();
     if (!colourOf(match, uid)) throw new HttpsError("permission-denied", "Bu maç senin değil.");
+    if (match.closed) throw new HttpsError("failed-precondition", "Masa kapandı.");
     if (!match.over) throw new HttpsError("failed-precondition", "Oyun daha bitmedi.");
     if (match.matchOver) throw new HttpsError("failed-precondition", "Maç bitti.");
 

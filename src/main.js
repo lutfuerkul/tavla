@@ -504,8 +504,9 @@ resumeButton?.addEventListener("click", async () => {
   const theirs = state?.players?.[Rules.other(HUMAN)];
   const there = theirs ? await seatTaken(id, theirs) : null;
   // `null` is not knowing — the question failed to arrive — and that is no
-  // reason to keep somebody from their own match.
-  if (there === false) {
+  // reason to keep somebody from their own match. A table the server has
+  // closed is a different matter: it is shut for both of them and says so.
+  if (state?.closed || there === false) {
     say("lobby.closed");
     localStorage.removeItem(MATCH_KEY);
     resumeButton.setAttribute("hidden", "");
@@ -581,6 +582,12 @@ findButton?.addEventListener("click", async () => {
   hostButton.disabled = joinButton.disabled = true;
   say("lobby.searching");
   try {
+    // Anything this browser left in the queue is cleared before a new search
+    // starts. A place left behind from an earlier one has an old match written
+    // on it by whoever paired with it, and being found a game is never being
+    // sent back to a game already played — the way back to a match of your own
+    // is the button that says so, and only that button.
+    await ask("siradanCik", {}).catch(() => {});
     const answer = await ask("eslesmeyeGir", {});
     if (!looking) return;
     if (answer?.matchId) return sitDownTo(answer.matchId, answer.colour ?? "ivory");
@@ -3265,9 +3272,21 @@ const closeConfirm = () => confirmBox?.setAttribute("hidden", "");
 // What the other player sees when somebody walks off is the server's business
 // and is not built yet.
 function leaveTable() {
+  const leaving = matchId ?? localStorage.getItem(MATCH_KEY);
   sessionStorage.removeItem("tavla.sitOnLoad");
   localStorage.removeItem(MATCH_KEY);
-  location.reload();
+  // Said out loud, so the table can close behind the last one out: two empty
+  // chairs are not a game anybody should be able to come back to. Which chair
+  // is empty is the server's to read — this only tells it somebody stood up.
+  //
+  // Not waited on for long. The door is where this player is going whatever
+  // the answer, and a slow line is no reason to keep them at a game they have
+  // already left.
+  const said = leaving
+    ? ask("masayiBirak", { matchId: leaving }).catch(() => {})
+    : Promise.resolve();
+  Promise.race([said, new Promise(done => setTimeout(done, 1500))])
+    .then(() => location.reload());
 }
 
 menuButton?.addEventListener("click", () => confirmBox?.removeAttribute("hidden"));
