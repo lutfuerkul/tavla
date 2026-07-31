@@ -46,6 +46,19 @@ const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 5;
 const ROOM_MINUTES = 20;
 
+// How long a record lingers before Firestore sweeps it up. This is a backstop
+// and nothing more: a table is deleted when the last player leaves it, at the
+// moment they leave. What is left over is what nobody could say goodbye for —
+// a tab closed, a phone put down, a signal lost — and these are how long that
+// takes to go. The dates are written on the documents themselves; the sweeping
+// is a TTL policy on the field, set on the project rather than in code.
+const KEPT_DAYS = 1;
+const KEPT_AFTER_CLOSING_HOURS = 1;
+const KEPT_IN_QUEUE_MINUTES = 5;
+const sweptIn = ms => new Date(Date.now() + ms);
+const KEPT = () => sweptIn(KEPT_DAYS * 24 * 60 * 60 * 1000);
+const SWEPT_SOON = () => sweptIn(KEPT_AFTER_CLOSING_HOURS * 60 * 60 * 1000);
+
 const now = () => FieldValue.serverTimestamp();
 const d6 = () => randomInt(1, 7);
 
@@ -106,6 +119,9 @@ function freshMatch(players) {
     seq: 0,
     createdAt: now(),
     updatedAt: now(),
+    // A match still on the table a day later is not one anybody is coming back
+    // to. Normally it is deleted long before this, as its last player leaves.
+    silinecek: KEPT(),
   };
 }
 
@@ -249,7 +265,13 @@ export const eslesmeyeGir = onCall(settings, async request => {
       // The one who waited takes black, and black opens — the small courtesy
       // of throwing first goes to whoever sat there longest.
       tx.set(match, freshMatch({ black: entry.id, ivory: uid }));
-      tx.update(entry.ref, { matchId: match.id, colour: "black" });
+      // Read by the board that is waiting and then of no further use — but it
+      // is written to rather than deleted, since deleting it is how the board
+      // watching it is told nothing at all. So it is left with a date on it.
+      tx.update(entry.ref, {
+        matchId: match.id, colour: "black",
+        silinecek: sweptIn(KEPT_IN_QUEUE_MINUTES * 60 * 1000),
+      });
       return { matchId: match.id, colour: "ivory" };
     });
     if (paired) {
@@ -264,7 +286,7 @@ export const eslesmeyeGir = onCall(settings, async request => {
   // queue on the way past — so two people who arrived in the same breath and
   // both sat down to wait find each other on their next ask rather than
   // waiting for a third.
-  await queue.doc(uid).set({ at: now(), matchId: null });
+  await queue.doc(uid).set({ at: now(), matchId: null, silinecek: sweptIn(KEPT_IN_QUEUE_MINUTES * 60 * 1000) });
   return { waiting: true, refresh: QUEUE_FRESH_SECONDS };
 });
 
@@ -272,6 +294,35 @@ export const siradanCik = onCall(settings, async request => {
   const uid = whoIsAsking(request);
   await db.collection("sira").doc(uid).delete().catch(() => {});
   return { ok: true };
+});
+
+// Getting up from the table, said out loud. A player leaving while the other
+// is still sitting there is an ordinary thing — the computer covers for them
+// and they can come back. Both of them leaving is not: the table closes behind
+// the last one out, and a closed table is played at by nobody and returned to
+// by nobody.
+//
+// Which chair is empty is read here rather than taken from the caller, and it
+// is the other one that is looked at: the one asking is on their way out by
+// definition.
+export const masayiBirak = onCall(settings, async request => {
+  const uid = whoIsAsking(request);
+  const id = String(request.data?.matchId ?? "");
+  const ref = db.collection("matches").doc(id);
+
+  const found = await ref.get();
+  if (!found.exists) return { ok: true, closed: false };
+  const match = found.data();
+  const mine = colourOf(match, uid);
+  if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
+  if (match.closed) return { ok: true, closed: true };
+
+  if (await isSeated(id, match.players[Rules.other(mine)])) return { ok: true, closed: false };
+  // Closed means gone. There is nothing left to read: no player, no game to
+  // carry on, nobody to come back — so the record is not marked and kept, it
+  // is deleted here and now. The boards watching it are told by its going.
+  await ref.delete();
+  return { ok: true, closed: true };
 });
 
 // --- the turn ---------------------------------------------------------
@@ -290,6 +341,7 @@ export const zarAt = onCall(settings, async request => {
     const match = found.data();
     const mine = colourOf(match, uid);
     if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
+    if (match.closed) throw new HttpsError("failed-precondition", "Masa kapandı.");
     if (match.over) throw new HttpsError("failed-precondition", "Maç bitti.");
 
     if (match.phase === "opening") {
@@ -360,6 +412,7 @@ export const turuOyna = onCall(settings, async request => {
     const match = found.data();
     const mine = colourOf(match, uid);
     if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
+    if (match.closed) throw new HttpsError("failed-precondition", "Masa kapandı.");
     if (match.over) throw new HttpsError("failed-precondition", "Maç bitti.");
     if (match.phase !== "play") throw new HttpsError("failed-precondition", "Sıra açılışta.");
     if (match.turn !== mine) throw new HttpsError("failed-precondition", "Sıra sende değil.");
@@ -406,6 +459,7 @@ export const turuOyna = onCall(settings, async request => {
       patch.score = score;
       patch.over = { winner: won, value };
       patch.matchOver = score[won] >= match.target ? won : null;
+      if (patch.matchOver) patch.silinecek = SWEPT_SOON();
     } else {
       patch.turn = Rules.other(mine);
     }
@@ -498,6 +552,7 @@ function actFor(match, colour) {
     patch.score = score;
     patch.over = { winner: won, value };
     patch.matchOver = score[won] >= match.target ? won : null;
+    if (patch.matchOver) patch.silinecek = SWEPT_SOON();
   } else {
     patch.turn = Rules.other(colour);
   }
@@ -516,6 +571,8 @@ export const sure = onCall(settings, async request => {
   const match = found.data();
   const mine = colourOf(match, uid);
   if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
+  // Nobody is covered for at a table nobody is at.
+  if (match.closed) return { acted: false, closed: true };
 
   const waiting = waitingFor(match);
   if (!waiting) return { acted: false };
@@ -645,15 +702,20 @@ export const yeniOyun = onCall(settings, async request => {
     if (!found.exists) throw new HttpsError("not-found", "Maç bulunamadı.");
     const match = found.data();
     if (!colourOf(match, uid)) throw new HttpsError("permission-denied", "Bu maç senin değil.");
+    if (match.closed) throw new HttpsError("failed-precondition", "Masa kapandı.");
     if (!match.over) throw new HttpsError("failed-precondition", "Oyun daha bitmedi.");
     if (match.matchOver) throw new HttpsError("failed-precondition", "Maç bitti.");
 
+    // Not opened for: inside a running match the winner of the game just
+    // finished starts the next one, the way it is played at a table. So the
+    // board comes back already in play with the turn on them, and the first
+    // thing that happens is their own throw.
     tx.update(ref, {
       pos: packPosition(Rules.startingPosition()),
-      phase: "opening",
+      phase: "play",
       opening: { ivory: null, black: null },
-      waitingOn: "black",
-      turn: "black",
+      waitingOn: null,
+      turn: match.over.winner,
       dice: null,
       remaining: [],
       required: 0,

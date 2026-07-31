@@ -86,12 +86,17 @@ export async function ask(name, data) {
 
 // Watches a document and calls back with it every time the server changes it.
 // Returns the way to stop watching, and a no-op if there is no connection.
-export async function follow(path, id, watch) {
+// `gone` is called instead when the record is not there any more, which is how
+// a table closing is heard: the server deletes it as the last player leaves,
+// rather than leaving a finished game lying about. Watchers that have nothing
+// to say about that leave it out and simply stop hearing anything.
+export async function follow(path, id, watch, gone) {
   const live = await connect();
   if (!live) return () => {};
   const { store, firestore } = live;
   return store.onSnapshot(store.doc(firestore, path, id), snapshot => {
     if (snapshot.exists()) watch(snapshot.data());
+    else gone?.();
   }, reason => console.info("tavla: dinleme koptu —", reason?.message ?? reason));
 }
 

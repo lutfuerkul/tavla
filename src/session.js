@@ -48,7 +48,10 @@ export function onlineSession({ matchId, colour, ask, follow }) {
     // The board is laid out again by the server, not by the player, so that
     // both of them are looking at the same one.
     nextGame: () => ask("yeniOyun", { matchId }),
-    watch: onChange => follow("matches", matchId, onChange),
+    // The second half is the table closing: the match is deleted the moment
+    // its last player leaves, and its going is the only word about it there
+    // will be.
+    watch: (onChange, closed) => follow("matches", matchId, onChange, closed),
   };
 }
 

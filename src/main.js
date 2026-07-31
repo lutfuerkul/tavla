@@ -245,7 +245,7 @@ function sitDown() {
   // Not before — at the door there is no board to put anything on.
   if (mode === "online" && matchId && !session.online) {
     session = onlineSession({ matchId, colour: HUMAN, ask, follow });
-    session.watch(applyServerState);
+    session.watch(applyServerState, tableClosed);
   }
 }
 
@@ -483,11 +483,16 @@ function say(key, code) {
 const resumeButton = document.querySelector("#resume");
 
 // The match as it stands, read once and let go of.
-function matchOnce(id) {
+// Three answers, not two: the match as it stands, `null` for a table that is
+// not there any more, and nothing at all for a question that never came back.
+// The last one is not the same as the first and must not be read as one — a
+// lost connection is no reason to tell somebody their match is over.
+function matchOnce(id, waitMs = 5000) {
   return new Promise(async resolve => {
     let stop = null, done = false;
     const take = state => { if (done) return; done = true; resolve(state); stop?.(); };
-    stop = await follow("matches", id, take);
+    setTimeout(() => take(undefined), waitMs);
+    stop = await follow("matches", id, take, () => take(null));
     if (done) stop?.();
   });
 }
@@ -504,8 +509,9 @@ resumeButton?.addEventListener("click", async () => {
   const theirs = state?.players?.[Rules.other(HUMAN)];
   const there = theirs ? await seatTaken(id, theirs) : null;
   // `null` is not knowing — the question failed to arrive — and that is no
-  // reason to keep somebody from their own match.
-  if (there === false) {
+  // reason to keep somebody from their own match. A table the server has
+  // closed is a different matter: it is shut for both of them and says so.
+  if (state === null || there === false) {
     say("lobby.closed");
     localStorage.removeItem(MATCH_KEY);
     resumeButton.setAttribute("hidden", "");
@@ -522,7 +528,8 @@ resumeButton?.addEventListener("click", async () => {
 // match while it is there, since nothing will ever make it worth returning to.
 async function forgetIfFinished(id) {
   const state = await matchOnce(id);
-  if (!state?.matchOver) return;
+  // Not there at all, or won: either way there is nothing to go back to.
+  if (state !== null && !state?.matchOver) return;
   localStorage.removeItem(MATCH_KEY);
   resumeButton?.setAttribute("hidden", "");
 }
@@ -581,6 +588,12 @@ findButton?.addEventListener("click", async () => {
   hostButton.disabled = joinButton.disabled = true;
   say("lobby.searching");
   try {
+    // Anything this browser left in the queue is cleared before a new search
+    // starts. A place left behind from an earlier one has an old match written
+    // on it by whoever paired with it, and being found a game is never being
+    // sent back to a game already played — the way back to a match of your own
+    // is the button that says so, and only that button.
+    await ask("siradanCik", {}).catch(() => {});
     const answer = await ask("eslesmeyeGir", {});
     if (!looking) return;
     if (answer?.matchId) return sitDownTo(answer.matchId, answer.colour ?? "ivory");
@@ -588,8 +601,15 @@ findButton?.addEventListener("click", async () => {
     // read, and it is the thing the next arrival writes to.
     const live = await connect();
     watchingQueue?.();
-    watchingQueue = await follow("sira", live?.uid ?? "", entry => {
-      if (looking && entry.matchId) sitDownTo(entry.matchId, entry.colour ?? "black");
+    watchingQueue = await follow("sira", live?.uid ?? "", async entry => {
+      if (!looking || !entry.matchId) return;
+      // Read once and then of no use to anybody. Taken out of the queue here
+      // rather than left for the sweeper: this is the moment it stops meaning
+      // anything, and a place with an old match written on it is exactly what
+      // should never be lying about.
+      looking = false;
+      await ask("siradanCik", {}).catch(() => {});
+      sitDownTo(entry.matchId, entry.colour ?? "black");
     });
     // Saying we are still here, over and over, so a place left behind by a
     // closed tab stops being one somebody can be sent to. It looks again on
@@ -2352,15 +2372,20 @@ const matchWinner = () =>
   match.ivory >= MATCH_TARGET ? "ivory" : match.black >= MATCH_TARGET ? "black" : null;
 
 let game;
-function resetState() {
+// A game inside a match that is already under way is not opened for: whoever
+// won the last one starts the next, the way it is played at a table. Only the
+// first game of a match — and the first after one has been won — is opened
+// with a die each. Pass that winner in and the board starts in play, with the
+// pair in the middle waiting for them.
+function resetState(starter = null) {
   game = {
     pos: Rules.startingPosition(),
     // The game opens with one die each rather than a turn: the higher of the
     // two starts, and then throws their own pair. A tie is thrown again.
-    phase: "opening",
+    phase: starter ? "play" : "opening",
     opening: { [HUMAN]: null, [COMPUTER]: null },
-    waitingOn: HUMAN,
-    turn: HUMAN,
+    waitingOn: starter ? null : HUMAN,
+    turn: starter ?? HUMAN,
     dice: null,          // the pair as thrown, once they have settled
     remaining: [],       // pips still to play this turn
     required: 0,         // how many the rules oblige to be played
@@ -3146,12 +3171,19 @@ function applyServerState(state) {
     // that was waiting off the board along with it.
     if (wasOpening && state.phase === "play") { resetDice(); openingStands = true; }
     if (state.dice || state.lastBy) openingStands = false;
+    // The next game of a match arrives already in play, with the turn on
+    // whoever won the last one — there is no opening to watch, so the moment
+    // the result goes is the moment the pair has to be back in the middle.
+    const restarted = !!game.over && !state.over;
     game.over = state.over ?? null;
     if (game.over) setTimeout(showResult, 1100);
     // Only one of the two presses "another game"; the other finds out here,
     // and the box in front of them has to come down by itself. The dice go
     // back to where they sit before a throw for the same reason.
     else if (!resultBox?.hasAttribute("hidden")) { resultBox?.setAttribute("hidden", ""); resetDice(); }
+    // The board that pressed took its own box down and would otherwise be left
+    // with the dice where the last throw of the last game put them.
+    else if (restarted) resetDice();
     renderPieces();
     updateHud();
     // Their dice, thrown here so they can be seen landing rather than simply
@@ -3253,9 +3285,41 @@ const closeConfirm = () => confirmBox?.setAttribute("hidden", "");
 // What the other player sees when somebody walks off is the server's business
 // and is not built yet.
 function leaveTable() {
+  const leaving = matchId ?? localStorage.getItem(MATCH_KEY);
   sessionStorage.removeItem("tavla.sitOnLoad");
   localStorage.removeItem(MATCH_KEY);
-  location.reload();
+  // Said out loud, so the table can close behind the last one out: two empty
+  // chairs are not a game anybody should be able to come back to. Which chair
+  // is empty is the server's to read — this only tells it somebody stood up.
+  //
+  // Not waited on for long. The door is where this player is going whatever
+  // the answer, and a slow line is no reason to keep them at a game they have
+  // already left.
+  const said = leaving
+    ? ask("masayiBirak", { matchId: leaving }).catch(() => {})
+    : Promise.resolve();
+  Promise.race([said, new Promise(done => setTimeout(done, 1500))])
+    .then(() => location.reload());
+}
+
+// Long enough to read before the board goes back to the door.
+const CLOSED_SHOWN_MS = 5000;
+let tableGone = false;
+
+// The table gone out from under the board. The server deletes a match as its
+// last player leaves, so the record simply stops being there — and that is the
+// only word about it there is going to be. Nothing on this board can be played
+// any more, and a board that looks playable and is not is worse than one that
+// says so: it is said plainly, and then the door.
+function tableClosed() {
+  if (tableGone) return;
+  tableGone = true;
+  announce("table.closed", CLOSED_SHOWN_MS);
+  setTimeout(() => {
+    sessionStorage.removeItem("tavla.sitOnLoad");
+    localStorage.removeItem(MATCH_KEY);
+    location.reload();
+  }, CLOSED_SHOWN_MS);
 }
 
 menuButton?.addEventListener("click", () => confirmBox?.removeAttribute("hidden"));
@@ -3340,10 +3404,18 @@ function nextGame() {
       console.info("tavla: yeni oyun kurulamadı —", reason?.message ?? reason));
     return;
   }
-  if (matchWinner()) match = { ivory: 0, black: 0 };
-  resetState();
+  // A match that has been won starts over from nothing, opening die and all.
+  // One that is still running carries on: the winner of the game just finished
+  // starts the next one rather than throwing for it again.
+  const took = matchWinner();
+  const starter = took ? null : (game.over?.winner ?? null);
+  if (took) match = { ivory: 0, black: 0 };
+  resetState(starter);
   resetDice();
   renderPieces();
+  // Which also puts the dice in whoever's hand it is — including the
+  // computer's, since nothing else is going to throw for it.
+  if (starter) startTurn(starter);
   updateHud();
 }
 
