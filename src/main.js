@@ -3495,13 +3495,16 @@ function showResult() {
   resultTitle.textContent = took
     ? (mode === "hotseat" ? t("result.matchWonHot", { name: nameOf(took) })
         : t(took === HUMAN ? "result.matchWon" : "result.matchLost"))
-    : said + (value === 2 ? t("mars") : "");
-  // A game is worth one point or two, so the singular is a real case and has
-  // its own line in the languages that inflect it.
+    // What the game was worth is said where it is decided — beside the mars
+    // that doubled it. A plain win is one point and needs no saying.
+    : said + (value === 2 ? t("result.mars") : "");
+  // And underneath, only the thing the panel does not already show. The score
+  // is up there in the corner throughout; repeating it here left the one line
+  // nobody knows — how many it takes to win the match — buried in the middle
+  // of a row of numbers.
   resultScore.textContent = took
     ? t("result.final", { score: scoreLine() })
-    : t(value === 1 ? "result.line1" : "result.line",
-        { points: value, score: scoreLine(), target: MATCH_TARGET });
+    : t(value === 1 ? "result.line1" : "result.line", { target: MATCH_TARGET });
   resultNext.textContent = t(took ? "result.newMatch" : "result.next");
   resultBox.removeAttribute("hidden");
 }
