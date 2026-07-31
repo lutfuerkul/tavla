@@ -3450,9 +3450,10 @@ function leaveTable() {
   const leaving = matchId ?? localStorage.getItem(MATCH_KEY);
   sessionStorage.removeItem("tavla.sitOnLoad");
   localStorage.removeItem(MATCH_KEY);
-  // Said out loud, so the table can close behind the last one out: two empty
-  // chairs are not a game anybody should be able to come back to. Which chair
-  // is empty is the server's to read — this only tells it somebody stood up.
+  // Said out loud, because getting up closes the table. A game across a
+  // network is two people, and one of them leaving on purpose does not leave
+  // a game behind for the computer to finish — the other board is told by the
+  // record going.
   //
   // Not waited on for long. The door is where this player is going whatever
   // the answer, and a slow line is no reason to keep them at a game they have

@@ -37,8 +37,12 @@ const MOVE_SECONDS = 60;
 // An empty chair is a different matter and is still covered: somebody who has
 // gone would otherwise leave the opening unfinished for good.
 const OPEN_SECONDS = Infinity;
-// And how long before the other player is told they are not coming back.
-const GONE_SECONDS = 180;
+// And how long a seat is held for somebody who has gone. A dropped connection
+// is not the same as leaving: the computer covers the empty chair and the seat
+// waits. Past this the match is over — it is deleted, and both boards are told
+// — because a table nobody is coming back to is a table that sits there for
+// hours and turns up again in somebody's next game.
+const HELD_SECONDS = 60;
 // Long enough that two rooms are never open on the same code, short enough to
 // read down a telephone. I, O, 0 and 1 are left out: they are the letters
 // people get wrong.
@@ -337,10 +341,11 @@ export const masayiBirak = onCall(settings, async request => {
   if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
   if (match.closed) return { ok: true, closed: true };
 
-  if (await isSeated(id, match.players[Rules.other(mine)])) return { ok: true, closed: false };
-  // Closed means gone. There is nothing left to read: no player, no game to
-  // carry on, nobody to come back — so the record is not marked and kept, it
-  // is deleted here and now. The boards watching it are told by its going.
+  // Getting up is final, and it closes the table on both of them. A game
+  // across a network is two people; one of them leaving on purpose does not
+  // leave a game behind for the computer to finish. The other board is told
+  // by the record going — there is nothing left to read: no player, no game
+  // to carry on, nobody to come back.
   await ref.delete();
   return { ok: true, closed: true };
 });
@@ -631,7 +636,6 @@ export const sure = onCall(settings, async request => {
       && (match.lastThrowSeq ?? -1) > match.returnedAt) {
     await ref.update({
       away: null,
-      gone: null,
       awaySince: {},
       returnedAt: null,
       updatedAt: now(),
@@ -651,20 +655,27 @@ export const sure = onCall(settings, async request => {
     // It has moved on since it was read; whoever moved it is playing.
     if (it.seq !== match.seq) return { acted: false };
 
+    // How long the seat has been empty. A minute of it and the seat is not
+    // being held any more: the match is deleted where it stands and both
+    // boards hear it in the only way there is left to hear it — the record
+    // they are watching stops being there.
+    const emptyFor = !seated && it.awaySince?.[waiting.colour]
+      ? (Date.now() - it.awaySince[waiting.colour].toDate().getTime()) / 1000
+      : 0;
+    if (emptyFor >= HELD_SECONDS) {
+      tx.delete(ref);
+      return { acted: false, closed: true };
+    }
+
     const patch = actFor(it, waiting.colour);
-    // How long the seat has been empty, so the other board can say why the
-    // computer is playing rather than leaving them to guess.
+    // Said so the other board can say why the computer is playing rather than
+    // leaving them to guess.
     if (!seated) {
-      const emptyFor = it.awaySince?.[waiting.colour]
-        ? (Date.now() - it.awaySince[waiting.colour].toDate().getTime()) / 1000
-        : 0;
       patch.away = waiting.colour;
-      patch.gone = emptyFor >= GONE_SECONDS ? waiting.colour : (it.gone ?? null);
       if (!it.awaySince?.[waiting.colour]) {
         patch.awaySince = { ...(it.awaySince ?? {}), [waiting.colour]: now() };
       }
-    } else if (it.away === waiting.colour || it.gone === waiting.colour
-               || it.awaySince?.[waiting.colour]) {
+    } else if (it.away === waiting.colour || it.awaySince?.[waiting.colour]) {
       // Only ever our own mark. Clearing it outright said "they are back" about
       // whoever happened to be marked, and the player being acted for here is
       // usually the one still sitting there — so every turn the clock played
@@ -672,7 +683,6 @@ export const sure = onCall(settings, async request => {
       // turn put it back. The board opposite watched them leave and return and
       // leave again while they had not moved.
       patch.away = it.away === waiting.colour ? null : (it.away ?? null);
-      patch.gone = it.gone === waiting.colour ? null : (it.gone ?? null);
       const since = { ...(it.awaySince ?? {}) };
       delete since[waiting.colour];
       patch.awaySince = since;
@@ -694,7 +704,7 @@ export const geriGeldim = onCall(settings, async request => {
     const match = found.data();
     const mine = colourOf(match, uid);
     if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
-    if (match.away !== mine && match.gone !== mine) return { ok: true };
+    if (match.away !== mine) return { ok: true };
     // Being back is not the same as being handed the table. Sitting down in
     // the middle of a turn — dice already thrown, a throw still landing — is
     // how a returning player ends up in the middle of something they never
