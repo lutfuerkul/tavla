@@ -12,12 +12,12 @@
       <section id="intro" aria-label="Oyun başlangıcı">
         <nav id="langs" aria-label="Dil"></nav>
         <p class="eyebrow" data-i18n="eyebrow">3B TAVLA</p>
+        <span id="online" hidden></span>
         <h1 data-i18n="door.title">Ayarlar</h1>
         <div id="modes">
           <button class="mode-pick" data-mode="solo" data-i18n="mode.solo">Bilgisayara karşı</button>
           <button class="mode-pick" data-mode="hotseat" data-i18n="mode.hotseat">İki kişi · aynı cihaz</button>
           <button class="mode-pick" data-mode="online" data-i18n="mode.online">Çevrimiçi</button>
-          <span id="online" hidden></span>
         </div>
         <div id="lobby" hidden>
           <button id="resume" data-i18n="lobby.resume" hidden>Maçına dön</button>
@@ -27,8 +27,10 @@
             <button id="join" data-i18n="lobby.join">Katıl</button>
             <input id="code" inputmode="latin" autocapitalize="characters"
                    autocomplete="off" spellcheck="false" maxlength="5" placeholder="ABC12" hidden />
+            <span id="code-hint" data-i18n="lobby.type" hidden>Kodu giriniz</span>
           </div>
           <p id="lobby-said"></p>
+          <button id="cancel" data-i18n="lobby.cancel" hidden>Vazgeç</button>
         </div>
         <div id="settings"></div>
         <button id="start" data-i18n="start" disabled>Oyuna başla</button>
