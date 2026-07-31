@@ -3495,9 +3495,9 @@ function showResult() {
   resultTitle.textContent = took
     ? (mode === "hotseat" ? t("result.matchWonHot", { name: nameOf(took) })
         : t(took === HUMAN ? "result.matchWon" : "result.matchLost"))
-    // What the game was worth is said where it is decided — beside the mars
-    // that doubled it. A plain win is one point and needs no saying.
-    : said + (value === 2 ? t("result.mars") : "");
+    // What the game was worth, said beside the word that decided it: the mars
+    // that doubled it, or the win that did not.
+    : said + t(value === 2 ? "result.mars" : "result.plain");
   // And underneath, only the thing the panel does not already show. The score
   // is up there in the corner throughout; repeating it here left the one line
   // nobody knows — how many it takes to win the match — buried in the middle
