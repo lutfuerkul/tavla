@@ -800,10 +800,23 @@ export const geriGeldim = onCall(settings, async request => {
     const match = found.data();
     const mine = colourOf(match, uid);
     if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
-    if (match.away !== mine) return { ok: true };
+    // The mark is written the moment the chair empties, before anything is
+    // said about it — so it is there after a reload as well as after a real
+    // absence, and either way it is what says this player has been away.
+    const wasAway = match.away === mine || !!match.awaySince?.[mine];
+    if (!wasAway) return { ok: true };
+    const since = { ...(match.awaySince ?? {}) };
+    delete since[mine];
     tx.update(ref, {
-      away: null,
-      awaySince: {},
+      // Only ever our own mark. The other player's absence is not ours to
+      // withdraw, and clearing it outright is how a board once announced that
+      // somebody had come back who had never gone.
+      away: match.away === mine ? null : (match.away ?? null),
+      awaySince: since,
+      // And the turn starts counting again from now. They have this second sat
+      // down in front of a board they were not watching; the seconds that ran
+      // out while they were away are not seconds they had, and without this the
+      // dice were thrown for them before they could reach for them.
       updatedAt: now(),
       seq: match.seq + 1,
     });
