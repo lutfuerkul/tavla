@@ -3422,6 +3422,17 @@ function applyServerState(state) {
     // has been thrown — which is exactly what stopped the other player's dice
     // from ever being thrown on this board.
     if (state.phase === "play" && !state.dice) thrown = false;
+    // Two equal opening dice: the server clears both and asks for them again
+    // from the top. The board did not know that had happened and still thought
+    // it was holding the throw it had already made — so nothing could be picked
+    // up on the side that threw first, and the other player's die, waiting for
+    // a clear hand before it could be shown, was never shown either.
+    if (state.phase === "opening" && state.opening
+        && state.opening.ivory === null && state.opening.black === null) {
+      thrown = false;
+      shownOpening = { black: null, ivory: null };
+      resetDice();
+    }
     // The opening is over: the pair goes back to the middle together, the one
     // that was waiting off the board along with it.
     if (wasOpening && state.phase === "play") { resetDice(); openingStands = true; }
@@ -3842,8 +3853,15 @@ function updateHud() {
       !isHuman(game.turn) || game.thinking;
   }
   if (doneButton) {
-    doneButton.disabled = !turnComplete() || !!game.over;
-    doneButton.textContent = t(game.dice && game.required === 0 ? "done.none" : "done");
+    // A throw still in the air has not been read yet. Across a network the
+    // numbers come from the server the moment they are asked for — a second or
+    // two before the dice they name come to rest on this felt — so a button
+    // written from the numbers announced the result while the dice were still
+    // tumbling. "No move to play" lit up early, and the throw was plainly
+    // decided before it landed.
+    const inTheAir = thrown || replayOwed || !!replayingFor || !!heldDice;
+    doneButton.disabled = inTheAir || !turnComplete() || !!game.over;
+    doneButton.textContent = t(!inTheAir && game.dice && game.required === 0 ? "done.none" : "done");
   }
 }
 
