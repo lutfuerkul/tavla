@@ -800,10 +800,21 @@ export const geriGeldim = onCall(settings, async request => {
     const match = found.data();
     const mine = colourOf(match, uid);
     if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
-    if (match.away !== mine) return { ok: true };
+    // Whatever else, the turn starts counting again from now. This is called
+    // once, as a board sits down, and a board that has just sat down has this
+    // second arrived in front of a game it was not watching — the seconds that
+    // ran out while it was away are not seconds it had, and without this the
+    // dice were thrown for a player before they could reach for them. A quick
+    // reload leaves no mark at all (nobody had looked yet), so the mark cannot
+    // be what this hangs on.
+    const since = { ...(match.awaySince ?? {}) };
+    delete since[mine];
     tx.update(ref, {
-      away: null,
-      awaySince: {},
+      // Only ever our own mark. The other player's absence is not ours to
+      // withdraw, and clearing it outright is how a board once announced that
+      // somebody had come back who had never gone.
+      away: match.away === mine ? null : (match.away ?? null),
+      awaySince: since,
       updatedAt: now(),
       seq: match.seq + 1,
     });
