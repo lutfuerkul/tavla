@@ -2352,15 +2352,20 @@ const matchWinner = () =>
   match.ivory >= MATCH_TARGET ? "ivory" : match.black >= MATCH_TARGET ? "black" : null;
 
 let game;
-function resetState() {
+// A game inside a match that is already under way is not opened for: whoever
+// won the last one starts the next, the way it is played at a table. Only the
+// first game of a match — and the first after one has been won — is opened
+// with a die each. Pass that winner in and the board starts in play, with the
+// pair in the middle waiting for them.
+function resetState(starter = null) {
   game = {
     pos: Rules.startingPosition(),
     // The game opens with one die each rather than a turn: the higher of the
     // two starts, and then throws their own pair. A tie is thrown again.
-    phase: "opening",
+    phase: starter ? "play" : "opening",
     opening: { [HUMAN]: null, [COMPUTER]: null },
-    waitingOn: HUMAN,
-    turn: HUMAN,
+    waitingOn: starter ? null : HUMAN,
+    turn: starter ?? HUMAN,
     dice: null,          // the pair as thrown, once they have settled
     remaining: [],       // pips still to play this turn
     required: 0,         // how many the rules oblige to be played
@@ -3146,12 +3151,19 @@ function applyServerState(state) {
     // that was waiting off the board along with it.
     if (wasOpening && state.phase === "play") { resetDice(); openingStands = true; }
     if (state.dice || state.lastBy) openingStands = false;
+    // The next game of a match arrives already in play, with the turn on
+    // whoever won the last one — there is no opening to watch, so the moment
+    // the result goes is the moment the pair has to be back in the middle.
+    const restarted = !!game.over && !state.over;
     game.over = state.over ?? null;
     if (game.over) setTimeout(showResult, 1100);
     // Only one of the two presses "another game"; the other finds out here,
     // and the box in front of them has to come down by itself. The dice go
     // back to where they sit before a throw for the same reason.
     else if (!resultBox?.hasAttribute("hidden")) { resultBox?.setAttribute("hidden", ""); resetDice(); }
+    // The board that pressed took its own box down and would otherwise be left
+    // with the dice where the last throw of the last game put them.
+    else if (restarted) resetDice();
     renderPieces();
     updateHud();
     // Their dice, thrown here so they can be seen landing rather than simply
@@ -3340,10 +3352,18 @@ function nextGame() {
       console.info("tavla: yeni oyun kurulamadı —", reason?.message ?? reason));
     return;
   }
-  if (matchWinner()) match = { ivory: 0, black: 0 };
-  resetState();
+  // A match that has been won starts over from nothing, opening die and all.
+  // One that is still running carries on: the winner of the game just finished
+  // starts the next one rather than throwing for it again.
+  const took = matchWinner();
+  const starter = took ? null : (game.over?.winner ?? null);
+  if (took) match = { ivory: 0, black: 0 };
+  resetState(starter);
   resetDice();
   renderPieces();
+  // Which also puts the dice in whoever's hand it is — including the
+  // computer's, since nothing else is going to throw for it.
+  if (starter) startTurn(starter);
   updateHud();
 }
 

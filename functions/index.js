@@ -648,12 +648,16 @@ export const yeniOyun = onCall(settings, async request => {
     if (!match.over) throw new HttpsError("failed-precondition", "Oyun daha bitmedi.");
     if (match.matchOver) throw new HttpsError("failed-precondition", "Maç bitti.");
 
+    // Not opened for: inside a running match the winner of the game just
+    // finished starts the next one, the way it is played at a table. So the
+    // board comes back already in play with the turn on them, and the first
+    // thing that happens is their own throw.
     tx.update(ref, {
       pos: packPosition(Rules.startingPosition()),
-      phase: "opening",
+      phase: "play",
       opening: { ivory: null, black: null },
-      waitingOn: "black",
-      turn: "black",
+      waitingOn: null,
+      turn: match.over.winner,
       dice: null,
       remaining: [],
       required: 0,
