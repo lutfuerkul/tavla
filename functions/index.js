@@ -22,10 +22,10 @@ const REGION = "europe-west1";
 const settings = { region: REGION, cors: true };
 
 const MATCH_TARGET = 3;
-// How long somebody who is sitting there may take. A player who is present
-// but not playing is given room to think; one who is not there at all is not
-// waited for at all — the computer takes their checkers the moment their seat
-// is empty and gives them straight back when they sit down again.
+// How long somebody who is sitting there may take. This is the only clock in
+// the game and it is only ever about a player who is present: a game must not
+// be stallable for ever by somebody who will not move. An empty chair is not
+// a slow player and is not treated as one — see HELD_SECONDS.
 const ROLL_SECONDS = 20;
 const MOVE_SECONDS = 60;
 // The opening keeps no time at all. Nobody is thinking yet — they have just
@@ -34,14 +34,13 @@ const MOVE_SECONDS = 60;
 // finding the board buys nothing and reads as the game throwing dice by
 // itself, so it waits for them however long they take.
 //
-// An empty chair is a different matter and is still covered: somebody who has
-// gone would otherwise leave the opening unfinished for good.
+// An empty chair is a different matter and is handled where all of them are.
 const OPEN_SECONDS = Infinity;
-// How long an empty chair is waited for before the computer sits down in it.
-// A dropped connection is not the same as walking off: the other board is told
-// straight away and a minute is counted out, and nothing is played in it. Come
-// back inside the minute and the game carries on as though nothing happened;
-// past it, the computer takes the checkers and the game goes on without them.
+// How long an empty chair is waited for before the table closes. Nothing is
+// played in it and nothing sits down in it: the game stops where it stood and
+// the other board is told, with the minute counted out in front of them. Come
+// back inside it — with the code, which is the only way back — and the game
+// carries on from exactly there. Past it the table closes for both of them.
 const HELD_SECONDS = 60;
 // Long enough that two rooms are never open on the same code, short enough to
 // read down a telephone. I, O, 0 and 1 are left out: they are the letters
@@ -98,9 +97,14 @@ function unpackPosition(packed) {
   return { points, bar: { ...packed.bar }, off: { ...packed.off } };
 }
 
-function freshMatch(players) {
+function freshMatch(players, code) {
   return {
     players,
+    // The code this table answers to, kept on the match for as long as it
+    // lives. It is the only way back to it: no seat is held open on trust and
+    // nothing plays a hand that has gone. You say the code, the seat is found
+    // to be yours, and the game carries on from exactly where it stopped.
+    code,
     // Which of them is which colour was settled when the room was made.
     pos: packPosition(Rules.startingPosition()),
     phase: "opening",
@@ -122,6 +126,9 @@ function freshMatch(players) {
     // reading "their turn, and moves on the board" would replay the winner's
     // own moves back at them in the other colour.
     lastBy: null,
+    // How many times each of them has dropped out. The first is waited for;
+    // the second closes the table — see `sure`.
+    drops: { ivory: 0, black: 0 },
     score: { ivory: 0, black: 0 },
     target: MATCH_TARGET,
     over: null,
@@ -159,14 +166,16 @@ const colourOf = (match, uid) =>
 
 // --- rooms ------------------------------------------------------------
 
-export const odaKur = onCall(settings, async request => {
-  const uid = whoIsAsking(request);
-  const wants = request.data?.colour === "ivory" ? "ivory" : "black";
-
-  // A code nobody else is holding. Five characters out of thirty two is
-  // thirty three million, so a clash is a curiosity rather than a problem —
-  // but it is still checked, inside a transaction, because a room handed to
-  // two hosts is a game neither of them can play.
+// A code nobody else is holding, claimed before anything is written against
+// it. Five characters out of thirty two is thirty three million, so a clash is
+// a curiosity rather than a problem — but it is still checked, inside a
+// transaction, because a code handed to two tables is a game neither of them
+// can play.
+//
+// Every match gets one, not only the ones somebody asked for a code for. Two
+// people found in the queue never said a code out loud, and they need the way
+// back just as much as anybody else.
+async function freeCode() {
   for (let attempt = 0; attempt < 8; attempt++) {
     const wanted = code();
     const room = db.collection("rooms").doc(wanted);
@@ -174,18 +183,26 @@ export const odaKur = onCall(settings, async request => {
       const found = await tx.get(room);
       if (found.exists) return true;
       tx.set(room, {
-        host: uid,
-        hostColour: wants,
-        status: "waiting",
-        matchId: null,
+        host: null, hostColour: null, guest: null,
+        status: "holding", matchId: null,
         createdAt: now(),
         expiresAt: new Date(Date.now() + ROOM_MINUTES * 60 * 1000),
       });
       return false;
     });
-    if (!taken) return { code: wanted, colour: wants };
+    if (!taken) return wanted;
   }
   throw new HttpsError("resource-exhausted", "Oda kodu üretilemedi, tekrar dene.");
+}
+
+
+export const odaKur = onCall(settings, async request => {
+  const uid = whoIsAsking(request);
+  const wants = request.data?.colour === "ivory" ? "ivory" : "black";
+
+  const wanted = await freeCode();
+  await db.collection("rooms").doc(wanted).update({ host: uid, hostColour: wants, status: "waiting" });
+  return { code: wanted, colour: wants };
 });
 
 export const odayaKatil = onCall(settings, async request => {
@@ -216,7 +233,7 @@ export const odayaKatil = onCall(settings, async request => {
     const players = it.hostColour === "black"
       ? { black: it.host, ivory: uid }
       : { ivory: it.host, black: uid };
-    tx.set(match, freshMatch(players));
+    tx.set(match, freshMatch(players, wanted));
     tx.update(room, { status: "matched", guest: uid, matchId: match.id });
     // Which colour the one arriving is playing is the server's to say, not
     // something the client should have to work out from what it asked for.
@@ -307,13 +324,25 @@ export const eslesmeyeGir = onCall(settings, async request => {
     }
 
     const match = db.collection("matches").doc();
+    // Claimed before the pairing, since a code cannot be minted inside the
+    // transaction that needs it. Given back if the pairing does not happen.
+    const wanted = await freeCode();
     const paired = await db.runTransaction(async tx => {
       const found = await tx.get(entry.ref);
       // Somebody else reached them first between the search and here.
       if (!found.exists || found.data().matchId) return null;
       // The one who waited takes black, and black opens — the small courtesy
       // of throwing first goes to whoever sat there longest.
-      tx.set(match, freshMatch({ black: entry.id, ivory: uid }));
+      tx.set(match, freshMatch({ black: entry.id, ivory: uid }, wanted));
+      // The code the two of them can come back through. Nobody said it out
+      // loud, but the board shows it to both of them from the moment they sit
+      // down, which is what it is for.
+      tx.set(db.collection("rooms").doc(wanted), {
+        host: entry.id, hostColour: "black", guest: uid,
+        status: "matched", matchId: match.id,
+        createdAt: now(),
+        expiresAt: new Date(Date.now() + ROOM_MINUTES * 60 * 1000),
+      });
       // Read by the board that is waiting and then of no further use — but it
       // is written to rather than deleted, since deleting it is how the board
       // watching it is told nothing at all. So it is left with a date on it.
@@ -327,6 +356,7 @@ export const eslesmeyeGir = onCall(settings, async request => {
       await queue.doc(uid).delete().catch(() => {});
       return paired;
     }
+    await db.collection("rooms").doc(wanted).delete().catch(() => {});
   }
 
   // Nobody to be found, so wait to be the one found. The entry is watched by
@@ -439,7 +469,7 @@ export const zarAt = onCall(settings, async request => {
       lastMoves: [],
       lastMoveSeq: 0,
       lastBy: null,
-      updatedAt: now(),
+        updatedAt: now(),
       seq: match.seq + 1,
     });
     return { dice };
@@ -531,9 +561,22 @@ export const turuOyna = onCall(settings, async request => {
 // taking its opponent's checkers.
 const rtdb = () => getDatabase();
 
+// How long the mark on a seat is good for. Four times the pulse the board
+// writes it with, so a slow line or a missed write does not empty a chair
+// somebody is plainly sitting in.
+const SEAT_FRESH_MS = 20 * 1000;
+
 async function isSeated(matchId, uid) {
   const seat = await rtdb().ref(`masalar/${matchId}/${uid}`).get();
-  return seat.exists();
+  if (!seat.exists()) return false;
+  // The seat is cleared by onDisconnect, which is the server noticing a closed
+  // connection — and a connection that is cut rather than closed is not
+  // noticed for a minute or more. So the time on the mark is read too, and a
+  // mark nobody has touched in twenty seconds is an empty chair whatever it
+  // says. A board too old to be writing the time is taken at its word.
+  const at = seat.val()?.at;
+  if (typeof at !== "number") return true;
+  return Date.now() - at < SEAT_FRESH_MS;
 }
 
 // Whoever the match is waiting on, and how long they have had.
@@ -575,7 +618,7 @@ function actFor(match, colour) {
       dice, remaining,
       required: Rules.legalSequences(pos, colour, remaining)[0].length,
       played: 0, lastMoves: [], lastMoveSeq: 0, lastBy: null,
-      lastThrowSeq: match.seq + 1,
+        lastThrowSeq: match.seq + 1,
       updatedAt: now(), seq: match.seq + 1,
     };
   }
@@ -624,68 +667,37 @@ export const sure = onCall(settings, async request => {
   const match = found.data();
   const mine = colourOf(match, uid);
   if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
-  // Nobody is covered for at a table nobody is at.
-  if (match.closed) return { acted: false, closed: true };
 
-  const waiting = waitingFor(match);
-  if (!waiting) return { acted: false };
+  // The chair opposite, asked about by the one person who minds. Which chair
+  // that is does not depend on whose turn it is: a game stops just as dead
+  // when the player who has gone is the one being waited on as when they are
+  // not, and reading it off the turn meant nobody ever asked about an absent
+  // opponent while it was their own move.
+  const theirs = Rules.other(mine);
+  const seated = await isSeated(id, match.players[theirs]);
 
-  // Ordinarily you may not run your own clock down: a client that could would
-  // be able to hand its own checkers to the computer whenever the position
-  // stopped suiting it, and it is the player kept waiting who has the reason
-  // to ask in the first place.
-  //
-  // Unless there is nobody opposite. A player who leaves takes their board
-  // with them, and with it the only thing that was asking — so a game with one
-  // person left in it stopped for good, whoever's turn it was. With that chair
-  // empty the last player may ask about themselves, and the emptiness is read
-  // here rather than claimed by the caller.
-  if (waiting.colour === mine) {
-    if (await isSeated(id, match.players[Rules.other(mine)])) return { acted: false };
-  }
-
-  const theirUid = match.players[waiting.colour];
-  const seated = await isSeated(id, theirUid);
-  const since = match.updatedAt?.toDate?.() ?? new Date(0);
-  const waited = (Date.now() - since.getTime()) / 1000;
-
-  // Somebody who has come back but not yet been handed the table. They are
-  // sitting there, so the seat says they are fine; the computer keeps playing
-  // for them anyway until there is a clean place to stop.
-  const returning = (match.returnedAt ?? null) !== null && match.away === waiting.colour;
-
-  // That place is the start of a turn of their own, and not the first one that
-  // comes along: the other player has to have played a whole turn they were
-  // here to watch. The throw that opens a turn is stamped, so a turn that was
-  // already under way when they sat down is one they did not see the start of
-  // and does not count. Landing in the middle of one is exactly what makes a
-  // mess of the dice.
-  if (returning && match.turn === waiting.colour && !match.dice
-      && (match.lastThrowSeq ?? -1) > match.returnedAt) {
-    await ref.update({
-      away: null,
-      covered: null,
-      awaySince: {},
-      returnedAt: null,
-      updatedAt: now(),
-      seq: match.seq + 1,
-    });
-    return { acted: false, handedBack: true };
-  }
-
-  // Somebody sitting there is given their time to think.
-  if (seated && !returning && waited < waiting.seconds) return { acted: false, seated: true };
-
-  // And an empty chair is given a minute. Nothing is played in it: the other
-  // board is told the moment the seat goes, counts the minute out on the same
-  // clock it counts turns with, and waits. Whoever it is may simply be
-  // reloading a page or walking through a tunnel.
-  if (!seated && !returning) {
-    const startedAt = match.awaySince?.[waiting.colour]?.toDate?.();
+  // An empty chair. Nothing is played in it and nobody sits down in it — the
+  // game stops exactly where it stood. The other board is told, a minute is
+  // counted out, and inside that minute they can come back with the code and
+  // carry on from here. Past it the table closes for both of them, and the
+  // record going is how they are both told.
+  if (!seated) {
+    const startedAt = match.awaySince?.[theirs]?.toDate?.();
     if (!startedAt) {
+      // Once is a tunnel, a flat battery, a router. Twice is a game the other
+      // player cannot play, and waiting out a second minute for somebody who
+      // has already been waited for is a game nobody is playing. The second
+      // time the chair empties, the table closes with it — there is no way
+      // back from it and the code will find nothing.
+      const gone = (match.drops?.[theirs] ?? 0) + 1;
+      if (gone > 1) {
+        await ref.delete();
+        return { acted: false, closed: true };
+      }
       await ref.update({
-        away: waiting.colour,
-        awaySince: { ...(match.awaySince ?? {}), [waiting.colour]: now() },
+        away: theirs,
+        awaySince: { ...(match.awaySince ?? {}), [theirs]: now() },
+        drops: { ...(match.drops ?? {}), [theirs]: gone },
         updatedAt: now(),
         seq: match.seq + 1,
       });
@@ -694,44 +706,38 @@ export const sure = onCall(settings, async request => {
     if ((Date.now() - startedAt.getTime()) / 1000 < HELD_SECONDS) {
       return { acted: false, holding: true };
     }
+    await ref.delete();
+    return { acted: false, closed: true };
+  }
+
+  // Somebody sitting there and taking their time is a different matter, and
+  // the only one the clock is for: a game must not be stallable for ever by a
+  // player who will not move. Your own clock is never yours to run down — a
+  // client that could would run it down whenever the position stopped suiting
+  // it — so this is only ever asked by the one being kept waiting.
+  const waiting = waitingFor(match);
+  if (!waiting || waiting.colour === mine) return { acted: false };
+  const since = match.updatedAt?.toDate?.() ?? new Date(0);
+  if ((Date.now() - since.getTime()) / 1000 < waiting.seconds) {
+    return { acted: false, seated: true };
   }
 
   return db.runTransaction(async tx => {
     const fresh = await tx.get(ref);
+    if (!fresh.exists) return { acted: false };
     const it = fresh.data();
     // It has moved on since it was read; whoever moved it is playing.
     if (it.seq !== match.seq) return { acted: false };
-
     const patch = actFor(it, waiting.colour);
-    // The minute is up and the computer is taking the checkers. Said out loud
-    // once, so the board opposite knows the difference between a game that has
-    // stopped and a game that is being played by something else.
-    if (!seated) {
-      patch.away = waiting.colour;
-      patch.covered = waiting.colour;
-      if (!it.awaySince?.[waiting.colour]) {
-        patch.awaySince = { ...(it.awaySince ?? {}), [waiting.colour]: now() };
-      }
-    } else if (it.away === waiting.colour || it.awaySince?.[waiting.colour]) {
-      // Only ever our own mark. Clearing it outright said "they are back" about
-      // whoever happened to be marked, and the player being acted for here is
-      // usually the one still sitting there — so every turn the clock played
-      // for them withdrew the news about their absent opponent, and the next
-      // turn put it back. The board opposite watched them leave and return and
-      // leave again while they had not moved.
-      patch.away = it.away === waiting.colour ? null : (it.away ?? null);
-      patch.covered = it.covered === waiting.colour ? null : (it.covered ?? null);
-      const since = { ...(it.awaySince ?? {}) };
-      delete since[waiting.colour];
-      patch.awaySince = since;
-    }
     tx.update(ref, patch);
-    return { acted: true, by: waiting.colour, seated };
+    return { acted: true, by: waiting.colour };
   });
 });
 
-// The player is back at the table: whatever was said about them being gone is
-// withdrawn, and the computer stops playing their checkers.
+// Back at the table. Whatever was said about this player being gone is
+// withdrawn, and their allowance starts again from now: they have this second
+// sat down in front of a board they were not watching, and the time that ran
+// out while they were away is not time they had.
 export const geriGeldim = onCall(settings, async request => {
   const uid = whoIsAsking(request);
   const id = String(request.data?.matchId ?? "");
@@ -743,18 +749,13 @@ export const geriGeldim = onCall(settings, async request => {
     const mine = colourOf(match, uid);
     if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
     if (match.away !== mine) return { ok: true };
-    // Being back is not the same as being handed the table. Sitting down in
-    // the middle of a turn — dice already thrown, a throw still landing — is
-    // how a returning player ends up in the middle of something they never
-    // saw, and the board makes a mess of it. So the return is written down and
-    // the computer keeps the checkers until there is a clean place to stop:
-    // see `sure`, which does the handing over.
     tx.update(ref, {
-      returnedAt: match.seq + 1,
+      away: null,
+      awaySince: {},
       updatedAt: now(),
       seq: match.seq + 1,
     });
-    return { ok: true, waiting: true };
+    return { ok: true, back: true };
   });
 });
 

@@ -116,6 +116,16 @@ export function connect() {
 //
 // `watch` is called with true or false every time the other player's claim
 // appears or disappears, and never called at all without a connection.
+//
+// The claim is written again every few seconds rather than once. onDisconnect
+// is the server noticing that a connection has closed, and a connection that
+// is cut rather than closed — a phone losing its signal, a router switched off
+// — is not closed until the socket times out a minute or more later. For that
+// whole minute the seat went on saying somebody was in it, so the other player
+// was told nothing at all: the news arrived when their opponent came back and
+// the socket finally died, which is the one moment it was no longer true.
+const SEAT_PULSE_MS = 5000;
+
 export async function sitAt(matchId, theirUid, watch) {
   const live = await connect();
   if (!live) return () => {};
@@ -133,11 +143,14 @@ export async function sitAt(matchId, theirUid, watch) {
     set(mine, { at: serverTimestamp() });
   });
 
+  const pulse = setInterval(() => set(mine, { at: serverTimestamp() }), SEAT_PULSE_MS);
+
   const stopThem = onValue(theirs, snapshot => watch(snapshot.exists()));
 
   return () => {
     stopConnected();
     stopThem();
+    clearInterval(pulse);
     remove(mine);
   };
 }
