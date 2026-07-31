@@ -800,11 +800,13 @@ export const geriGeldim = onCall(settings, async request => {
     const match = found.data();
     const mine = colourOf(match, uid);
     if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
-    // The mark is written the moment the chair empties, before anything is
-    // said about it — so it is there after a reload as well as after a real
-    // absence, and either way it is what says this player has been away.
-    const wasAway = match.away === mine || !!match.awaySince?.[mine];
-    if (!wasAway) return { ok: true };
+    // Whatever else, the turn starts counting again from now. This is called
+    // once, as a board sits down, and a board that has just sat down has this
+    // second arrived in front of a game it was not watching — the seconds that
+    // ran out while it was away are not seconds it had, and without this the
+    // dice were thrown for a player before they could reach for them. A quick
+    // reload leaves no mark at all (nobody had looked yet), so the mark cannot
+    // be what this hangs on.
     const since = { ...(match.awaySince ?? {}) };
     delete since[mine];
     tx.update(ref, {
@@ -813,10 +815,6 @@ export const geriGeldim = onCall(settings, async request => {
       // somebody had come back who had never gone.
       away: match.away === mine ? null : (match.away ?? null),
       awaySince: since,
-      // And the turn starts counting again from now. They have this second sat
-      // down in front of a board they were not watching; the seconds that ran
-      // out while they were away are not seconds they had, and without this the
-      // dice were thrown for them before they could reach for them.
       updatedAt: now(),
       seq: match.seq + 1,
     });

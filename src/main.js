@@ -2994,6 +2994,15 @@ let opponentGone = false;
 
 // The last turn this board watched, by the write it was made on.
 let seenMoveSeq = 0;
+// And the last throw, the same way. The dice stay written on the match until
+// the turn is played, so every word about it in between carries them along —
+// somebody sitting down, a chair emptying — and a board reading the numbers
+// alone threw them again on each one. The player who had just come back
+// watched their opponent throw twice.
+let seenThrowSeq = 0;
+// Whether this board has heard anything yet. The first word it hears is the
+// game as it already stands, not a series of things happening in front of it.
+let caughtUp = false;
 // True between the opening being settled and the first dice of the game being
 // thrown. The panel says who won the opening in that gap, and it was saying it
 // on every later turn too: the opening numbers stay on the match for the whole
@@ -3271,6 +3280,14 @@ function applyServerState(state) {
   // while our own move is still in hand counts as seen too.
   const seenBefore = state.lastMoveSeq > 0 && state.lastMoveSeq === seenMoveSeq;
   seenMoveSeq = state.lastMoveSeq ?? 0;
+  const throwSeen = state.lastThrowSeq > 0 && state.lastThrowSeq === seenThrowSeq;
+  seenThrowSeq = state.lastThrowSeq ?? 0;
+  // This board's first word. What it says is where the game has got to, and
+  // none of it is news: the opening die was thrown a quarter of an hour ago
+  // and does not want throwing again in front of somebody who has just sat
+  // back down at a game in progress.
+  const firstWord = !caughtUp;
+  caughtUp = true;
 
   // The phase is settled with the turn and the dice rather than ahead of them.
   // Moving it early meant the board could be in the play phase while it still
@@ -3391,7 +3408,7 @@ function applyServerState(state) {
     // server settles both at once — so it is looked for whether or not the
     // phase has moved on. Reading only the opening phase left the second of
     // the two dice unthrown on the board that was waiting to see it.
-    if (state.opening) showOpening(state);
+    if (state.opening && !firstWord) showOpening(state);
     if (state.phase === "opening" || !state.dice) return;
     // A turn's dice, on the other hand, are only worth showing while they are
     // still the turn's dice.
@@ -3403,7 +3420,7 @@ function applyServerState(state) {
     // the panel with no die having moved.
     const oursInHand = state.turn === HUMAN && weAsked;
     if (oursInHand) weAsked = false;
-    if (!oursInHand) replayThrow(state.turn, state.dice, () => remoteSeq !== state.seq);
+    if (!oursInHand && !throwSeen) replayThrow(state.turn, state.dice, () => remoteSeq !== state.seq);
   };
 
   // Something they played since we last looked: watch it happen, then take
@@ -3429,7 +3446,7 @@ function applyServerState(state) {
   // first was over before it could be read. Their die is thrown here, and the
   // game does not start until it has come to rest and been left there a while.
   else if (wasOpening && state.phase === "play") {
-    if (state.opening) showOpening(state);
+    if (state.opening && !firstWord) showOpening(state);
     holdTheOpening(settle);
   }
   else settle();
