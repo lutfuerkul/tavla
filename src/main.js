@@ -3047,6 +3047,8 @@ let watchingSeat = false;
 let opponentGone = false;
 let opponentCovered = false;
 let weWereAway = false;
+// The last turn this board watched, by the write it was made on.
+let seenMoveSeq = 0;
 // True between the opening being settled and the first dice of the game being
 // thrown. The panel says who won the opening in that gap, and it was saying it
 // on every later turn too: the opening numbers stay on the match for the whole
@@ -3249,15 +3251,30 @@ let clockUntil = 0;
 // number worth having on the screen while nothing at all is happening.
 function runningClock(state) {
   if (mode !== "online" || !state || state.over) return 0;
-  const gone = state.away && state.away !== HUMAN && !state.covered;
-  if (gone) {
-    const since = state.awaySince?.[state.away]?.toMillis?.();
-    return since ? { seconds: HELD_SECONDS, from: since } : 0;
-  }
+  // Not while the chair opposite is being held. That minute is counted out in
+  // the middle of the table beside the line that says what it is for: a bare
+  // number up in the corner, where the panel keeps your own time, is a number
+  // nobody looks at and nobody could read the meaning of.
+  if (state.away && state.away !== HUMAN && !state.covered) return 0;
   // The opening keeps no time, so there is nothing to count out.
   if (state.phase === "opening") return 0;
   if (state.turn !== HUMAN) return 0;
   return { seconds: state.dice ? MOVE_SECONDS : ROLL_SECONDS, from: null };
+}
+
+// The minute the server holds an empty chair for, counted where the news is.
+// Zero when nobody is being waited for.
+let awayUntil = 0;
+
+// Said for as long as the chair is empty, with the minute running in the same
+// line. News is a thing that is said once and taken down; this is a condition
+// of the game, and taking it down after ten seconds left somebody sitting in
+// front of a board that had simply stopped, with nothing on the screen to say
+// why or for how much longer.
+function awayLine() {
+  if (!awayUntil) return "";
+  const left = Math.max(0, Math.ceil((awayUntil - Date.now()) / 1000));
+  return `${t("away.gone")} · ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
 }
 
 // Written as a clock rather than as a bare number of seconds: under a row of
@@ -3276,7 +3293,12 @@ function showClock() {
   clockBox.classList.add("running");
   clockBox.classList.toggle("nearly", seconds <= 5);
 }
-setInterval(showClock, 250);
+setInterval(() => {
+  showClock();
+  // The held chair counts down in the middle of the table, so the line it is
+  // written in has to be redrawn as it goes.
+  if (awayUntil && !weWereAway && !tableGone) notice(awayLine());
+}, 250);
 
 function holdTheOpening(done, waited = 0) {
   const rolling = replayingFor || replayOwed || thrown || heldDice || pending;
@@ -3294,6 +3316,16 @@ function applyServerState(state) {
   const ours = !state.over && !handedOver
     && state.turn === HUMAN && game.history.length && state.phase === "play";
   remoteSeq = state.seq;
+
+  // Watched once. The moves stay written on the match until the next throw
+  // clears them, so every word about it in between — a chair emptying, a clock
+  // being asked — carries the last turn along untouched. Reading the moves
+  // alone, a board took each of those for a fresh turn and played the same one
+  // over again; which write they were made on is stamped, so it can tell them
+  // apart. Marked here rather than where it is used, so a word arrived at
+  // while our own move is still in hand counts as seen too.
+  const seenBefore = state.lastMoveSeq > 0 && state.lastMoveSeq === seenMoveSeq;
+  seenMoveSeq = state.lastMoveSeq ?? 0;
 
   // The phase is settled with the turn and the dice rather than ahead of them.
   // Moving it early meant the board could be in the play phase while it still
@@ -3323,14 +3355,20 @@ function applyServerState(state) {
   const coveredNow = state.covered === Rules.other(HUMAN);
   if (coveredNow && !opponentCovered) announce("away.covered", 10000);
   opponentCovered = coveredNow;
+  // How long is left of the minute their chair is held for, anchored to the
+  // server's own stamp: the two boards sat down at different moments and would
+  // otherwise be counting from different places.
+  const holding = goneNow && !coveredNow;
+  awayUntil = holding
+    ? (state.awaySince?.[state.away]?.toMillis?.() ?? Date.now()) + HELD_SECONDS * 1000
+    : 0;
   if (goneNow !== opponentGone) {
     opponentGone = goneNow;
-    // Both halves of the same piece of news. The return is only ever mentioned
-    // to somebody who was told about the leaving, since this only runs on a
+    // The leaving says itself, and goes on saying itself for as long as it is
+    // true — see awayLine. Only the coming back is news, and it is only ever
+    // mentioned to somebody who watched the chair empty, since this runs on a
     // change and the leaving is what changed it.
-    // Longer for the leaving than for the coming back: one is a thing to take
-    // in and the other is a relief.
-    announce(goneNow ? "away.gone" : "away.back", goneNow ? 10000 : 5000);
+    if (!goneNow) announce("away.back", 5000);
   }
   // The running score of the match belongs to the server too.
   match.ivory = state.score.ivory;
@@ -3434,7 +3472,7 @@ function applyServerState(state) {
   // told apart by what is in hand for it rather than by whose name is on it.
   const echoed = state.lastBy === HUMAN && weCommitted;
   if (echoed) weCommitted = false;
-  const unseen = state.lastMoves?.length && state.lastBy && !echoed;
+  const unseen = !seenBefore && state.lastMoves?.length && state.lastBy && !echoed;
   if (unseen) playRemoteTurn(state.lastBy, state.lastMoves, settle);
   // The opening is decided by two dice and it is worth seeing them decide it.
   // The server settles both in one write, so without this the second die lands
@@ -3497,6 +3535,12 @@ const closeConfirm = () => confirmBox?.setAttribute("hidden", "");
 // and is not built yet.
 function leaveTable() {
   const leaving = matchId ?? localStorage.getItem(MATCH_KEY);
+  // Answered at once. Between pressing Çık and the page coming back there is a
+  // second or two of a board that looks exactly as it did, and with the box
+  // gone and nothing said in its place the press looked like it had missed.
+  closeConfirm();
+  awayUntil = 0;
+  if (leaving) announce("table.leaving", 4000);
   sessionStorage.removeItem("tavla.sitOnLoad");
   localStorage.removeItem(MATCH_KEY);
   // Said out loud, because getting up closes the table. A game across a
@@ -3526,6 +3570,9 @@ let tableGone = false;
 function tableClosed() {
   if (tableGone) return;
   tableGone = true;
+  // Nobody is being waited for any more: whatever was counting down opposite
+  // stops here, or it would go on writing over the one line that matters.
+  awayUntil = 0;
   announce("table.closed", CLOSED_SHOWN_MS);
   setTimeout(() => {
     sessionStorage.removeItem("tavla.sitOnLoad");
@@ -3744,7 +3791,7 @@ function updateHud() {
       if (roll) roll.textContent = openingLine();
       if (doneButton) doneButton.disabled = true;
       if (undoButton) undoButton.disabled = true;
-      notice("");
+      notice(awayLine());
       return;
     }
     // Whoever's turn it is cannot come in, so the panel does not ask them to
@@ -3762,7 +3809,10 @@ function updateHud() {
           ? t("turn.wonHot", { name: nameOf(game.over.winner) })
           : t(game.over.winner === HUMAN ? "turn.won" : "turn.lost")) + mars
       : game.thinking ? t("turn.thinking")
-      : !isHuman(game.turn) ? t("turn.opponent")
+      // Whose checkers those are has not changed; whose hand is on them has.
+      // A player who has been told the computer took over should be able to
+      // see it in the one place the panel says who is playing.
+      : !isHuman(game.turn) ? t(opponentCovered ? "turn.bot" : "turn.opponent")
       : mode === "hotseat"
         ? (game.dice ? nameOf(game.turn) : t("turn.hotThrow", { name: nameOf(game.turn) }))
         : t(game.dice ? "turn.you" : "turn.youThrow");
@@ -3771,7 +3821,8 @@ function updateHud() {
   // the board looks exactly as it would if we had the table and nothing we do
   // to it has any effect. News comes and goes; this is a condition.
   notice(weWereAway ? t("away.waiting")
-    : performance.now() < newsUntil ? t(newsWord, newsFill) : "");
+    : awayLine()
+      || (performance.now() < newsUntil ? t(newsWord, newsFill) : ""));
   if (roll && !game.dice) roll.textContent = "—";
   if (undoButton) {
     undoButton.disabled = !game.history.length || !!game.over ||
