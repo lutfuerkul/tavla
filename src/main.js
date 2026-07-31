@@ -3280,14 +3280,26 @@ function applyServerState(state) {
   // while our own move is still in hand counts as seen too.
   const seenBefore = state.lastMoveSeq > 0 && state.lastMoveSeq === seenMoveSeq;
   seenMoveSeq = state.lastMoveSeq ?? 0;
+  // Marked where it is acted on rather than here. A board that has just sat
+  // down hears two words in quick succession — sitting down is itself a word
+  // about the match — and the first of them does not throw the dice straight
+  // away: it waits out the pause the opening is given. Marked here, the second
+  // word found the throw already spoken for and skipped it, and the dice were
+  // left lying on whatever faces the felt had given them. The panel said 4-1
+  // and the dice said 5-4.
   const throwSeen = state.lastThrowSeq > 0 && state.lastThrowSeq === seenThrowSeq;
-  seenThrowSeq = state.lastThrowSeq ?? 0;
   // This board's first word. What it says is where the game has got to, and
   // none of it is news: the opening die was thrown a quarter of an hour ago
   // and does not want throwing again in front of somebody who has just sat
   // back down at a game in progress.
   const firstWord = !caughtUp;
   caughtUp = true;
+  // The opening numbers stay written on the match for the whole game, so a
+  // board that has just sat down finds two dice it has never seen and throws
+  // them across the felt — one of them, in front of somebody who came back to
+  // a game a quarter of an hour old. Taken as read, once, before anything is
+  // shown: they are not news to anybody at this table.
+  if (firstWord) shownOpening = { ...state.opening };
 
   // The phase is settled with the turn and the dice rather than ahead of them.
   // Moving it early meant the board could be in the play phase while it still
@@ -3408,7 +3420,7 @@ function applyServerState(state) {
     // server settles both at once — so it is looked for whether or not the
     // phase has moved on. Reading only the opening phase left the second of
     // the two dice unthrown on the board that was waiting to see it.
-    if (state.opening && !firstWord) showOpening(state);
+    if (state.opening) showOpening(state);
     if (state.phase === "opening" || !state.dice) return;
     // A turn's dice, on the other hand, are only worth showing while they are
     // still the turn's dice.
@@ -3419,8 +3431,10 @@ function applyServerState(state) {
     // too slow, were never asked for, and without this the numbers appear on
     // the panel with no die having moved.
     const oursInHand = state.turn === HUMAN && weAsked;
-    if (oursInHand) weAsked = false;
-    if (!oursInHand && !throwSeen) replayThrow(state.turn, state.dice, () => remoteSeq !== state.seq);
+    if (oursInHand) { weAsked = false; seenThrowSeq = state.lastThrowSeq ?? 0; }
+    if (oursInHand || throwSeen) return;
+    seenThrowSeq = state.lastThrowSeq ?? 0;
+    replayThrow(state.turn, state.dice, () => remoteSeq !== state.seq);
   };
 
   // Something they played since we last looked: watch it happen, then take
@@ -3438,15 +3452,18 @@ function applyServerState(state) {
   // told apart by what is in hand for it rather than by whose name is on it.
   const echoed = state.lastBy === HUMAN && weCommitted;
   if (echoed) weCommitted = false;
-  const unseen = !seenBefore && state.lastMoves?.length && state.lastBy && !echoed;
+  // None of it on the first word. A board that has just sat down is not owed
+  // the last turn played out in front of it, nor the pause the opening is
+  // given: it is being shown where the game has got to, all at once.
+  const unseen = !firstWord && !seenBefore && state.lastMoves?.length && state.lastBy && !echoed;
   if (unseen) playRemoteTurn(state.lastBy, state.lastMoves, settle);
   // The opening is decided by two dice and it is worth seeing them decide it.
   // The server settles both in one write, so without this the second die lands
   // and the board is swept in the same breath — the throw that chose who goes
   // first was over before it could be read. Their die is thrown here, and the
   // game does not start until it has come to rest and been left there a while.
-  else if (wasOpening && state.phase === "play") {
-    if (state.opening && !firstWord) showOpening(state);
+  else if (!firstWord && wasOpening && state.phase === "play") {
+    if (state.opening) showOpening(state);
     holdTheOpening(settle);
   }
   else settle();
