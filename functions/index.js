@@ -171,8 +171,22 @@ function handOver(pos, from, patch) {
 // Closing a table takes its code with it. A code outliving its match is a code
 // that lets somebody in through the door of a room that is not there any more:
 // they are seated, the board opens, and then it tells them the table has gone.
-async function closeTable(ref, match) {
-  await ref.delete();
+//
+// The match itself is marked rather than deleted, and says who closed it. A
+// record simply vanishing tells the board opposite that something happened and
+// nothing about what — so both boards were told the same thing, and one of
+// them was told its opponent had walked off when the opponent was itself. What
+// is left is swept within the hour.
+async function closeTable(ref, match, by) {
+  await ref.update({
+    closed: true,
+    closedBy: by ?? null,
+    away: null,
+    awaySince: {},
+    silinecek: SWEPT_SOON(),
+    updatedAt: now(),
+    seq: (match?.seq ?? 0) + 1,
+  });
   if (match?.code) await db.collection("rooms").doc(match.code).delete().catch(() => {});
 }
 
@@ -426,7 +440,7 @@ export const masayiBirak = onCall(settings, async request => {
   // leave a game behind for the computer to finish. The other board is told
   // by the record going — there is nothing left to read: no player, no game
   // to carry on, nobody to come back.
-  await closeTable(ref, match);
+  await closeTable(ref, match, mine);
   return { ok: true, closed: true };
 });
 
@@ -692,6 +706,8 @@ export const sure = onCall(settings, async request => {
   const match = found.data();
   const mine = colourOf(match, uid);
   if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
+  // Nobody is waited for at a table that has closed.
+  if (match.closed) return { acted: false, closed: true };
 
   // The chair opposite, asked about by the one person who minds. Which chair
   // that is does not depend on whose turn it is: a game stops just as dead
@@ -727,7 +743,7 @@ export const sure = onCall(settings, async request => {
     if (match.away !== theirs) {
       const gone = (match.drops?.[theirs] ?? 0) + 1;
       if (gone > 1) {
-        await closeTable(ref, match);
+        await closeTable(ref, match, theirs);
         return { acted: false, closed: true };
       }
       await ref.update({
@@ -740,7 +756,7 @@ export const sure = onCall(settings, async request => {
     }
     // The minute is counted from when the chair emptied, grace and all.
     if (goneFor / 1000 < HELD_SECONDS) return { acted: false, holding: true };
-    await closeTable(ref, match);
+    await closeTable(ref, match, theirs);
     return { acted: false, closed: true };
   }
 
