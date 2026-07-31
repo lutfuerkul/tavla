@@ -346,3 +346,22 @@ body.ideographic #hud span, body.ideographic #hud strong {
   #view, #menu { padding: .5rem .7rem; font-size: .6rem; letter-spacing: .08em; }
   #undo, #done { padding: .55rem 1rem; font-size: .72rem; }
 }
+
+/* Held sideways, a phone or a tablet is the wrong shape for this board: the
+   case is fitted to whichever way round is shorter, and lying down that is the
+   height — the board shrinks into a strip with the whole of the rail above and
+   below it, and the checkers come off past an edge that is no longer there.
+   Upright it fills the screen. So sideways is asked out of rather than drawn
+   for, and the game underneath is left exactly as it was — turning back is all
+   it takes.
+
+   Coarse pointers only. A desktop window that happens to be short is a window
+   somebody chose, and it is playable. */
+#rotate { display: none; position: fixed; z-index: 9; inset: 0;
+  flex-direction: column; align-items: center; justify-content: center; gap: 1.2rem;
+  padding: 2rem; text-align: center; color: #e5ad54; background: #0d0a06; }
+#rotate p { margin: 0; color: #f3ead7; font: 500 .82rem/1.5 "DM Mono", monospace;
+  letter-spacing: .12em; text-transform: uppercase; }
+@media (orientation: landscape) and (pointer: coarse) {
+  #rotate { display: flex; }
+}
