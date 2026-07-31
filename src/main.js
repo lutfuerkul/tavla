@@ -999,13 +999,27 @@ const pearl = new THREE.MeshStandardMaterial({ color: 0xe8e2d6, roughness: .4, m
 // bottom and the wall are the same moulding and take the same light. The thick
 // pieces are polished — moulded plastic, the cream one waxy and the dark one a
 // shade harder. The thin ones keep the satin they always had.
+// The room turned up, on the thick pieces and on nothing else. A flat face
+// pointing at the ceiling reflects the ceiling, and the ceiling of the room the
+// board is lit by is dim — so the only thing on these pieces that caught a
+// highlight was the bowl, which curves round to face the light, and the flat
+// top and the wall either side of it read as matte. Which is backwards: the
+// flats are the polished part of a moulding.
+const POLISH = 2.6;
 const ivory = new THREE.MeshPhysicalMaterial(THICK ? {
   color: 0xd8bc82, roughness: .3, metalness: 0, clearcoat: .45, clearcoatRoughness: .12,
+  envMapIntensity: POLISH,
 } : {
   color: 0xd4b471, roughness: .62, metalness: 0, clearcoat: .1, clearcoatRoughness: .45,
 });
+// The dark one is not a mirror. Its bowl curves round to face the light, so a
+// hard specular lands in it and nowhere else — the piece came out with a shiny
+// hole in a matte face, which is the wrong way round on a moulding. Rougher,
+// and with far less coat on it, so the shine spreads over the whole of it
+// instead of collecting in the one place that happens to be aimed right.
 const black = new THREE.MeshPhysicalMaterial(THICK ? {
-  color: 0x16171b, roughness: .18, metalness: .03, clearcoat: .6, clearcoatRoughness: .08,
+  color: 0x16171b, roughness: .38, metalness: .02, clearcoat: .25, clearcoatRoughness: .3,
+  envMapIntensity: 1.8,
 } : {
   color: 0x141518, roughness: .16, metalness: .04, clearcoat: .7, clearcoatRoughness: .06,
 });
