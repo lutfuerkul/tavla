@@ -1317,7 +1317,7 @@ function addHinges() {
 const MM = 1 / 36;
 const mm = (r, h) => new THREE.Vector2(r, h * MM);
 const CHECKER_R = CHECKER_D / 2;
-const CHECKER_H = (THICK ? 10 : 8) * MM;
+const CHECKER_H = (THICK ? 9 : 8) * MM;
 
 // The profile runs bottom-centre outwards and up. Listing it in this order is
 // what makes the revolved normals face outwards — reversed, the discs render
@@ -1357,21 +1357,22 @@ const THICK_PROFILE = [
   mm(.4913, .28),
   mm(.4988, .65),
   mm(.5, 1.2),
-  mm(.5, 8.8),          // straight side wall between the two corners
-  mm(.4988, 9.35),
-  mm(.4913, 9.72),      // the top corner, the same round
-  mm(.478, 9.94),
-  mm(.467, 10),
-  mm(.42, 10),          // flat top
-  mm(.2083, 10),
-  // And the saucer in the middle of it: 15mm across and two tenths of a
-  // millimetre deep. A spherical cap, so the curve is one smooth sweep from
-  // its edge to the middle rather than a lens with a seam round it.
-  mm(.175, 9.941),
-  mm(.140, 9.890),
-  mm(.100, 9.846),
-  mm(.050, 9.812),
-  mm(0, 9.800),
+  mm(.5, 7.8),          // straight side wall between the two corners
+  mm(.4988, 8.35),
+  mm(.4913, 8.72),      // the top corner, the same round
+  mm(.478, 8.94),
+  mm(.467, 9),
+  mm(.42, 9),           // flat top
+  mm(.2361, 9),
+  // And the bowl in the middle of it: 17mm across on a 36mm piece and 3mm
+  // deep, a third of the thickness. A spherical cap, so the curve is one
+  // smooth sweep from its edge to the middle rather than a lens with a seam
+  // round it.
+  mm(0.2, 8.153),
+  mm(0.16, 7.378),
+  mm(0.115, 6.712),
+  mm(0.06, 6.194),
+  mm(0, 6.000),
 ];
 
 // Ninety-six segments turn a checker that is an inch across on a desktop. On a
