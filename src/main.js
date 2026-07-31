@@ -2455,6 +2455,11 @@ const OFF_TO_THE_SIDE = !HANDHELD;
 // yours whoever you are, and two people round one tablet sit either side of it.
 const offEdge = colour => (colour === HUMAN ? -AWAY : AWAY);
 
+// How many go in a row out there before the next one starts. Five is a hand
+// of them: a glance counts a row of five without counting, and three rows is
+// the whole game.
+const OFF_IN_A_ROW = 5;
+
 // Where the nth checker of a colour sits once it is off.
 function offSeat(colour, standing = 0) {
   if (OFF_TO_THE_SIDE) {
@@ -2464,14 +2469,16 @@ function offSeat(colour, standing = 0) {
       z: colour === "black" ? FIELD_HALF * .55 : -FIELD_HALF * .55,
     };
   }
-  // Laid out in a row rather than piled up. The board is being looked straight
-  // down at here, and from up there a pile of fifteen is one checker and a long
-  // shadow — while a row is a row, countable at a glance. It runs from the home
-  // board it came off inwards, overlapping like a tray of them pushed together.
+  // Laid out flat rather than piled up, in rows of five. The board is being
+  // looked straight down at here, and from up there a pile of fifteen is one
+  // checker and a long shadow. Five is what a glance counts without counting —
+  // three full rows is the game — and each row sits further out from the rail
+  // than the last, clear of the board rather than against it.
+  const row = Math.floor(standing / OFF_IN_A_ROW), place = standing % OFF_IN_A_ROW;
   return {
-    x: MIRROR * (FIELD_HALF_X - CHECKER_R - standing * CHECKER_D * .4),
-    y: FELT_Y + standing * .012,
-    z: offEdge(colour) * (CASE_HALF_Z + 1),
+    x: MIRROR * (FIELD_HALF_X * .55 + (place - (OFF_IN_A_ROW - 1) / 2) * CHECKER_D * 1.15),
+    y: FELT_Y,
+    z: offEdge(colour) * (CASE_HALF_Z + 1 + row * CHECKER_D * 1.2),
   };
 }
 
