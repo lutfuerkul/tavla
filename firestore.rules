@@ -18,9 +18,15 @@ service cloud.firestore {
     // anyway: they hand the code to a function, which is where knowing it is
     // checked. This is only the host, watching their own room for somebody to
     // arrive, and the guest afterwards.
+    // A room that is not there is readable by anyone signed in, and has nothing
+    // in it to read. This is not a loosening: without it, a host watching their
+    // own room is cut off the moment the room goes — see the matches rule below,
+    // where the same omission cost rather more.
     match /rooms/{code} {
       allow read: if request.auth != null
-        && (request.auth.uid == resource.data.host || request.auth.uid == resource.data.guest);
+        && (resource == null
+            || request.auth.uid == resource.data.host
+            || request.auth.uid == resource.data.guest);
       allow write: if false;
     }
 
@@ -32,9 +38,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // The two people playing it — and, once it is gone, anybody, because there
+    // is nothing left to read. That last part is not a nicety. A match is
+    // deleted the moment its last player gets up, and a listener on a deleted
+    // document is asked this question with `resource` set to null: without the
+    // first line the rule threw on the null instead of answering, and Firestore
+    // tears a listener down on an error rather than reporting the deletion. So
+    // the one board still sitting there never heard that the table had gone.
+    // It kept the last position on the screen, looking perfectly playable,
+    // deaf to everything — no result, no news, no way of knowing.
     match /matches/{id} {
       allow read: if request.auth != null
-        && request.auth.uid in resource.data.players.values();
+        && (resource == null || request.auth.uid in resource.data.players.values());
       allow write: if false;
     }
 

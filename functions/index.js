@@ -27,6 +27,8 @@ const MATCH_TARGET = 3;
 // waited for at all — the computer takes their checkers the moment their seat
 // is empty and gives them straight back when they sit down again.
 const ROLL_SECONDS = 20;
+// The first throw after the table is handed back — see waitingFor.
+const RETURN_SECONDS = 45;
 const MOVE_SECONDS = 60;
 // The opening keeps no time at all. Nobody is thinking yet — they have just
 // sat down, and the first thing asked of them is a die that decides nothing
@@ -112,6 +114,7 @@ function freshMatch(players) {
     required: 0,
     played: 0,
     lastMoves: [],
+    settledFor: null,
     // Which write they were made on. Every later word about the match carries
     // the moves along untouched — a chair emptying, a clock running — and a
     // board with no way of telling the two apart watched the same turn played
@@ -439,6 +442,7 @@ export const zarAt = onCall(settings, async request => {
       lastMoves: [],
       lastMoveSeq: 0,
       lastBy: null,
+      settledFor: null,
       updatedAt: now(),
       seq: match.seq + 1,
     });
@@ -531,9 +535,22 @@ export const turuOyna = onCall(settings, async request => {
 // taking its opponent's checkers.
 const rtdb = () => getDatabase();
 
+// How long the mark on a seat is good for. Four times the pulse the board
+// writes it with, so a slow line or a missed write does not empty a chair
+// somebody is plainly sitting in.
+const SEAT_FRESH_MS = 20 * 1000;
+
 async function isSeated(matchId, uid) {
   const seat = await rtdb().ref(`masalar/${matchId}/${uid}`).get();
-  return seat.exists();
+  if (!seat.exists()) return false;
+  // The seat is cleared by onDisconnect, which is the server noticing a closed
+  // connection — and a connection that is cut rather than closed is not
+  // noticed for a minute or more. So the time on the mark is read too, and a
+  // mark nobody has touched in twenty seconds is an empty chair whatever it
+  // says. A board too old to be writing the time is taken at its word.
+  const at = seat.val()?.at;
+  if (typeof at !== "number") return true;
+  return Date.now() - at < SEAT_FRESH_MS;
 }
 
 // Whoever the match is waiting on, and how long they have had.
@@ -541,7 +558,16 @@ function waitingFor(match) {
   if (match.over) return null;
   if (match.phase === "opening") return { colour: match.waitingOn, seconds: OPEN_SECONDS };
   if (!match.turn) return null;
-  return { colour: match.turn, seconds: match.dice ? MOVE_SECONDS : ROLL_SECONDS };
+  // The first throw after being handed the table back is given longer. Twenty
+  // seconds is the allowance of somebody already sitting there with their hand
+  // out; a player who has just come back learns they have the table from a line
+  // of text over a board they were not watching, and was having the dice thrown
+  // for them while they were still reading it.
+  const settling = !match.dice && match.settledFor === match.turn;
+  return {
+    colour: match.turn,
+    seconds: match.dice ? MOVE_SECONDS : (settling ? RETURN_SECONDS : ROLL_SECONDS),
+  };
 }
 
 // One thing the absent or idle player would have done. Rolling and playing are
@@ -575,6 +601,7 @@ function actFor(match, colour) {
       dice, remaining,
       required: Rules.legalSequences(pos, colour, remaining)[0].length,
       played: 0, lastMoves: [], lastMoveSeq: 0, lastBy: null,
+      settledFor: null,
       lastThrowSeq: match.seq + 1,
       updatedAt: now(), seq: match.seq + 1,
     };
@@ -667,6 +694,9 @@ export const sure = onCall(settings, async request => {
       covered: null,
       awaySince: {},
       returnedAt: null,
+      // They have the table again, and the longer allowance that goes with
+      // finding that out. Cleared by their first throw.
+      settledFor: waiting.colour,
       updatedAt: now(),
       seq: match.seq + 1,
     });

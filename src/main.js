@@ -3237,6 +3237,8 @@ const OPENING_HELD_MS = 3500;
 // server and is read by the other board — but a turn that can be taken away
 // without warning is a turn taken away unfairly, so it is shown.
 const ROLL_SECONDS = 20, MOVE_SECONDS = 60;
+// The first throw after being handed the table back gets longer.
+const RETURN_SECONDS = 45;
 // The same minute the server holds an empty chair for.
 const HELD_SECONDS = 60;
 const clockBox = document.querySelector("#sayac");
@@ -3259,7 +3261,13 @@ function runningClock(state) {
   // The opening keeps no time, so there is nothing to count out.
   if (state.phase === "opening") return 0;
   if (state.turn !== HUMAN) return 0;
-  return { seconds: state.dice ? MOVE_SECONDS : ROLL_SECONDS, from: null };
+  // The longer allowance the server gives a first throw after the table has
+  // been handed back, shown as the server keeps it.
+  const settling = !state.dice && state.settledFor === HUMAN;
+  return {
+    seconds: state.dice ? MOVE_SECONDS : (settling ? RETURN_SECONDS : ROLL_SECONDS),
+    from: null,
+  };
 }
 
 // The minute the server holds an empty chair for, counted where the news is.
@@ -3273,7 +3281,12 @@ let awayUntil = 0;
 // why or for how much longer.
 function awayLine() {
   if (!awayUntil) return "";
-  const left = Math.max(0, Math.ceil((awayUntil - Date.now()) / 1000));
+  const left = Math.ceil((awayUntil - Date.now()) / 1000);
+  // The minute is up but the handover has not happened — it waits for a turn
+  // of theirs to hand over, and until one comes round there is nothing to do.
+  // The words still hold; the number does not, and a clock sitting at 0:00 is
+  // a clock that has stopped working as far as anyone reading it can tell.
+  if (left <= 0) return t("away.gone");
   return `${t("away.gone")} · ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
 }
 
