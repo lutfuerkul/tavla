@@ -245,7 +245,7 @@ function sitDown() {
   // Not before — at the door there is no board to put anything on.
   if (mode === "online" && matchId && !session.online) {
     session = onlineSession({ matchId, colour: HUMAN, ask, follow });
-    session.watch(applyServerState);
+    session.watch(applyServerState, tableClosed);
   }
 }
 
@@ -483,11 +483,16 @@ function say(key, code) {
 const resumeButton = document.querySelector("#resume");
 
 // The match as it stands, read once and let go of.
-function matchOnce(id) {
+// Three answers, not two: the match as it stands, `null` for a table that is
+// not there any more, and nothing at all for a question that never came back.
+// The last one is not the same as the first and must not be read as one — a
+// lost connection is no reason to tell somebody their match is over.
+function matchOnce(id, waitMs = 5000) {
   return new Promise(async resolve => {
     let stop = null, done = false;
     const take = state => { if (done) return; done = true; resolve(state); stop?.(); };
-    stop = await follow("matches", id, take);
+    setTimeout(() => take(undefined), waitMs);
+    stop = await follow("matches", id, take, () => take(null));
     if (done) stop?.();
   });
 }
@@ -506,7 +511,7 @@ resumeButton?.addEventListener("click", async () => {
   // `null` is not knowing — the question failed to arrive — and that is no
   // reason to keep somebody from their own match. A table the server has
   // closed is a different matter: it is shut for both of them and says so.
-  if (state?.closed || there === false) {
+  if (state === null || there === false) {
     say("lobby.closed");
     localStorage.removeItem(MATCH_KEY);
     resumeButton.setAttribute("hidden", "");
@@ -523,7 +528,8 @@ resumeButton?.addEventListener("click", async () => {
 // match while it is there, since nothing will ever make it worth returning to.
 async function forgetIfFinished(id) {
   const state = await matchOnce(id);
-  if (!state?.matchOver) return;
+  // Not there at all, or won: either way there is nothing to go back to.
+  if (state !== null && !state?.matchOver) return;
   localStorage.removeItem(MATCH_KEY);
   resumeButton?.setAttribute("hidden", "");
 }
@@ -595,8 +601,15 @@ findButton?.addEventListener("click", async () => {
     // read, and it is the thing the next arrival writes to.
     const live = await connect();
     watchingQueue?.();
-    watchingQueue = await follow("sira", live?.uid ?? "", entry => {
-      if (looking && entry.matchId) sitDownTo(entry.matchId, entry.colour ?? "black");
+    watchingQueue = await follow("sira", live?.uid ?? "", async entry => {
+      if (!looking || !entry.matchId) return;
+      // Read once and then of no use to anybody. Taken out of the queue here
+      // rather than left for the sweeper: this is the moment it stops meaning
+      // anything, and a place with an old match written on it is exactly what
+      // should never be lying about.
+      looking = false;
+      await ask("siradanCik", {}).catch(() => {});
+      sitDownTo(entry.matchId, entry.colour ?? "black");
     });
     // Saying we are still here, over and over, so a place left behind by a
     // closed tab stops being one somebody can be sent to. It looks again on
@@ -3287,6 +3300,26 @@ function leaveTable() {
     : Promise.resolve();
   Promise.race([said, new Promise(done => setTimeout(done, 1500))])
     .then(() => location.reload());
+}
+
+// Long enough to read before the board goes back to the door.
+const CLOSED_SHOWN_MS = 5000;
+let tableGone = false;
+
+// The table gone out from under the board. The server deletes a match as its
+// last player leaves, so the record simply stops being there — and that is the
+// only word about it there is going to be. Nothing on this board can be played
+// any more, and a board that looks playable and is not is worse than one that
+// says so: it is said plainly, and then the door.
+function tableClosed() {
+  if (tableGone) return;
+  tableGone = true;
+  announce("table.closed", CLOSED_SHOWN_MS);
+  setTimeout(() => {
+    sessionStorage.removeItem("tavla.sitOnLoad");
+    localStorage.removeItem(MATCH_KEY);
+    location.reload();
+  }, CLOSED_SHOWN_MS);
 }
 
 menuButton?.addEventListener("click", () => confirmBox?.removeAttribute("hidden"));

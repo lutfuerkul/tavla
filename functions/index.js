@@ -46,12 +46,13 @@ const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 5;
 const ROOM_MINUTES = 20;
 
-// How long a record is kept before Firestore sweeps it up. Nothing here is
-// worth storing for ever: a match nobody can return to is a few kilobytes of
-// a game that finished, and a place in the queue is stale after a minute. The
-// dates are written on the documents themselves; the sweeping is a TTL policy
-// on the field, set on the project rather than in code.
-const KEPT_DAYS = 3;
+// How long a record lingers before Firestore sweeps it up. This is a backstop
+// and nothing more: a table is deleted when the last player leaves it, at the
+// moment they leave. What is left over is what nobody could say goodbye for —
+// a tab closed, a phone put down, a signal lost — and these are how long that
+// takes to go. The dates are written on the documents themselves; the sweeping
+// is a TTL policy on the field, set on the project rather than in code.
+const KEPT_DAYS = 1;
 const KEPT_AFTER_CLOSING_HOURS = 1;
 const KEPT_IN_QUEUE_MINUTES = 5;
 const sweptIn = ms => new Date(Date.now() + ms);
@@ -118,8 +119,8 @@ function freshMatch(players) {
     seq: 0,
     createdAt: now(),
     updatedAt: now(),
-    // Swept up three days after it was laid out. A match still being played
-    // three days later is not one anybody is coming back to.
+    // A match still on the table a day later is not one anybody is coming back
+    // to. Normally it is deleted long before this, as its last player leaves.
     silinecek: KEPT(),
   };
 }
@@ -317,11 +318,10 @@ export const masayiBirak = onCall(settings, async request => {
   if (match.closed) return { ok: true, closed: true };
 
   if (await isSeated(id, match.players[Rules.other(mine)])) return { ok: true, closed: false };
-  await ref.update({
-    closed: true, updatedAt: now(), seq: (match.seq ?? 0) + 1,
-    // Nobody is coming back to it, so it does not wait out the three days.
-    silinecek: SWEPT_SOON(),
-  });
+  // Closed means gone. There is nothing left to read: no player, no game to
+  // carry on, nobody to come back — so the record is not marked and kept, it
+  // is deleted here and now. The boards watching it are told by its going.
+  await ref.delete();
   return { ok: true, closed: true };
 });
 
