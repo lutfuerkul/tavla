@@ -232,6 +232,17 @@ export function maxPlayable(pos, colour, dice) {
 // What the player may do right now, part way through a turn: every move that
 // leaves the turn still able to play as many dice as it could before it.
 //
+// Shut out: a checker on the bar with every one of the six points it could
+// enter on held against it. No number brings it in, so the throw decides
+// nothing — it is the one turn in the game where the dice have no say.
+export function shutOut(pos, colour) {
+  if (!pos.bar[colour]) return false;
+  for (let die = 1; die <= 6; die++) {
+    if (!blocked(pos, entryPoint(colour, die), colour)) return false;
+  }
+  return true;
+}
+
 // This is asked of the position rather than pulled out of a list of whole
 // sequences, because sequences that reach the same board by a different order
 // are the same sequence to a search and only one of them survives. Reading

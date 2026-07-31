@@ -211,7 +211,12 @@ body.ideographic #hud span, body.ideographic #hud strong {
   cursor: pointer; transition: color .2s ease, border-color .2s ease, background .2s ease; }
 #find:hover { border-color: #e5ad54; color: #f6ecd6; background: rgba(36,26,16,.9); }
 #find.looking { color: #17110a; background: #e5ad54; border-color: #e5ad54; }
-.lobby-or { font-size: .7rem; letter-spacing: .1em; color: #9b907e; text-transform: uppercase; }
+/* It sits over the board rather than over the panel, and at the weight of a
+   caption it was lost in the walnut behind it. Same type as the buttons it
+   stands between, and light enough to read off the wood. */
+.lobby-or { font: 500 .78rem/1 "DM Mono", monospace; letter-spacing: .12em;
+  color: #d8ccb4; text-transform: uppercase;
+  text-shadow: 0 1px 3px rgba(0,0,0,.85), 0 0 10px rgba(0,0,0,.7); }
 #host, #join { padding: .68rem 1.4rem; font: 500 .78rem/1 "DM Mono", monospace;
   letter-spacing: .12em; text-transform: uppercase; color: #d8ccb4;
   background: rgba(20,15,10,.78); border: 1px solid rgba(229,173,84,.4);

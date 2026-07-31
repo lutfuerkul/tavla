@@ -2899,9 +2899,32 @@ function startTurn(colour) {
   game.required = 0;
   game.played = 0;
   game.history = [];
+  // A checker on the bar and the six points it could come in on all held
+  // against it: no number brings it in, so there is nothing to throw for. The
+  // turn is said out loud and handed straight back rather than spent throwing
+  // dice that cannot be played.
+  if (Rules.shutOut(game.pos, colour)) return standAside(colour);
   // Across a network the other side throws for itself; here there is nobody
   // to throw for but the computer.
   if (mode !== "online" && !isHuman(colour)) setTimeout(() => throwDice(-AWAY), 550);
+}
+
+// Long enough to read why the turn went past without anything happening.
+const SHUT_OUT_MS = 2200;
+
+function standAside(colour) {
+  announce(mode === "hotseat" ? "shut.hot" : colour === HUMAN ? "shut.you" : "shut.them",
+           SHUT_OUT_MS, { name: nameOf(colour) });
+  updateHud();
+  // Both of them shut out at once is a position nothing can move on from.
+  // Vanishingly rare and not worth a rule of its own, but it must not turn
+  // into two boards handing a turn back and forth for ever.
+  if (Rules.shutOut(game.pos, Rules.other(colour))) return;
+  setTimeout(() => {
+    if (game.over || game.turn !== colour) return;
+    startTurn(Rules.other(colour));
+    updateHud();
+  }, SHUT_OUT_MS);
 }
 
 // The turn is over when there is nothing left that may be played — which is
@@ -2983,6 +3006,7 @@ let weWereAway = false;
 // game, so "the opening is decided and nothing has been thrown yet" was true
 // again at the start of every single turn.
 let openingStands = false;
+let newsFill;
 // Long enough to read and no longer. Both of these are news, not states of
 // the board: once either has been said there is nothing to be done about it,
 // and a line that stays put is a line still covering something else an hour
@@ -3146,10 +3170,11 @@ function replayThrow(colour, values, stale, tries = 0) {
 // A line of news, up long enough to read. It is taken down on a timer rather
 // than by the next redraw: the panel is drawn on events, and in a game the
 // computer is playing there may not be another one for minutes.
-function announce(word, ms = NEWS_SHOWN_MS) {
+function announce(word, ms = NEWS_SHOWN_MS, fill = undefined) {
   newsWord = word;
+  newsFill = fill;
   newsUntil = performance.now() + ms;
-  notice(t(word));
+  notice(t(word, fill));
   setTimeout(() => { if (performance.now() >= newsUntil) notice(""); }, ms);
 }
 
@@ -3286,6 +3311,13 @@ function applyServerState(state) {
     // that was waiting off the board along with it.
     if (wasOpening && state.phase === "play") { resetDice(); openingStands = true; }
     if (state.dice || state.lastBy) openingStands = false;
+    // Passed over on the bar: the server hands the turn back rather than
+    // spending one on a throw that cannot be played, and says who it was so
+    // both boards can account for the turn that went by without anything
+    // happening on it.
+    if (state.skipped) {
+      announce(state.skipped === HUMAN ? "shut.you" : "shut.them", SHUT_OUT_MS);
+    }
     // The next game of a match arrives already in play, with the turn on
     // whoever won the last one — there is no opening to watch, so the moment
     // the result goes is the moment the pair has to be back in the middle.
@@ -3495,13 +3527,16 @@ function showResult() {
   resultTitle.textContent = took
     ? (mode === "hotseat" ? t("result.matchWonHot", { name: nameOf(took) })
         : t(took === HUMAN ? "result.matchWon" : "result.matchLost"))
-    : said + (value === 2 ? t("mars") : "");
-  // A game is worth one point or two, so the singular is a real case and has
-  // its own line in the languages that inflect it.
+    // What the game was worth, said beside the word that decided it: the mars
+    // that doubled it, or the win that did not.
+    : said + t(value === 2 ? "result.mars" : "result.plain");
+  // And underneath, only the thing the panel does not already show. The score
+  // is up there in the corner throughout; repeating it here left the one line
+  // nobody knows — how many it takes to win the match — buried in the middle
+  // of a row of numbers.
   resultScore.textContent = took
     ? t("result.final", { score: scoreLine() })
-    : t(value === 1 ? "result.line1" : "result.line",
-        { points: value, score: scoreLine(), target: MATCH_TARGET });
+    : t(value === 1 ? "result.line1" : "result.line", { target: MATCH_TARGET });
   resultNext.textContent = t(took ? "result.newMatch" : "result.next");
   resultBox.removeAttribute("hidden");
 }
@@ -3647,6 +3682,16 @@ function updateHud() {
       notice("");
       return;
     }
+    // Whoever's turn it is cannot come in, so the panel does not ask them to
+    // throw. It says why, for as long as the turn is theirs.
+    if (!game.over && !game.dice && Rules.shutOut(game.pos, game.turn)) {
+      side.textContent = mode === "hotseat"
+        ? t("turn.shutOutHot", { name: nameOf(game.turn) }) : t("turn.shutOut");
+      if (roll) roll.textContent = "—";
+      if (doneButton) doneButton.disabled = true;
+      if (undoButton) undoButton.disabled = true;
+      return;
+    }
     side.textContent = game.over
       ? (mode === "hotseat"
           ? t("turn.wonHot", { name: nameOf(game.over.winner) })
@@ -3661,7 +3706,7 @@ function updateHud() {
   // the board looks exactly as it would if we had the table and nothing we do
   // to it has any effect. News comes and goes; this is a condition.
   notice(weWereAway ? t("away.waiting")
-    : performance.now() < newsUntil ? t(newsWord) : "");
+    : performance.now() < newsUntil ? t(newsWord, newsFill) : "");
   if (roll && !game.dice) roll.textContent = "—";
   if (undoButton) {
     undoButton.disabled = !game.history.length || !!game.over ||
@@ -4144,7 +4189,7 @@ canvas.addEventListener("pointerdown", (e) => {
     // without the first half of this, a hand could reach in during the pause
     // and pick a die back up off the settled opening.
     ? !!game.waitingOn && isHuman(game.waitingOn)
-    : isHuman(game.turn) && !game.dice);
+    : isHuman(game.turn) && !game.dice && !Rules.shutOut(game.pos, game.turn));
   const reached = dieHit.length ? dieHit[0].object : withinReach(e, canThrow);
   if (reached && !heldDice && canThrow && !game.over) {
     const anchor = pointerOnPlane(liftPlane, new THREE.Vector3())
