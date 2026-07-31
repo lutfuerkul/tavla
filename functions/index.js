@@ -42,6 +42,13 @@ const OPEN_SECONDS = Infinity;
 // back inside it — with the code, which is the only way back — and the game
 // carries on from exactly there. Past it the table closes for both of them.
 const HELD_SECONDS = 60;
+// A page being reloaded empties its seat for a second or two. That is not
+// somebody leaving and must not be announced as one, still less counted as
+// one: reloading is the commonest thing anybody does to a web page, and it was
+// spending the single absence a table allows and closing the game on the
+// second press. Nothing is said until the chair has been empty longer than a
+// reload takes.
+const AWAY_GRACE_MS = 10 * 1000;
 // Long enough that two rooms are never open on the same code, short enough to
 // read down a telephone. I, O, 0 and 1 are left out: they are the letters
 // people get wrong.
@@ -161,6 +168,14 @@ function handOver(pos, from, patch) {
   patch.skipped = null;
 }
 
+// Closing a table takes its code with it. A code outliving its match is a code
+// that lets somebody in through the door of a room that is not there any more:
+// they are seated, the board opens, and then it tells them the table has gone.
+async function closeTable(ref, match) {
+  await ref.delete();
+  if (match?.code) await db.collection("rooms").doc(match.code).delete().catch(() => {});
+}
+
 const colourOf = (match, uid) =>
   match.players.black === uid ? "black" : match.players.ivory === uid ? "ivory" : null;
 
@@ -222,6 +237,12 @@ export const odayaKatil = onCall(settings, async request => {
     // Coming back to a room that has already been paired is not an error: it
     // is what happens when a player reloads. They are sent to their match.
     if (it.status === "matched") {
+      // The match this code answers to may have closed since. A code is deleted
+      // with its table, but a sweep or a crash can leave one standing — and
+      // being let in through the door of a room that is not there is worse than
+      // being told at the door.
+      const still = it.matchId ? await tx.get(db.collection("matches").doc(it.matchId)) : null;
+      if (!still?.exists) { tx.delete(room); return { error: "not-found" }; }
       const other = it.hostColour === "black" ? "ivory" : "black";
       if (it.host === uid) return { matchId: it.matchId, colour: it.hostColour };
       if (it.guest === uid) return { matchId: it.matchId, colour: other };
@@ -405,7 +426,7 @@ export const masayiBirak = onCall(settings, async request => {
   // leave a game behind for the computer to finish. The other board is told
   // by the record going — there is nothing left to read: no player, no game
   // to carry on, nobody to come back.
-  await ref.delete();
+  await closeTable(ref, match);
   return { ok: true, closed: true };
 });
 
@@ -687,30 +708,39 @@ export const sure = onCall(settings, async request => {
   // record going is how they are both told.
   if (!seated) {
     const startedAt = match.awaySince?.[theirs]?.toDate?.();
+    // Noted, and nothing more. No word to the other board and no mark on the
+    // match — not even a new seq, so no board hears anything at all — until it
+    // has lasted longer than a reload takes.
     if (!startedAt) {
-      // Once is a tunnel, a flat battery, a router. Twice is a game the other
-      // player cannot play, and waiting out a second minute for somebody who
-      // has already been waited for is a game nobody is playing. The second
-      // time the chair empties, the table closes with it — there is no way
-      // back from it and the code will find nothing.
+      await ref.update({ awaySince: { ...(match.awaySince ?? {}), [theirs]: now() } });
+      return { acted: false, holding: true };
+    }
+    const goneFor = Date.now() - startedAt.getTime();
+    if (goneFor < AWAY_GRACE_MS) return { acted: false, holding: true };
+
+    // Long enough to be real. Said out loud now, and counted.
+    //
+    // Once is a tunnel, a flat battery, a router. Twice is a game the other
+    // player cannot play, and waiting out a second minute for somebody who has
+    // already been waited for is a game nobody is playing — the second time
+    // the chair empties, the table closes with it.
+    if (match.away !== theirs) {
       const gone = (match.drops?.[theirs] ?? 0) + 1;
       if (gone > 1) {
-        await ref.delete();
+        await closeTable(ref, match);
         return { acted: false, closed: true };
       }
       await ref.update({
         away: theirs,
-        awaySince: { ...(match.awaySince ?? {}), [theirs]: now() },
         drops: { ...(match.drops ?? {}), [theirs]: gone },
         updatedAt: now(),
         seq: match.seq + 1,
       });
       return { acted: false, holding: true };
     }
-    if ((Date.now() - startedAt.getTime()) / 1000 < HELD_SECONDS) {
-      return { acted: false, holding: true };
-    }
-    await ref.delete();
+    // The minute is counted from when the chair emptied, grace and all.
+    if (goneFor / 1000 < HELD_SECONDS) return { acted: false, holding: true };
+    await closeTable(ref, match);
     return { acted: false, closed: true };
   }
 
