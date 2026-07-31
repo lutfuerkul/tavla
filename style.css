@@ -339,6 +339,36 @@ body.ideographic #hud span, body.ideographic #hud strong {
   .board-pick { padding: .55rem 1rem; }
 }
 
+/* The code this table answers to, up the right-hand side beside the board. It
+   is the way back into this game if either of them drops out, so it is read
+   long before it is needed rather than looked for once it is too late. */
+#table-code { position: fixed; z-index: 3; top: 5rem; right: 1.4rem;
+  display: flex; flex-direction: column; align-items: flex-end; gap: .25rem;
+  padding: .55rem .8rem; background: rgba(12,9,6,.6);
+  border: 1px solid rgba(229,173,84,.28); border-radius: .45rem; }
+#table-code[hidden] { display: none; }
+#table-code span { color: #ad9470; font: 500 .55rem/1 "DM Mono", monospace;
+  letter-spacing: .15em; }
+#table-code strong { color: #f3ead7; font: 600 .95rem/1 "DM Mono", monospace;
+  letter-spacing: .28em; }
+#intro:not(.hidden) ~ #table-code, #intro:not(.hidden) ~ #end-table { display: none; }
+
+/* The way out of a wait, offered only while there is one. It sits under the
+   line that says why, in the middle of the table, because that is where the
+   news it belongs to is. */
+#end-table { position: fixed; z-index: 4; left: 50%; transform: translateX(-50%);
+  top: calc(50% + 3.2rem); padding: .6rem 1.5rem;
+  font: 500 .72rem/1 "DM Mono", monospace; letter-spacing: .12em;
+  text-transform: uppercase; color: #d8ccb4; background: rgba(20,15,10,.9);
+  border: 1px solid rgba(229,173,84,.45); border-radius: .45rem; box-shadow: none;
+  cursor: pointer; transition: color .2s ease, border-color .2s ease, background .2s ease; }
+#end-table:hover { border-color: #e5ad54; color: #f6ecd6; background: rgba(36,26,16,.95); }
+#end-table[hidden] { display: none; }
+@media (max-width: 600px) {
+  #table-code { top: 4.2rem; right: .8rem; padding: .45rem .65rem; }
+  #table-code strong { font-size: .82rem; letter-spacing: .22em; }
+}
+
 /* Back to the door, by way of a question — a game in progress is not
    something to lose to a stray click. */
 #menu { position: fixed; z-index: 3; top: 1.4rem; right: 1.4rem; padding: .6rem 1.3rem;

@@ -5,7 +5,7 @@ const canvas = document.querySelector("#scene");
 import * as Rules from "./rules.js";
 import { LANGS, language, setLanguage, t, isIdeographic } from "./i18n.js";
 import { localSession, onlineSession } from "./session.js";
-import { attend, ask, connect, follow, seatTaken, sitAt } from "./firebase.js";
+import { attend, ask, connect, follow, sitAt } from "./firebase.js";
 
 // Where the turns come from. Everything the board cannot decide by itself goes
 // through here, so a game against a server can be a different session rather
@@ -495,71 +495,17 @@ function say(key, code) {
   }
 }
 
-// A match this browser is already sitting at. Closing the tab drops the seat
-// but not the match — it is written down here, and without a way back the
-// player was stranded at the door with a game of theirs still on the table.
-const resumeButton = document.querySelector("#resume");
-
-// The match as it stands, read once and let go of.
-// Three answers, not two: the match as it stands, `null` for a table that is
-// not there any more, and nothing at all for a question that never came back.
-// The last one is not the same as the first and must not be read as one — a
-// lost connection is no reason to tell somebody their match is over.
-function matchOnce(id, waitMs = 5000) {
-  return new Promise(async resolve => {
-    let stop = null, done = false;
-    const take = state => { if (done) return; done = true; resolve(state); stop?.(); };
-    setTimeout(() => take(undefined), waitMs);
-    stop = await follow("matches", id, take, () => take(null));
-    if (done) stop?.();
-  });
-}
-
-resumeButton?.addEventListener("click", async () => {
-  const id = localStorage.getItem(MATCH_KEY);
-  if (!id) return;
-  resumeButton.disabled = true;
-  // Nobody opposite is nobody to play, and sitting down at an abandoned table
-  // only puts you where the computer will play both sides. The seat is asked
-  // after rather than assumed: a match can be waiting for somebody who left
-  // and is not coming back.
-  const state = await matchOnce(id);
-  const theirs = state?.players?.[Rules.other(HUMAN)];
-  const there = theirs ? await seatTaken(id, theirs) : null;
-  // `null` is not knowing — the question failed to arrive — and that is no
-  // reason to keep somebody from their own match. A table the server has
-  // closed is a different matter: it is shut for both of them and says so.
-  if (state === null || there === false) {
-    say("lobby.closed");
-    localStorage.removeItem(MATCH_KEY);
-    resumeButton.setAttribute("hidden", "");
-    resumeButton.disabled = false;
-    return;
-  }
-  // The same door the lobby goes through when a room is matched.
-  sessionStorage.setItem("tavla.sitOnLoad", "1");
-  location.reload();
-});
-
-// A match that has been won is not one to go back to. The board is allowed to
-// read its own match, so it asks before offering the way in — and forgets the
-// match while it is there, since nothing will ever make it worth returning to.
-async function forgetIfFinished(id) {
-  const state = await matchOnce(id);
-  // Not there at all, or won: either way there is nothing to go back to.
-  if (state !== null && !state?.matchOver) return;
-  localStorage.removeItem(MATCH_KEY);
-  resumeButton?.setAttribute("hidden", "");
-}
+// The way back to a table is its code and nothing else. A seat is not held
+// open on trust, nothing plays a hand that has gone, and a board that offered
+// its way back in from the door could offer it to a table that had closed an
+// hour ago. You say the code, the seat is found to be yours, and the game
+// carries on from exactly where it stopped.
 
 function showLobby() {
   const online = mode === "online";
   lobby?.toggleAttribute("hidden", !online);
   if (codeBox) codeBox.hidden = true;
   if (codeHint) codeHint.hidden = true;
-  const waiting = online && localStorage.getItem(MATCH_KEY);
-  resumeButton?.toggleAttribute("hidden", !waiting);
-  if (waiting) forgetIfFinished(waiting).catch(() => {});
   // Your colour comes from the room, so it is not asked for here.
   document.querySelector("#colours")?.toggleAttribute("hidden", online);
   refreshStart();
@@ -3045,8 +2991,7 @@ let shownOpening = { black: null, ivory: null };
 let theirSeat = null;
 let watchingSeat = false;
 let opponentGone = false;
-let opponentCovered = false;
-let weWereAway = false;
+
 // The last turn this board watched, by the write it was made on.
 let seenMoveSeq = 0;
 // True between the opening being settled and the first dice of the game being
@@ -3257,7 +3202,7 @@ function runningClock(state) {
   // the middle of the table beside the line that says what it is for: a bare
   // number up in the corner, where the panel keeps your own time, is a number
   // nobody looks at and nobody could read the meaning of.
-  if (state.away && state.away !== HUMAN && !state.covered) return 0;
+  if (state.away && state.away !== HUMAN) return 0;
   // The opening keeps no time, so there is nothing to count out.
   if (state.phase === "opening") return 0;
   if (state.turn !== HUMAN) return 0;
@@ -3281,12 +3226,7 @@ let awayUntil = 0;
 // why or for how much longer.
 function awayLine() {
   if (!awayUntil) return "";
-  const left = Math.ceil((awayUntil - Date.now()) / 1000);
-  // The minute is up but the handover has not happened — it waits for a turn
-  // of theirs to hand over, and until one comes round there is nothing to do.
-  // The words still hold; the number does not, and a clock sitting at 0:00 is
-  // a clock that has stopped working as far as anyone reading it can tell.
-  if (left <= 0) return t("away.gone");
+  const left = Math.max(0, Math.ceil((awayUntil - Date.now()) / 1000));
   return `${t("away.gone")} · ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
 }
 
@@ -3310,7 +3250,7 @@ setInterval(() => {
   showClock();
   // The held chair counts down in the middle of the table, so the line it is
   // written in has to be redrawn as it goes.
-  if (awayUntil && !weWereAway && !tableGone) notice(awayLine());
+  if (awayUntil && !tableGone) notice(awayLine());
 }, 250);
 
 function holdTheOpening(done, waited = 0) {
@@ -3356,25 +3296,18 @@ function applyServerState(state) {
   // keeps us marked away however plainly we are sitting here — so the mark
   // lifting is the handover itself, and it is worth saying, since until then
   // nothing we did to the board had any effect.
-  const heldForUs = state.away === HUMAN;
-  if (heldForUs !== weWereAway) {
-    weWereAway = heldForUs;
-    if (!heldForUs) announce("away.yours", 5000);
+  if (codePanel && state.code) {
+    codePanel.querySelector("strong").textContent = state.code;
+    codePanel.removeAttribute("hidden");
   }
   const goneNow = state.away === Rules.other(HUMAN);
-  // And the computer sitting down in the empty chair, which is a different
-  // piece of news from the chair emptying: one is a game waiting, the other is
-  // a game going on without them.
-  const coveredNow = state.covered === Rules.other(HUMAN);
-  if (coveredNow && !opponentCovered) announce("away.covered", 10000);
-  opponentCovered = coveredNow;
   // How long is left of the minute their chair is held for, anchored to the
   // server's own stamp: the two boards sat down at different moments and would
   // otherwise be counting from different places.
-  const holding = goneNow && !coveredNow;
-  awayUntil = holding
+  awayUntil = goneNow
     ? (state.awaySince?.[state.away]?.toMillis?.() ?? Date.now()) + HELD_SECONDS * 1000
     : 0;
+  endButton?.toggleAttribute("hidden", !goneNow);
   if (goneNow !== opponentGone) {
     opponentGone = goneNow;
     // The leaving says itself, and goes on saying itself for as long as it is
@@ -3548,6 +3481,18 @@ function endTurn() {
 // Back to the door. A game in progress is worth a question first, and the
 // cleanest way back is to load the page again — the door then asks for a
 // table and a colour from scratch rather than reopening on stale choices.
+// The code this table answers to, beside the board for as long as it is being
+// played at. It is the way back into this game if either of them drops out, so
+// it is not something to be looked up when it is already too late to look
+// anything up: it is simply there, being read, before it is ever needed.
+const codePanel = document.querySelector("#table-code");
+
+// Offered to whoever is still sitting there while the chair opposite is empty.
+// The minute runs down on its own and closes the table at the end of it; this
+// is for somebody who has already decided they are not waiting out the rest.
+const endButton = document.querySelector("#end-table");
+endButton?.addEventListener("click", () => { endButton.disabled = true; leaveTable(); });
+
 const menuButton = document.querySelector("#menu");
 const confirmBox = document.querySelector("#confirm");
 const closeConfirm = () => confirmBox?.setAttribute("hidden", "");
@@ -3836,7 +3781,7 @@ function updateHud() {
       // Whose checkers those are has not changed; whose hand is on them has.
       // A player who has been told the computer took over should be able to
       // see it in the one place the panel says who is playing.
-      : !isHuman(game.turn) ? t(opponentCovered ? "turn.bot" : "turn.opponent")
+      : !isHuman(game.turn) ? t("turn.opponent")
       : mode === "hotseat"
         ? (game.dice ? nameOf(game.turn) : t("turn.hotThrow", { name: nameOf(game.turn) }))
         : t(game.dice ? "turn.you" : "turn.youThrow");
@@ -3844,9 +3789,7 @@ function updateHud() {
   // While the computer is still covering for us the line stays up, because
   // the board looks exactly as it would if we had the table and nothing we do
   // to it has any effect. News comes and goes; this is a condition.
-  notice(weWereAway ? t("away.waiting")
-    : awayLine()
-      || (performance.now() < newsUntil ? t(newsWord, newsFill) : ""));
+  notice(awayLine() || (performance.now() < newsUntil ? t(newsWord, newsFill) : ""));
   if (roll && !game.dice) roll.textContent = "—";
   if (undoButton) {
     undoButton.disabled = !game.history.length || !!game.over ||
