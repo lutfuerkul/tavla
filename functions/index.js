@@ -228,6 +228,10 @@ export const odayaKatil = onCall(settings, async request => {
       return { error: "full" };
     }
     if (it.host === uid) return { error: "own-room" };
+    // A code claimed but not yet written against. There is a hair's breadth
+    // between minting a code and putting a host on it, and a guest who typed
+    // it in that instant was seated opposite nobody at all.
+    if (!it.host) return { error: "not-found" };
     if (it.expiresAt?.toDate?.() < new Date()) return { error: "expired" };
 
     const players = it.hostColour === "black"
