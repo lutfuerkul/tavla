@@ -3398,9 +3398,16 @@ function applyServerState(state) {
     // The throw never landed, so it never counted, so it was made again.
     if (hadOpening && state.phase === "opening" && state.opening
         && state.opening.ivory === null && state.opening.black === null) {
-      thrown = false;
       shownOpening = { black: null, ivory: null };
-      resetDice();
+      // Not while the die that tied it is still crossing the felt. The server
+      // settles the tie the moment it is asked for the second number, which is
+      // a second or two before that die comes to rest here — and sweeping the
+      // board then took the throw out of the air, so the two dice that had to
+      // be equal for any of this to happen were never seen to be equal. It
+      // lands, it is left there long enough to read, and then the board clears.
+      const clear = () => { thrown = false; resetDice(); updateHud(); };
+      if (thrown || heldDice || replayingFor || replayOwed || pending) holdTheOpening(clear);
+      else clear();
     }
     // The opening is over: the pair goes back to the middle together, the one
     // that was waiting off the board along with it.
