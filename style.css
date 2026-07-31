@@ -97,18 +97,22 @@ body.ideographic #hud span, body.ideographic #hud strong {
 /* On a panel of its own, because behind the door is a lit board: a label the
    colour of aged brass reads perfectly against felt and disappears entirely
    over a stack of ivory checkers. */
-#settings { display: grid; gap: .6rem; justify-content: center;
-  margin: .4rem auto .3rem; padding: 1.1rem 1.3rem;
+/* Four rows now rather than three, and the door is a page that has to fit on a
+   phone with the mode buttons above it and the way in below. So every row gives
+   up a little: the gaps, the padding and the type all come in a notch, which is
+   about one row's worth of height between them. */
+#settings { display: grid; gap: .45rem; justify-content: center;
+  margin: .35rem auto .25rem; padding: .85rem 1.1rem;
   background: rgba(9,7,5,.82); border: 1px solid rgba(229,173,84,.18);
   border-radius: .7rem; box-shadow: 0 20px 50px rgba(0,0,0,.5); }
-.setting { display: grid; grid-template-columns: 9.5rem 12rem; gap: .9rem;
+.setting { display: grid; grid-template-columns: 8.6rem 11rem; gap: .8rem;
   align-items: center; text-align: left; }
-.setting-name { font-size: .74rem; letter-spacing: .1em; text-transform: uppercase;
+.setting-name { font-size: .7rem; letter-spacing: .09em; text-transform: uppercase;
   color: #cdbb9a; }
 .setting-box { position: relative; }
 .setting-value { display: block; width: 100%; justify-self: stretch; text-align: left;
-  padding: .68rem 2.1rem .68rem 1rem;
-  font: 500 .8rem/1 "DM Mono", monospace; letter-spacing: .08em; text-transform: uppercase;
+  padding: .55rem 1.9rem .55rem .85rem;
+  font: 500 .76rem/1 "DM Mono", monospace; letter-spacing: .07em; text-transform: uppercase;
   color: #e7dcc4; background: rgba(20,15,10,.85);
   border: 1px solid rgba(229,173,84,.32); border-radius: .45rem; box-shadow: none;
   cursor: pointer; transition: color .2s ease, border-color .2s ease, background .2s ease; }
@@ -127,7 +131,7 @@ body.ideographic #hud span, body.ideographic #hud strong {
   border-radius: .45rem; box-shadow: 0 18px 40px rgba(0,0,0,.65); }
 .setting-list[hidden] { display: none; }
 .setting-choice { width: 100%; justify-self: stretch; text-align: left;
-  padding: .55rem .8rem; font: 500 .78rem/1 "DM Mono", monospace;
+  padding: .46rem .7rem; font: 500 .74rem/1 "DM Mono", monospace;
   letter-spacing: .08em; text-transform: uppercase; color: #cbbfa6;
   background: transparent; border: 0; border-radius: .3rem; box-shadow: none;
   cursor: pointer; transition: color .15s ease, background .15s ease; }

@@ -103,6 +103,17 @@ if (mode === "online" && !matchId) mode = "solo";
 // Across a network only your own colour is yours; on one device both are.
 const isHuman = colour => mode === "hotseat" || colour === HUMAN;
 
+// Two sets of pieces to play with. The thin ones are the game's own — a
+// dished face with a rim round it — and the thick ones are cut from the
+// photographs of a real set: a plain cylinder, a millimetre of radius on each
+// corner, and one shallow saucer in the middle of the top. Which is on the
+// table is a setting at the door, like the board and the colour.
+const PIECE_KEY = "tavla.tas";
+const PIECES = ["ince", "kalin"];
+const pieceType = PIECES.includes(localStorage.getItem(PIECE_KEY))
+  ? localStorage.getItem(PIECE_KEY) : "ince";
+const THICK = pieceType === "kalin";
+
 const BOARD_KEY = "tavla.board";
 const boardName = BOARDS[localStorage.getItem(BOARD_KEY)] ? localStorage.getItem(BOARD_KEY) : "klasik";
 const BOARD = BOARDS[boardName];
@@ -263,10 +274,15 @@ const SETTINGS = [
     options: [["auto", "option.auto"], ["black", "colour.black"], ["ivory", "colour.ivory"]] },
   { key: "side", label: "setting.side",
     options: [["auto", "option.auto"], ["sol", "side.left"], ["sag", "side.right"]] },
+  // No Otomatik on this one. The other three are matters of taste with nothing
+  // to choose between them, so a coin is a fair answer; which pieces are on the
+  // table is a thing somebody has decided and should stay decided.
+  { key: "piece", label: "setting.piece",
+    options: [["ince", "piece.thin"], ["kalin", "piece.thick"]] },
 ];
 
 let pickedMode = null;
-const picked = { board: "auto", colour: "auto", side: "auto" };
+const picked = { board: "auto", colour: "auto", side: "auto", piece: pieceType };
 const startButton = document.querySelector("#start");
 
 function markChosen(attribute, value) {
@@ -556,6 +572,7 @@ function sitDownTo(id, colour) {
   // side they gather on. Only the colour comes from the room.
   localStorage.setItem(BOARD_KEY, settle("board"));
   localStorage.setItem(SIDE_KEY, settle("side"));
+  localStorage.setItem(PIECE_KEY, settle("piece"));
   sessionStorage.setItem("tavla.sitOnLoad", "1");
   say("lobby.found");
   location.reload();
@@ -693,10 +710,13 @@ const sideName = SIDE === -1 ? "sag" : "sol";
 startButton?.addEventListener("click", () => {
   if (!pickedMode) return;
   const board = settle("board"), colour = settle("colour"), side = settle("side");
-  if (board === boardName && colour === HUMAN && side === sideName) return sitDown();
+  const piece = settle("piece");
+  if (board === boardName && colour === HUMAN && side === sideName
+      && piece === pieceType) return sitDown();
   localStorage.setItem(BOARD_KEY, board);
   localStorage.setItem(COLOUR_KEY, colour);
   localStorage.setItem(SIDE_KEY, side);
+  localStorage.setItem(PIECE_KEY, piece);
   sessionStorage.setItem("tavla.sitOnLoad", "1");
   location.reload();
 });
@@ -975,19 +995,19 @@ const pearl = new THREE.MeshStandardMaterial({ color: 0xe8e2d6, roughness: .4, m
 // dome while the cream one stays satin.
 // Bone-coloured pieces are matte moulded plastic, not lacquer. The gloss was
 // blowing the whole face to one flat highlight and burying the relief.
-const ivory = new THREE.MeshPhysicalMaterial({
-  color: 0xd4b471,
-  roughness: .62,
-  metalness: 0,
-  clearcoat: .1,
-  clearcoatRoughness: .45
+// One material over the whole piece and no map on any of it: the top face, the
+// bottom and the wall are the same moulding and take the same light. The thick
+// pieces are polished — moulded plastic, the cream one waxy and the dark one a
+// shade harder. The thin ones keep the satin they always had.
+const ivory = new THREE.MeshPhysicalMaterial(THICK ? {
+  color: 0xd8bc82, roughness: .3, metalness: 0, clearcoat: .45, clearcoatRoughness: .12,
+} : {
+  color: 0xd4b471, roughness: .62, metalness: 0, clearcoat: .1, clearcoatRoughness: .45,
 });
-const black = new THREE.MeshPhysicalMaterial({
-  color: 0x141518,
-  roughness: .16,
-  metalness: .04,
-  clearcoat: .7,
-  clearcoatRoughness: .06
+const black = new THREE.MeshPhysicalMaterial(THICK ? {
+  color: 0x16171b, roughness: .18, metalness: .03, clearcoat: .6, clearcoatRoughness: .08,
+} : {
+  color: 0x141518, roughness: .16, metalness: .04, clearcoat: .7, clearcoatRoughness: .06,
 });
 // Points alternate pale maple and dark walnut, both carrying the same inlay.
 const marquetryA = new THREE.MeshStandardMaterial({
@@ -1291,45 +1311,74 @@ function addHinges() {
   });
 }
 
-// Dished checker profile, taken straight from the reference pieces: a raised
-// outer rim around a recessed circular dimple, with a rounded outer edge.
-// One world unit is one checker diameter, which on the reference pieces is
-// 36mm — so a millimetre is 1/36 of a unit and every other size below can be
-// written in real millimetres.
+// One world unit is one checker diameter, which on both sets of pieces is
+// 36mm — so a millimetre is 1/36 of a unit and every size below can be written
+// in real millimetres.
 const MM = 1 / 36;
+const mm = (r, h) => new THREE.Vector2(r, h * MM);
 const CHECKER_R = CHECKER_D / 2;
-const CHECKER_H = 8 * MM;   // 8mm thick, per the checker's stated dimensions
-// Profile runs bottom-centre outwards and up to the dished top. Listing it
-// in this order is what makes the revolved normals face outwards — reversed,
-// the discs render inside-out and read as hollow rings.
-// Profile read off the photographed pieces, running bottom-centre outwards:
-// a barrelled side wall, a flat outer rim, a step down into a recessed
-// channel, then a low dome rising back up out of the middle. That central
-// dome is what catches the highlight on the dark pieces.
-const checkerGeometry = new THREE.LatheGeometry([
-  new THREE.Vector2(0, 0),
-  new THREE.Vector2(.40, 0),
-  new THREE.Vector2(.468, .018),
-  new THREE.Vector2(CHECKER_R, .06),
-  new THREE.Vector2(CHECKER_R, .16),
-  new THREE.Vector2(.484, .208),
-  new THREE.Vector2(.455, CHECKER_H),   // flat outer rim
-  new THREE.Vector2(.378, CHECKER_H),
-  // The step is cut deeper and steeper than before — at barely a millimetre
-  // it caught no shadow at all and the face read as flat.
-  new THREE.Vector2(.362, .213),
-  new THREE.Vector2(.352, .190),        // near-vertical wall of the channel
-  new THREE.Vector2(.340, .178),
-  new THREE.Vector2(.30, .174),         // channel floor, 1.7mm below the rim
-  new THREE.Vector2(.268, .178),
-  new THREE.Vector2(.245, .191),        // dome springs from here
-  new THREE.Vector2(.20, .208),
-  new THREE.Vector2(.13, .219),
-  new THREE.Vector2(0, .2225),          // dome crown, level with the rim
-  // Ninety-six segments turn a checker that is an inch across on a desktop.
-  // On a tablet it is a centimetre and forty-eight are past telling apart, so
-  // half the triangles on the board go away for nothing.
-], TABLET ? 48 : 96);
+const CHECKER_H = (THICK ? 10 : 8) * MM;
+
+// The profile runs bottom-centre outwards and up. Listing it in this order is
+// what makes the revolved normals face outwards — reversed, the discs render
+// inside-out and read as hollow rings.
+//
+// The thin set: a raised outer rim around a recessed channel with a low dome
+// standing back up out of the middle of it, and the outer edge rolled over.
+const THIN_PROFILE = [
+  mm(0, 0),
+  mm(.40, 0),
+  mm(.468, .65),
+  mm(CHECKER_R, 2.16),
+  mm(CHECKER_R, 5.76),
+  mm(.484, 7.49),
+  mm(.455, 8),          // flat outer rim
+  mm(.378, 8),
+  mm(.362, 7.67),       // the step down into the channel
+  mm(.352, 6.84),
+  mm(.340, 6.41),
+  mm(.30, 6.26),        // channel floor, 1.7mm below the rim
+  mm(.268, 6.41),
+  mm(.245, 6.88),       // dome springs from here
+  mm(.20, 7.49),
+  mm(.13, 7.88),
+  mm(0, 8.01),          // dome crown, level with the rim
+];
+
+// The thick set, read off the photographed pieces: a disc 36mm across and 10mm
+// thick, and a cylinder — the top face meets the wall at a corner rather than
+// a roll, with a millimetre of radius on it and nothing else standing proud of
+// the face or cut into it. The only thing on the whole piece is one shallow
+// saucer in the middle of the top.
+const THICK_PROFILE = [
+  mm(0, 0),
+  mm(.467, 0),          // flat bottom, out to the corner
+  mm(.478, .06),        // a millimetre of radius on the corner, and no more
+  mm(.4913, .28),
+  mm(.4988, .65),
+  mm(.5, 1.2),
+  mm(.5, 8.8),          // straight side wall between the two corners
+  mm(.4988, 9.35),
+  mm(.4913, 9.72),      // the top corner, the same round
+  mm(.478, 9.94),
+  mm(.467, 10),
+  mm(.42, 10),          // flat top
+  mm(.2083, 10),
+  // And the saucer in the middle of it: 15mm across and two tenths of a
+  // millimetre deep. A spherical cap, so the curve is one smooth sweep from
+  // its edge to the middle rather than a lens with a seam round it.
+  mm(.175, 9.941),
+  mm(.140, 9.890),
+  mm(.100, 9.846),
+  mm(.050, 9.812),
+  mm(0, 9.800),
+];
+
+// Ninety-six segments turn a checker that is an inch across on a desktop. On a
+// tablet it is a centimetre and forty-eight are past telling apart, so half the
+// triangles on the board go away for nothing.
+const checkerGeometry = new THREE.LatheGeometry(
+  THICK ? THICK_PROFILE : THIN_PROFILE, TABLET ? 48 : 96);
 
 // --- Dice ------------------------------------------------------------
 // A real die: every face carries its own pips, opposite faces sum to 7,
