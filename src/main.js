@@ -217,21 +217,29 @@ const NATIVE = Math.min(devicePixelRatio || 1, 3);
 // rungs under it are a proportion of that rather than fixed numbers, so a
 // dense screen steps down to something still worth looking at instead of
 // falling straight to a third of itself.
-const TOP = Math.max(2, NATIVE);
+// In the hand, the screen's own resolution and no further. Drawing beyond it is
+// what sharpens a desktop monitor, where the page's pixel and the screen's are
+// the same size and there is room above — but a phone or a tablet already has
+// two or three of its own to every one of the page's, which is the sharpening
+// done. Anything past that is a bigger buffer for a picture nobody can tell
+// apart, paid for by the machine least able to pay.
+const TOP = HANDHELD ? NATIVE : Math.max(2, NATIVE);
 const SAMPLE_STEPS = [TOP, TOP * .75, TOP * .55];
 let sampleStep = 0;
 
-// A ceiling on the drawing buffer itself, whatever the ladder would like. Two
-// samples across a 4K window is 7680x4320 — thirty-three megapixels of colour
-// and of depth, with four multisamples behind every one of them, which is over
-// a gigabyte asked for before a single frame is drawn, and sixteen times the
-// fragment work of 1080p. The frame timer further down would give a step back
-// a second later, but the memory is asked for first. And it buys nothing: a 4K
-// window already draws the die thirty-eight pixels across, which is exactly
-// what a 1080p window gets out of drawing at two samples. Fifteen million
-// leaves 1080p and 1440p on the top step and sends 4K straight to its own
-// resolution.
-const PIXEL_BUDGET = 15e6;
+// A ceiling on the drawing buffer itself, whatever the ladder would like: 4K,
+// and not a pixel past it. Two samples across a 4K window is 7680x4320 —
+// thirty-three megapixels of colour and of depth, with four multisamples behind
+// every one of them, which is over a gigabyte asked for before a single frame
+// is drawn. The frame timer further down would give a step back a second later,
+// but the memory is asked for first.
+//
+// And past 4K it buys nothing anybody can see: a 4K buffer already draws the
+// die thirty-eight pixels across, which is exactly what a 1080p window gets out
+// of drawing at two samples — the sharpest the board has ever looked. So 1080p
+// stays on the top rung (two samples is 4K exactly), 1440p comes down to where
+// it also lands on 4K, and a 4K window draws its own resolution.
+const PIXEL_BUDGET = 3840 * 2160;
 
 // Which rung is actually being drawn, which is not always the one the frame
 // timer asked for: a window too large for the budget above is held further
@@ -244,7 +252,12 @@ function applySampleRatio() {
   let step = sampleStep;
   while (step < SAMPLE_STEPS.length - 1 && SAMPLE_STEPS[step] ** 2 > room) step++;
   effectiveStep = step;
-  renderer.setPixelRatio(SAMPLE_STEPS[step]);
+  // The bottom rung is not a floor for the ceiling. A window large enough that
+  // even the lowest rung overruns the budget used to be given that rung anyway
+  // and drawn over 4K regardless — the ladder ran out before the limit did. The
+  // ratio itself is held to what the budget allows, so the cap is a cap.
+  const capped = Math.sqrt(room);
+  renderer.setPixelRatio(Math.min(SAMPLE_STEPS[step], capped));
   renderer.setSize(innerWidth, innerHeight);
 }
 
