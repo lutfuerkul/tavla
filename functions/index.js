@@ -70,6 +70,20 @@ const KEPT = () => sweptIn(KEPT_DAYS * 24 * 60 * 60 * 1000);
 const SWEPT_SOON = () => sweptIn(KEPT_AFTER_CLOSING_HOURS * 60 * 60 * 1000);
 
 const now = () => FieldValue.serverTimestamp();
+
+// When the current wait began, which is not the same as when the record was
+// last written. The clock used to be read off updatedAt, and updatedAt moves
+// on every word about the match — a chair emptying, a board sitting back down,
+// a clock being asked about. So a player with four seconds left could reload,
+// and the minute started over; and a player who never touched anything got
+// their minute extended every time their opponent's connection hiccuped. It
+// moves only where a new thing is being waited for: a turn handed over, dice
+// thrown, an opening die asked for, a new game laid out. Everything else
+// leaves it exactly where it was, so the same sixty seconds are the same sixty
+// seconds for both of them whatever else happens in between.
+const CLOCK = () => ({ clockFrom: now() });
+const clockStarted = match =>
+  (match.clockFrom ?? match.updatedAt)?.toDate?.() ?? new Date(0);
 const d6 = () => randomInt(1, 7);
 
 function code() {
@@ -144,6 +158,7 @@ function freshMatch(players, code) {
     seq: 0,
     createdAt: now(),
     updatedAt: now(),
+    ...CLOCK(),
     // A match still on the table a day later is not one anybody is coming back
     // to. Normally it is deleted long before this, as its last player leaves.
     silinecek: KEPT(),
@@ -508,7 +523,7 @@ export const zarAt = onCall(settings, async request => {
       const patch = {
         opening,
         openingAt: { ...(match.openingAt ?? {}), [mine]: match.seq + 1 },
-        updatedAt: now(), seq: match.seq + 1,
+        updatedAt: now(), ...CLOCK(), seq: match.seq + 1,
       };
 
       if (opening.ivory === null || opening.black === null) {
@@ -551,7 +566,8 @@ export const zarAt = onCall(settings, async request => {
       lastMoves: [],
       lastMoveSeq: 0,
       lastBy: null,
-        updatedAt: now(),
+      updatedAt: now(),
+      ...CLOCK(),
       seq: match.seq + 1,
     });
     return { dice };
@@ -613,6 +629,7 @@ export const turuOyna = onCall(settings, async request => {
       required: 0,
       played: 0,
       updatedAt: now(),
+      ...CLOCK(),
       seq: match.seq + 1,
     };
 
@@ -676,7 +693,7 @@ function actFor(match, colour) {
   if (match.phase === "opening") {
     const value = d6();
     const opening = { ...match.opening, [colour]: value };
-    const patch = { opening, updatedAt: now(), seq: match.seq + 1 };
+    const patch = { opening, updatedAt: now(), ...CLOCK(), seq: match.seq + 1 };
     if (opening.ivory === null || opening.black === null) {
       patch.waitingOn = opening.black === null ? "black" : "ivory";
     } else if (opening.ivory === opening.black) {
@@ -700,8 +717,8 @@ function actFor(match, colour) {
       dice, remaining,
       required: Rules.legalSequences(pos, colour, remaining)[0].length,
       played: 0, lastMoves: [], lastMoveSeq: 0, lastBy: null,
-        lastThrowSeq: match.seq + 1,
-      updatedAt: now(), seq: match.seq + 1,
+      lastThrowSeq: match.seq + 1,
+      updatedAt: now(), ...CLOCK(), seq: match.seq + 1,
     };
   }
 
@@ -721,6 +738,7 @@ function actFor(match, colour) {
     required: 0,
     played: 0,
     updatedAt: now(),
+    ...CLOCK(),
     seq: match.seq + 1,
   };
   const won = Rules.winner(after);
@@ -828,7 +846,7 @@ export const sure = onCall(settings, async request => {
   // it — so this is only ever asked by the one being kept waiting.
   const waiting = waitingFor(match);
   if (!waiting || waiting.colour === mine) return { acted: false };
-  const since = match.updatedAt?.toDate?.() ?? new Date(0);
+  const since = clockStarted(match);
   if ((Date.now() - since.getTime()) / 1000 < waiting.seconds) {
     return { acted: false, seated: true };
   }
@@ -859,13 +877,13 @@ export const geriGeldim = onCall(settings, async request => {
     const match = found.data();
     const mine = colourOf(match, uid);
     if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
-    // Whatever else, the turn starts counting again from now. This is called
-    // once, as a board sits down, and a board that has just sat down has this
-    // second arrived in front of a game it was not watching — the seconds that
-    // ran out while it was away are not seconds it had, and without this the
-    // dice were thrown for a player before they could reach for them. A quick
-    // reload leaves no mark at all (nobody had looked yet), so the mark cannot
-    // be what this hangs on.
+    // The clock is not touched. Sitting back down says only that the chair is
+    // filled again; the turn has been running the whole time and goes on
+    // running from where it was. It used to start over here, on the grounds
+    // that seconds spent away were not seconds anybody had — but the player
+    // opposite was sitting there through every one of them, and a minute that
+    // begins again on every reload is not a minute. Come back too late and the
+    // server plays the turn, the same as for anybody sitting still.
     const since = { ...(match.awaySince ?? {}) };
     delete since[mine];
     tx.update(ref, {
@@ -916,6 +934,7 @@ export const yeniOyun = onCall(settings, async request => {
       lastBy: null,
       over: null,
       updatedAt: now(),
+      ...CLOCK(),
       seq: match.seq + 1,
     });
     return { ok: true };

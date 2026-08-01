@@ -3467,8 +3467,14 @@ function applyServerState(state) {
     // otherwise be counting from different places — one of them showing a
     // number while the other had already run out, for the same turn.
     const counting = runningClock(state);
+    // The moment the wait began, which the server keeps apart from the moment
+    // it last wrote. Read off the write, a minute started over every time
+    // anything at all was said about the match — so reloading the page at the
+    // fifty-eighth second bought a fresh minute, and a chair emptying opposite
+    // handed one to somebody who had not moved.
     const from = counting && counting.from !== null
-      ? counting.from : (state.updatedAt?.toMillis?.() ?? Date.now());
+      ? counting.from
+      : (state.clockFrom?.toMillis?.() ?? state.updatedAt?.toMillis?.() ?? Date.now());
     clockUntil = counting ? from + counting.seconds * 1000 : 0;
     showClock();
     game.phase = state.phase;
