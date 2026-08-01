@@ -28,14 +28,17 @@ const MATCH_TARGET = 3;
 // a slow player and is not treated as one — see HELD_SECONDS.
 const ROLL_SECONDS = 20;
 const MOVE_SECONDS = 60;
-// The opening keeps no time at all. Nobody is thinking yet — they have just
-// sat down, and the first thing asked of them is a die that decides nothing
-// but who goes first. Taking that throw away from somebody who is still
-// finding the board buys nothing and reads as the game throwing dice by
-// itself, so it waits for them however long they take.
+// The opening used to keep no time at all: nobody is thinking yet, they have
+// just sat down, and the first thing asked of them is a die that decides
+// nothing but who goes first. Taking that throw away from somebody still
+// finding the board buys nothing.
 //
-// An empty chair is a different matter and is handled where all of them are.
-const OPEN_SECONDS = Infinity;
+// It is also the one place a table could be held for ever. A chair that empties
+// is noticed and waited out; a player who stays connected and never throws was
+// answered by nothing at all, since the clock that answers that is the same
+// clock the opening did not have. Shorter than the others, because it is not a
+// decision — there is one die and nothing to weigh up about it.
+const OPEN_SECONDS = 20;
 // How long an empty chair is waited for before the table closes. Nothing is
 // played in it and nothing sits down in it: the game stops where it stood and
 // the other board is told, with the minute counted out in front of them. Come
@@ -49,6 +52,18 @@ const HELD_SECONDS = 60;
 // second press. Nothing is said until the chair has been empty longer than a
 // reload takes.
 const AWAY_GRACE_MS = 10 * 1000;
+// How many things the server may do on somebody's behalf, one after another,
+// before the table is given up on. A chair that empties is noticed and waited
+// for; a player who stays connected and simply stops playing was not covered by
+// anything at all, and the server would have thrown and moved for them until
+// one of them won. The other player is not playing a game at that point, they
+// are watching one play itself.
+//
+// Three: a throw, the move it was for, and the next throw. A hundred seconds of
+// somebody else's board moving on its own, which is long enough to know nobody
+// is coming back to it — and short of a whole second turn, so a single lapse of
+// attention is a turn lost rather than a match.
+const ABANDON_ACTS = 3;
 // Long enough that two rooms are never open on the same code, short enough to
 // read down a telephone. I, O, 0 and 1 are left out: they are the letters
 // people get wrong.
@@ -152,6 +167,9 @@ function freshMatch(players, code) {
     // How many times each of them has dropped out. The first is waited for;
     // the second closes the table — see `sure`.
     drops: { ivory: 0, black: 0 },
+    // How many things in a row the server has done for each of them. Anything
+    // they do themselves puts it back to nothing — see ABANDON_ACTS.
+    idle: { ivory: 0, black: 0 },
     score: { ivory: 0, black: 0 },
     target: MATCH_TARGET,
     over: null,
@@ -583,6 +601,8 @@ export const zarAt = onCall(settings, async request => {
       const patch = {
         opening,
         openingAt: { ...(match.openingAt ?? {}), [mine]: match.seq + 1 },
+        // Done by hand, so nothing here was done for them.
+        idle: { ...(match.idle ?? {}), [mine]: 0 },
         updatedAt: now(), ...CLOCK(), seq: match.seq + 1,
       };
 
@@ -626,6 +646,7 @@ export const zarAt = onCall(settings, async request => {
       lastMoves: [],
       lastMoveSeq: 0,
       lastBy: null,
+      idle: { ...(match.idle ?? {}), [mine]: 0 },
       updatedAt: now(),
       ...CLOCK(),
       seq: match.seq + 1,
@@ -688,6 +709,7 @@ export const turuOyna = onCall(settings, async request => {
       remaining: [],
       required: 0,
       played: 0,
+      idle: { ...(match.idle ?? {}), [mine]: 0 },
       updatedAt: now(),
       ...CLOCK(),
       seq: match.seq + 1,
@@ -753,12 +775,23 @@ function actFor(match, colour) {
   if (match.phase === "opening") {
     const value = d6();
     const opening = { ...match.opening, [colour]: value };
-    const patch = { opening, updatedAt: now(), ...CLOCK(), seq: match.seq + 1 };
+    // Stamped, the same as a throw made by hand. Without it a board cannot tell
+    // this die from one it has already watched land, and the same face thrown
+    // twice — which is exactly what breaking a tie produces — went unshown.
+    const patch = {
+      opening,
+      openingAt: { ...(match.openingAt ?? {}), [colour]: match.seq + 1 },
+      updatedAt: now(), ...CLOCK(), seq: match.seq + 1,
+    };
     if (opening.ivory === null || opening.black === null) {
       patch.waitingOn = opening.black === null ? "black" : "ivory";
     } else if (opening.ivory === opening.black) {
-      patch.opening = { ivory: null, black: null };
-      patch.waitingOn = "black";
+      // The same rule the players play by: whoever threw second throws again,
+      // alone, against the number the two of them made. This was left behind
+      // when that rule changed — it still wiped both dice and started the
+      // opening over from black, so a tie broken by the clock was played by
+      // one set of rules and a tie broken by hand by another.
+      patch.waitingOn = colour;
     } else {
       patch.phase = "play";
       patch.waitingOn = null;
@@ -918,8 +951,24 @@ export const sure = onCall(settings, async request => {
     // It has moved on since it was read; whoever moved it is playing.
     if (it.seq !== match.seq) return { acted: false };
     const patch = actFor(it, waiting.colour);
+    const left = waiting.colour;
+    const stayed = Rules.other(left);
+    const alone = (it.idle?.[left] ?? 0) + 1;
+    patch.idle = { ...(it.idle ?? {}), [left]: alone };
+    // Given up on. The match goes to whoever is still sitting there — not
+    // because backgammon has a rule about walking away, but because the
+    // alternative is a board that plays itself to the end in front of somebody
+    // who did stay. Never over a win the server's own play has just produced:
+    // that game was won on the board and stands.
+    if (alone >= ABANDON_ACTS && !patch.over) {
+      patch.over = { winner: stayed, value: 1 };
+      patch.score = { ...it.score, [stayed]: it.target };
+      patch.matchOver = stayed;
+      patch.abandonedBy = left;
+      patch.silinecek = SWEPT_SOON();
+    }
     tx.update(ref, patch);
-    return { acted: true, by: waiting.colour };
+    return { acted: true, by: left, abandoned: alone >= ABANDON_ACTS };
   });
 });
 
@@ -993,6 +1042,7 @@ export const yeniOyun = onCall(settings, async request => {
       lastMoveSeq: 0,
       lastBy: null,
       over: null,
+      idle: { ivory: 0, black: 0 },
       updatedAt: now(),
       ...CLOCK(),
       seq: match.seq + 1,
