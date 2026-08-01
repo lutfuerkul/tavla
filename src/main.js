@@ -3354,6 +3354,9 @@ function runningClock(state) {
 // The minute the server holds an empty chair for, counted where the news is.
 // Zero when nobody is being waited for.
 let awayUntil = 0;
+// How many things the server has done for us in a row, as far as this board has
+// heard, and whether the giving-up has been said out loud yet.
+let idleSeen = 0, abandonSeen = false;
 
 // Said for as long as the chair is empty, with the minute running in the same
 // line. News is a thing that is said once and taken down; this is a condition
@@ -3510,6 +3513,21 @@ function applyServerState(state) {
     // mentioned to somebody who watched the chair empty, since this runs on a
     // change and the leaving is what changed it.
     if (!goneNow) announce("away.back", 5000);
+  }
+  // The server has started playing for somebody who is still sitting there.
+  // Said to them, once, the first time it happens: they are connected, so they
+  // can be told — and being told is the whole point, since the alternative is
+  // a table that closes on somebody who only looked away.
+  const played = state.idle?.[HUMAN] ?? 0;
+  if (played > idleSeen && played === 1) announce("idle.warn", 8000);
+  idleSeen = played;
+  // And when the table is finally given up on, to both of them: the result box
+  // says who won the match, this says why it ended. Each is told their own side
+  // of it — the one who stayed that their opponent handed the game over, the
+  // one who left that handing it over is what ended it.
+  if (state.abandonedBy && !abandonSeen) {
+    abandonSeen = true;
+    announce(state.abandonedBy === HUMAN ? "idle.gone" : "idle.left", 8000);
   }
   // The running score of the match belongs to the server too.
   match.ivory = state.score.ivory;

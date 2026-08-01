@@ -49,6 +49,18 @@ const HELD_SECONDS = 60;
 // second press. Nothing is said until the chair has been empty longer than a
 // reload takes.
 const AWAY_GRACE_MS = 10 * 1000;
+// How many things the server may do on somebody's behalf, one after another,
+// before the table is given up on. A chair that empties is noticed and waited
+// for; a player who stays connected and simply stops playing was not covered by
+// anything at all, and the server would have thrown and moved for them until
+// one of them won. The other player is not playing a game at that point, they
+// are watching one play itself.
+//
+// Three: a throw, the move it was for, and the next throw. A hundred seconds of
+// somebody else's board moving on its own, which is long enough to know nobody
+// is coming back to it — and short of a whole second turn, so a single lapse of
+// attention is a turn lost rather than a match.
+const ABANDON_ACTS = 3;
 // Long enough that two rooms are never open on the same code, short enough to
 // read down a telephone. I, O, 0 and 1 are left out: they are the letters
 // people get wrong.
@@ -152,6 +164,9 @@ function freshMatch(players, code) {
     // How many times each of them has dropped out. The first is waited for;
     // the second closes the table — see `sure`.
     drops: { ivory: 0, black: 0 },
+    // How many things in a row the server has done for each of them. Anything
+    // they do themselves puts it back to nothing — see ABANDON_ACTS.
+    idle: { ivory: 0, black: 0 },
     score: { ivory: 0, black: 0 },
     target: MATCH_TARGET,
     over: null,
@@ -583,6 +598,8 @@ export const zarAt = onCall(settings, async request => {
       const patch = {
         opening,
         openingAt: { ...(match.openingAt ?? {}), [mine]: match.seq + 1 },
+        // Done by hand, so nothing here was done for them.
+        idle: { ...(match.idle ?? {}), [mine]: 0 },
         updatedAt: now(), ...CLOCK(), seq: match.seq + 1,
       };
 
@@ -626,6 +643,7 @@ export const zarAt = onCall(settings, async request => {
       lastMoves: [],
       lastMoveSeq: 0,
       lastBy: null,
+      idle: { ...(match.idle ?? {}), [mine]: 0 },
       updatedAt: now(),
       ...CLOCK(),
       seq: match.seq + 1,
@@ -688,6 +706,7 @@ export const turuOyna = onCall(settings, async request => {
       remaining: [],
       required: 0,
       played: 0,
+      idle: { ...(match.idle ?? {}), [mine]: 0 },
       updatedAt: now(),
       ...CLOCK(),
       seq: match.seq + 1,
@@ -918,8 +937,24 @@ export const sure = onCall(settings, async request => {
     // It has moved on since it was read; whoever moved it is playing.
     if (it.seq !== match.seq) return { acted: false };
     const patch = actFor(it, waiting.colour);
+    const left = waiting.colour;
+    const stayed = Rules.other(left);
+    const alone = (it.idle?.[left] ?? 0) + 1;
+    patch.idle = { ...(it.idle ?? {}), [left]: alone };
+    // Given up on. The match goes to whoever is still sitting there — not
+    // because backgammon has a rule about walking away, but because the
+    // alternative is a board that plays itself to the end in front of somebody
+    // who did stay. Never over a win the server's own play has just produced:
+    // that game was won on the board and stands.
+    if (alone >= ABANDON_ACTS && !patch.over) {
+      patch.over = { winner: stayed, value: 1 };
+      patch.score = { ...it.score, [stayed]: it.target };
+      patch.matchOver = stayed;
+      patch.abandonedBy = left;
+      patch.silinecek = SWEPT_SOON();
+    }
     tx.update(ref, patch);
-    return { acted: true, by: waiting.colour };
+    return { acted: true, by: left, abandoned: alone >= ABANDON_ACTS };
   });
 });
 
@@ -993,6 +1028,7 @@ export const yeniOyun = onCall(settings, async request => {
       lastMoveSeq: 0,
       lastBy: null,
       over: null,
+      idle: { ivory: 0, black: 0 },
       updatedAt: now(),
       ...CLOCK(),
       seq: match.seq + 1,
