@@ -216,20 +216,21 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: !HANDHELD });
 // Capped at three: past that the buffer grows faster than anything anybody can
 // see, and it is the buffer that has to be paid for.
 const NATIVE = Math.min(devicePixelRatio || 1, 3);
-// The top rung is the screen's own resolution, or twice the page's on a screen
-// that has no more to give — never below what the old ladder started at. The
-// rungs under it are a proportion of that rather than fixed numbers, so a
-// dense screen steps down to something still worth looking at instead of
-// falling straight to a third of itself.
 // In the hand, the screen's own resolution and no further. Drawing beyond it is
 // what sharpens a desktop monitor, where the page's pixel and the screen's are
 // the same size and there is room above — but a phone or a tablet already has
 // two or three of its own to every one of the page's, which is the sharpening
 // done. Anything past that is a bigger buffer for a picture nobody can tell
 // apart, paid for by the machine least able to pay.
+//
+// And this is the only number there is now. There used to be a ladder under it
+// and a timer that walked down it whenever the frames were late, on the
+// reasoning that a board which answers the finger beats a sharp one that does
+// not. Sat in front of, that reasoning did not hold: what a machine too slow
+// for its own screen actually produced was a soft board — and then a board that
+// changed sharpness while being looked at, which is worse than either. The
+// screen gets what the screen has, and a slow machine draws it slowly.
 const TOP = HANDHELD ? NATIVE : Math.max(2, NATIVE);
-const SAMPLE_STEPS = [TOP, TOP * .75, TOP * .55];
-let sampleStep = 0;
 
 // A ceiling on the drawing buffer itself, whatever the ladder would like: 4K,
 // and not a pixel past it. Two samples across a 4K window is 7680x4320 —
@@ -245,23 +246,12 @@ let sampleStep = 0;
 // it also lands on 4K, and a 4K window draws its own resolution.
 const PIXEL_BUDGET = 3840 * 2160;
 
-// Which rung is actually being drawn, which is not always the one the frame
-// timer asked for: a window too large for the budget above is held further
-// down whatever the timer thinks. The readout says this one, since the point
-// of a readout is what is happening rather than what was intended.
-let effectiveStep = 0;
-
 function applySampleRatio() {
-  const room = PIXEL_BUDGET / (innerWidth * innerHeight);
-  let step = sampleStep;
-  while (step < SAMPLE_STEPS.length - 1 && SAMPLE_STEPS[step] ** 2 > room) step++;
-  effectiveStep = step;
-  // The bottom rung is not a floor for the ceiling. A window large enough that
-  // even the lowest rung overruns the budget used to be given that rung anyway
-  // and drawn over 4K regardless — the ladder ran out before the limit did. The
-  // ratio itself is held to what the budget allows, so the cap is a cap.
-  const capped = Math.sqrt(room);
-  renderer.setPixelRatio(Math.min(SAMPLE_STEPS[step], capped));
+  // What the screen is worth, held to what the buffer may cost. The budget is
+  // about memory rather than speed — it is asked for before a single frame is
+  // drawn, and no timer can give it back afterwards.
+  const capped = Math.sqrt(PIXEL_BUDGET / (innerWidth * innerHeight));
+  renderer.setPixelRatio(Math.min(TOP, capped));
   renderer.setSize(innerWidth, innerHeight);
 }
 
@@ -4889,101 +4879,6 @@ function fitCamera() {
 
 fitCamera();
 
-// Four times the pixels is not free, and there is no knowing beforehand what
-// the machine can carry. So it starts at the top and gives a step back if the
-// frames are not arriving: a full second of them is timed, and if the middle
-// one took longer than a thirtieth of a second, the next step down is taken.
-//
-// And it climbs back. It used to be one way only, on the grounds that a
-// machine sitting right on the line would flicker between two rungs — but the
-// hardest second of a game of tavla is the one where the dice are tumbling and
-// the shadows are being redrawn every frame, and that second happens once a
-// turn. One-way meant a phone that stumbled on the very first throw spent the
-// rest of the game soft, with nothing left on the screen that needed the frames
-// it had given the sharpness up for. The flickering is answered where it comes
-// from instead: see EASY_FRAME and easyNeeded.
-// Thirty frames a second, not forty. A board that sits still between turns
-// does not need sixty, and every step down the ladder is paid for in
-// sharpness — so it is worth waiting until the frames are genuinely late
-// before giving any of it up.
-const SLOW_FRAME = 1000 / 30;
-// Fast enough to be worth trying the rung above, which is not the same as
-// "not slow": a window that only just cleared the threshold would climb, find
-// it cannot hold it, and come straight back down. Comfortably clear, and
-// comfortably for a while.
-const EASY_FRAME = SLOW_FRAME * .6;
-const EASY_WINDOWS = 3;
-let recent = [], measuredSince = 0, warmed = false;
-// How many comfortable seconds in a row are wanted before climbing.
-let easyRun = 0;
-// How many times each rung has been tried and lost. Doubling the wait after a
-// failed climb was not enough on its own: a machine sitting between two rungs —
-// too slow for the one above, fast enough on the one below to look ready for it
-// — walked up and down between them for minutes on end, and the board changing
-// sharpness every few seconds is worse to sit in front of than either rung.
-//
-// Twice and it is done: the first loss can be a throw that happened to land in
-// the wrong second, the second is the rung's own answer. After that the rung is
-// not asked for again, and the ladder settles where the machine actually lives.
-const RETRIES = 2;
-const lost = SAMPLE_STEPS.map(() => 0);
-
-// Whatever the rung, the second in which the buffer is thrown away and built
-// again is not a second that says anything about the machine.
-function settleLadder(now) {
-  applySampleRatio();
-  recent = [];
-  measuredSince = now;
-  warmed = false;
-  easyRun = 0;
-}
-
-function watchFrames(now) {
-  if (!measuredSince) { measuredSince = now; return; }
-  recent.push(now);
-  const elapsed = now - measuredSince;
-  if (elapsed < 1000) return;
-  const gaps = [];
-  for (let i = 1; i < recent.length; i++) gaps.push(recent[i] - recent[i - 1]);
-  const frames = recent.length;
-  recent = [];
-  measuredSince = now;
-  // The first window is thrown away: the page has just finished drawing every
-  // texture it owns and the frames in that second say nothing about what the
-  // machine can hold.
-  if (!warmed) { warmed = true; return; }
-  // With frames to spare the middle gap is the honest number. With only a
-  // handful the window itself says it — a second that fitted three frames into
-  // it was a slow second however the gaps fell, and insisting on a full sample
-  // would throw away exactly the windows this is here to catch.
-  gaps.sort((a, b) => a - b);
-  const typical = gaps.length >= 8 ? gaps[gaps.length >> 1] : elapsed / Math.max(1, frames);
-
-  if (typical > SLOW_FRAME) {
-    // Late. This rung has been lost once more — and the rung below, if there is
-    // one.
-    lost[sampleStep]++;
-    easyRun = 0;
-    if (sampleStep >= SAMPLE_STEPS.length - 1) return;
-    sampleStep++;
-    settleLadder(now);
-    return;
-  }
-
-  // On the top rung there is nothing to climb to, and no reason to count.
-  if (sampleStep === 0) { easyRun = 0; return; }
-  // Asked for twice and lost twice: not asked for again.
-  if (lost[sampleStep - 1] >= RETRIES) { easyRun = 0; return; }
-  // Not late, but not comfortable either. The run starts again.
-  if (typical > EASY_FRAME) { easyRun = 0; return; }
-  if (++easyRun < EASY_WINDOWS) return;
-  sampleStep--;
-  settleLadder(now);
-}
-
-// Frames stop arriving while the tab is in the background, and the gap either
-// side of that is not the machine struggling. The window starts again.
-addEventListener("visibilitychange", () => { recent = []; measuredSince = 0; });
 
 // A readout, for a phone that cannot be plugged into anything. Off unless it is
 // asked for by name in the address — ?fps — because it is an instrument and not
@@ -5015,7 +4910,7 @@ function showFps(now) {
   // asking while looking at a board.
   const drawn = canvas.width * canvas.height;
   const screen = innerWidth * innerHeight * devicePixelRatio ** 2;
-  fpsBox.textContent = `${fps} fps · basamak ${effectiveStep + 1}/${SAMPLE_STEPS.length}\n`
+  fpsBox.textContent = `${fps} fps\n`
     + `${canvas.width}x${canvas.height} — ekranın %${Math.round(100 * drawn / screen)}'i`;
 }
 
@@ -5033,7 +4928,6 @@ function animate(now) {
     || diceMeshes.some(die => die.userData.die.mode !== "rest");
   shadowsDirty = false;
   renderer.render(scene, camera);
-  watchFrames(now ?? performance.now());
   showFps(now ?? performance.now());
   requestAnimationFrame(animate);
 }
