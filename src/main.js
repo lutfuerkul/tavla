@@ -447,6 +447,7 @@ function applyStaticText() {
   markChosen("lang", language());
   showSettings();
   showOnline();
+  showFullscreen();
 }
 
 // How many people are at a table right now, said quietly under the way in. It
@@ -463,6 +464,42 @@ function showOnline() {
     ? t("online.one") : t("online.count", { n: onlineCount });
   onlineLine.removeAttribute("hidden");
 }
+
+// Filling the window is not filling the screen: the browser's own bars stay
+// where they are, and on a phone they are a third of the height. Fullscreen is
+// only ever granted to a gesture — a page cannot ask for it on its own, and it
+// does not survive the page being loaded again — so it is a button, under the
+// menu, and it is pressed when it is wanted.
+//
+// Not everywhere: an iPhone will only ever go fullscreen for a video. There
+// the button is not drawn at all, and nothing is lost — the page already fills
+// the window, which is all that machine will give anybody.
+const canFullscreen = !!(document.fullscreenEnabled ?? document.webkitFullscreenEnabled);
+const inFullscreen = () =>
+  !!(document.fullscreenElement ?? document.webkitFullscreenElement);
+
+const fullButton = document.querySelector("#fullscreen");
+
+function showFullscreen() {
+  if (!fullButton) return;
+  fullButton.toggleAttribute("hidden", !canFullscreen);
+  fullButton.textContent = t(inFullscreen() ? "fullscreen.exit" : "fullscreen.on");
+}
+
+fullButton?.addEventListener("click", () => {
+  const root = document.documentElement;
+  if (inFullscreen()) {
+    const exit = document.exitFullscreen ?? document.webkitExitFullscreen;
+    try { exit?.call(document)?.catch?.(() => {}); } catch { /* already out */ }
+    return;
+  }
+  const ask = root.requestFullscreen ?? root.webkitRequestFullscreen;
+  try { ask?.call(root)?.catch?.(() => {}); } catch { /* not here, then */ }
+});
+
+document.addEventListener("fullscreenchange", showFullscreen);
+document.addEventListener("webkitfullscreenchange", showFullscreen);
+showFullscreen();
 
 applyStaticText();
 attend(here => { onlineCount = here; showOnline(); });
@@ -3735,9 +3772,14 @@ function placeButtons() {
   if (narrow) {
     controls?.prepend(viewButton);
     controls?.append(menuButton);
+    // On a phone there is no corner to stand in: the buttons come down into
+    // the row along the bottom, and this one goes with them rather than
+    // sitting on top of the score.
+    if (fullButton) controls?.append(fullButton);
   } else {
     hud?.append(viewButton);
     app?.append(menuButton);
+    if (fullButton) app?.append(fullButton);
   }
 }
 
