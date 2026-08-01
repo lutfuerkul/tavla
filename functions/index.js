@@ -65,6 +65,9 @@ const ROOM_MINUTES = 20;
 const KEPT_DAYS = 1;
 const KEPT_AFTER_CLOSING_HOURS = 1;
 const KEPT_IN_QUEUE_MINUTES = 5;
+// A code that never became a table. Long enough to read down a telephone and
+// be typed in at the other end, and no longer.
+const KEPT_ROOM_MINUTES = 30;
 const sweptIn = ms => new Date(Date.now() + ms);
 const KEPT = () => sweptIn(KEPT_DAYS * 24 * 60 * 60 * 1000);
 const SWEPT_SOON = () => sweptIn(KEPT_AFTER_CLOSING_HOURS * 60 * 60 * 1000);
@@ -216,6 +219,10 @@ async function freeCode() {
         status: "holding", matchId: null,
         createdAt: now(),
         expiresAt: new Date(Date.now() + ROOM_MINUTES * 60 * 1000),
+        // A code is deleted with the table it belongs to. What was left over
+        // is the codes that never became tables — a room made and never
+        // joined, a tab closed at the door — and nothing deleted those.
+        silinecek: sweptIn(KEPT_ROOM_MINUTES * 60 * 1000),
       });
       return false;
     });
@@ -230,7 +237,10 @@ export const odaKur = onCall(settings, async request => {
   const wants = request.data?.colour === "ivory" ? "ivory" : "black";
 
   const wanted = await freeCode();
-  await db.collection("rooms").doc(wanted).update({ host: uid, hostColour: wants, status: "waiting" });
+  await db.collection("rooms").doc(wanted).update({
+    host: uid, hostColour: wants, status: "waiting",
+    silinecek: sweptIn(KEPT_ROOM_MINUTES * 60 * 1000),
+  });
   return { code: wanted, colour: wants };
 });
 
@@ -256,7 +266,25 @@ export const odayaKatil = onCall(settings, async request => {
       // being let in through the door of a room that is not there is worse than
       // being told at the door.
       const still = it.matchId ? await tx.get(db.collection("matches").doc(it.matchId)) : null;
-      if (!still?.exists) { tx.delete(room); return { error: "not-found" }; }
+      if (!still?.exists || still.data().closed) { tx.delete(room); return { error: "not-found" }; }
+      // The minute nobody counted. A table is closed by whoever is still
+      // sitting at it, so a table both of them walked away from has nobody to
+      // close it: it would stand until it was swept, and the first of them
+      // back would sit down at a game the other gave up on long ago. The count
+      // is done here instead, at the door — if a chair has been empty longer
+      // than the minute, that minute is over.
+      const emptied = Object.values(still.data().awaySince ?? {})
+        .map(at => at?.toDate?.()?.getTime() ?? Infinity);
+      const oldest = emptied.length ? Math.min(...emptied) : Infinity;
+      if (Number.isFinite(oldest) && (Date.now() - oldest) / 1000 > HELD_SECONDS) {
+        tx.update(still.ref, {
+          closed: true, closedBy: null,
+          silinecek: SWEPT_SOON(), updatedAt: now(),
+          seq: (still.data().seq ?? 0) + 1,
+        });
+        tx.delete(room);
+        return { error: "not-found" };
+      }
       const other = it.hostColour === "black" ? "ivory" : "black";
       if (it.host === uid) return { matchId: it.matchId, colour: it.hostColour };
       if (it.guest === uid) return { matchId: it.matchId, colour: other };
@@ -273,7 +301,8 @@ export const odayaKatil = onCall(settings, async request => {
       ? { black: it.host, ivory: uid }
       : { ivory: it.host, black: uid };
     tx.set(match, freshMatch(players, wanted));
-    tx.update(room, { status: "matched", guest: uid, matchId: match.id });
+    // A matched code lives as long as its table: it is the way back to it.
+    tx.update(room, { status: "matched", guest: uid, matchId: match.id, silinecek: KEPT() });
     // Which colour the one arriving is playing is the server's to say, not
     // something the client should have to work out from what it asked for.
     return { matchId: match.id, colour: it.hostColour === "black" ? "ivory" : "black" };
@@ -381,6 +410,7 @@ export const eslesmeyeGir = onCall(settings, async request => {
         status: "matched", matchId: match.id,
         createdAt: now(),
         expiresAt: new Date(Date.now() + ROOM_MINUTES * 60 * 1000),
+        silinecek: KEPT(),
       });
       // Read by the board that is waiting and then of no further use — but it
       // is written to rather than deleted, since deleting it is how the board
