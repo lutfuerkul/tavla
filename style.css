@@ -374,7 +374,9 @@ body.ideographic #hud span, body.ideographic #hud strong {
 #end-table:hover { border-color: #e5ad54; color: #f6ecd6; background: rgba(36,26,16,.95); }
 #end-table[hidden] { display: none; }
 @media (max-width: 600px) {
-  #table-code { top: 4.2rem; right: .8rem; padding: .45rem .65rem; }
+  /* Under the readout rather than beside it: on a phone the panel runs the
+     width of the screen and the corner it used to stand in is the score. */
+  #table-code { top: 7.2rem; right: .8rem; padding: .45rem .65rem; }
   #table-code strong { font-size: .82rem; letter-spacing: .22em; }
 }
 
@@ -462,4 +464,37 @@ body.ideographic #hud span, body.ideographic #hud strong {
   letter-spacing: .12em; text-transform: uppercase; }
 @media (orientation: landscape) and (pointer: coarse) {
   #rotate { display: flex; }
+}
+/* Unless the browser's own bars have gone. Sideways is the better shape for a
+   board — it is wider than it is deep — and what made it unusable was the
+   address bar and the tab strip eating the height, not the orientation. With
+   those gone the board is bigger than it ever is upright, so the warning has
+   nothing left to warn about. */
+html:fullscreen #rotate,
+html:-webkit-full-screen #rotate { display: none; }
+/* The way out of the warning, inside the warning: it covers the screen, so a
+   button anywhere else cannot be reached from here. */
+#rotate button { padding: .7rem 1.5rem; font: 500 .74rem/1 "DM Mono", monospace;
+  letter-spacing: .12em; text-transform: uppercase; }
+#rotate button[hidden] { display: none; }
+
+/* Sideways, with the bars gone: the board takes the whole height and the
+   readings go down one side of it, the buttons down the other. Upright the two
+   of them sit above and below because a phone held that way has height to
+   spare and no width; turned over, it is the other way round exactly. */
+@media (orientation: landscape) and (pointer: coarse) {
+  html:fullscreen #hud, html:-webkit-full-screen #hud {
+    top: 50%; left: .5rem; transform: translateY(-50%);
+    flex-direction: column; gap: .35rem; }
+  html:fullscreen #hud div, html:-webkit-full-screen #hud div {
+    min-width: 6.6rem; padding: .5rem .7rem; }
+  html:fullscreen #controls, html:-webkit-full-screen #controls {
+    top: 50%; bottom: auto; left: auto; right: .5rem;
+    width: auto; padding: 0; flex-wrap: nowrap;
+    transform: translateY(-50%); flex-direction: column; gap: .35rem; }
+  html:fullscreen #controls button, html:-webkit-full-screen #controls button {
+    width: 100%; }
+  html:fullscreen #table-code, html:-webkit-full-screen #table-code {
+    top: .5rem; right: .5rem; }
+  html:fullscreen #menu, html:-webkit-full-screen #menu { top: .5rem; right: .5rem; }
 }

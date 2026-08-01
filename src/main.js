@@ -497,9 +497,14 @@ function showFullscreen() {
   if (!fullButton) return;
   fullButton.toggleAttribute("hidden", !canFullscreen);
   fullButton.textContent = t(inFullscreen() ? "fullscreen.exit" : "fullscreen.on");
+  rotateFull?.toggleAttribute("hidden", !canFullscreen);
 }
 
-fullButton?.addEventListener("click", () => {
+// The same button again, inside the sideways warning: the warning covers the
+// screen, so without one there the way out of it cannot be reached from it.
+const rotateFull = document.querySelector("#rotate-full");
+
+const toggleFullscreen = () => {
   const root = document.documentElement;
   if (inFullscreen()) {
     const exit = document.exitFullscreen ?? document.webkitExitFullscreen;
@@ -508,7 +513,10 @@ fullButton?.addEventListener("click", () => {
   }
   const ask = root.requestFullscreen ?? root.webkitRequestFullscreen;
   try { ask?.call(root)?.catch?.(() => {}); } catch { /* not here, then */ }
-});
+};
+
+fullButton?.addEventListener("click", toggleFullscreen);
+rotateFull?.addEventListener("click", toggleFullscreen);
 
 document.addEventListener("fullscreenchange", showFullscreen);
 document.addEventListener("webkitfullscreenchange", showFullscreen);
