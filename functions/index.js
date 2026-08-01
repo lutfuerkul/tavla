@@ -117,6 +117,8 @@ function freshMatch(players, code) {
     phase: "opening",
     opening: { ivory: null, black: null },
     waitingOn: "black",
+    // Which throw of the opening the numbers above came from — see zarAt.
+    openingSeq: 0,
     turn: "black",
     dice: null,
     remaining: [],
@@ -497,14 +499,21 @@ export const zarAt = onCall(settings, async request => {
       }
       const value = d6();
       const opening = { ...match.opening, [mine]: value };
-      const patch = { opening, updatedAt: now(), seq: match.seq + 1 };
+      // Which throw of the opening this is. Two of them can carry the same
+      // number — a tie broken by throwing the same face again — and a board
+      // reading the number alone cannot tell a second throw from the first,
+      // so it never shows it.
+      const patch = { opening, openingSeq: match.seq + 1, updatedAt: now(), seq: match.seq + 1 };
 
       if (opening.ivory === null || opening.black === null) {
         patch.waitingOn = opening.black === null ? "black" : "ivory";
       } else if (opening.ivory === opening.black) {
-        // A tie is thrown again, from the top.
-        patch.opening = { ivory: null, black: null };
-        patch.waitingOn = "black";
+        // A tie is broken by whoever threw second, on their own. They throw
+        // again against the number the two of them made: higher and they
+        // start, lower and the other one does, equal again and they throw
+        // again. Only their own die changes, so the comparison below never has
+        // to know that a tie happened at all.
+        patch.waitingOn = mine;
       } else {
         // The opening die only settles who goes first; the winner throws their
         // own pair for the turn rather than playing the two as they lie.

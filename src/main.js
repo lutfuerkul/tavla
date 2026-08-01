@@ -2885,9 +2885,15 @@ function openingSettled() {
 
   const mine = game.opening[HUMAN], theirs = game.opening[COMPUTER];
   if (mine === theirs) {
-    // Thrown again, from the top.
-    game.opening = { [HUMAN]: null, [COMPUTER]: null };
-    game.waitingOn = HUMAN;
+    // A tie is broken by whoever threw second, on their own: they throw again
+    // against the number the two of them made. Higher and they start, lower
+    // and the other one does, equal again and they throw again. Only their own
+    // die changes, so the comparison below never has to know a tie happened.
+    game.waitingOn = who;
+    announce(mode === "hotseat" ? "open.tieHot"
+      : isHuman(who) ? "open.tieYou" : "open.tieThem",
+      NEWS_SHOWN_MS, { name: nameOf(who) });
+    if (!isHuman(who)) setTimeout(() => throwDice(who === HUMAN ? AWAY : -AWAY), 1500);
     updateHud();
     return;
   }
@@ -3045,6 +3051,11 @@ let replayOwed = false;
 // the die is yours and it still has to be thrown here, or the number simply
 // appears out of nowhere.
 let shownOpening = { black: null, ivory: null };
+// Which throw of the opening each of those numbers came from. Two throws can
+// carry the same face — a tie broken by throwing it again — and a board
+// reading the number alone takes the second for the first and never shows it.
+let shownOpeningAt = { black: -1, ivory: -1 };
+let shownTieAt = -1;
 // The other player's seat: whether anybody is in it, and whether the server
 // has given up on them coming back. Nothing here decides anything — it asks,
 // and the server reads the seat itself before it acts.
@@ -3201,10 +3212,12 @@ function showOpening(state) {
   // opening keeps no time, so there is no case left that wanted it.
   const theirs = Rules.other(HUMAN);
   const value = state.opening?.[theirs] ?? null;
-  if (value === null) { shownOpening[theirs] = null; return; }
-  if (shownOpening[theirs] === value) return;
+  if (value === null) { shownOpening[theirs] = null; shownOpeningAt[theirs] = -1; return; }
+  const at = state.openingSeq ?? 0;
+  if (shownOpening[theirs] === value && shownOpeningAt[theirs] === at) return;
   shownOpening[theirs] = value;
-  replayThrow(theirs, [value], () => shownOpening[theirs] !== value);
+  shownOpeningAt[theirs] = at;
+  replayThrow(theirs, [value], () => shownOpeningAt[theirs] !== at);
 }
 
 // The other side's throw, shown on this board. One at a time, and never on
@@ -3359,18 +3372,17 @@ function applyServerState(state) {
   // them across the felt — one of them, in front of somebody who came back to
   // a game a quarter of an hour old. Taken as read, once, before anything is
   // shown: they are not news to anybody at this table.
-  if (firstWord) shownOpening = { ...state.opening };
+  if (firstWord) {
+    shownOpening = { ...state.opening };
+    const at = state.openingSeq ?? 0;
+    shownOpeningAt = { black: at, ivory: at };
+    shownTieAt = at;
+  }
 
   // The phase is settled with the turn and the dice rather than ahead of them.
   // Moving it early meant the board could be in the play phase while it still
   // thought the turn belonged to whoever held it last, and the play phase is
   // what decides that picking the dice up picks up both of them.
-  // Whether this board had any opening numbers before this word arrived. Two
-  // dice going back to nothing is how a tie is announced — but it is also how
-  // every match starts, and a game where nobody has thrown yet looks exactly
-  // the same. Told apart by what was there a moment ago.
-  const hadOpening = game.opening
-    && (game.opening.ivory != null || game.opening.black != null);
   game.opening = { ...state.opening };
   game.waitingOn = state.waitingOn ?? null;
   watchSeats(state.players);
@@ -3451,23 +3463,15 @@ function applyServerState(state) {
     // it was holding the throw it had already made — so nothing could be picked
     // up on the side that threw first, and the other player's die, waiting for
     // a clear hand before it could be shown, was never shown either.
-    // Two equal opening dice: the server clears both and asks for them again
-    // from the top. Only when there was something to clear — this is the same
-    // shape as a match nobody has thrown in yet, and taking one for the other
-    // pulled the dice out of the air in the middle of the very first throw.
-    // The throw never landed, so it never counted, so it was made again.
-    if (hadOpening && state.phase === "opening" && state.opening
-        && state.opening.ivory === null && state.opening.black === null) {
-      shownOpening = { black: null, ivory: null };
-      // Not while the die that tied it is still crossing the felt. The server
-      // settles the tie the moment it is asked for the second number, which is
-      // a second or two before that die comes to rest here — and sweeping the
-      // board then took the throw out of the air, so the two dice that had to
-      // be equal for any of this to happen were never seen to be equal. It
-      // lands, it is left there long enough to read, and then the board clears.
-      const clear = () => { thrown = false; resetDice(); updateHud(); };
-      if (thrown || heldDice || replayingFor || replayOwed || pending) holdTheOpening(clear);
-      else clear();
+    // Two equal opening dice. Nothing is cleared and nothing is swept: the one
+    // who threw second throws again, over their own number, and the board says
+    // so. Announced once per throw of the opening, since the tie stands on the
+    // match until it is broken and every later word about the match carries it.
+    const tied = state.phase === "opening" && state.opening
+      && state.opening.ivory != null && state.opening.ivory === state.opening.black;
+    if (tied && (state.openingSeq ?? 0) !== shownTieAt) {
+      shownTieAt = state.openingSeq ?? 0;
+      announce(state.waitingOn === HUMAN ? "open.tieYou" : "open.tieThem");
     }
     // The opening is over: the pair goes back to the middle together, the one
     // that was waiting off the board along with it.
