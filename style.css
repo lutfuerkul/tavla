@@ -3,6 +3,10 @@
 :root { color-scheme: dark; }
 * { box-sizing: border-box; }
 html, body, #app, #scene { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+/* A phone's address bar is part of the window as far as 100% is concerned, so
+   a page sized to it is taller than what can be seen. dvh is the height that
+   is actually there. */
+html, body, #app, #scene { height: 100dvh; }
 body { background: #090807; color: #f3ead7; font-family: "DM Mono", monospace; }
 /* On a tablet the board is played with a finger, and a finger dragging across
    a canvas is a page gesture as far as the browser is concerned — it takes the
@@ -308,26 +312,34 @@ body.ideographic #hud span, body.ideographic #hud strong {
    are tightened instead. Wide windows keep the heading on the middle of the
    board, which is where it was asked to sit. */
 @media (max-width: 600px) {
-  #intro { place-content: center; padding: 1.2rem; }
+  /* Not centred. A centred column taller than its box is cut off at both ends
+     and the top cannot be scrolled to at all — which is how the first row of
+     languages went missing while the way in went off the bottom. Started at
+     the top, everything is reachable, and the tightening below is so that on
+     most phones there is nothing to reach for. */
+  #intro { place-content: start center; padding: .7rem 1rem 1.6rem; }
   /* No room up the side of a phone, so the languages become a row of their
      own at the top of the door instead. */
   #langs { position: static; flex-direction: row; flex-wrap: wrap;
-    justify-content: center; gap: .3rem; margin-bottom: 1rem; }
+    justify-content: center; gap: .22rem; margin-bottom: .5rem; }
   /* No black band above the board on a phone — the languages are up there —
      so it goes back into the door where it came from. */
-  .eyebrow { position: static; transform: none; margin: 0 0 .6rem; }
-  #online { position: static; transform: none; justify-self: center; margin: 0 0 .9rem; }
-  .lang-pick { width: auto; font-size: .66rem; padding: .3rem .5rem; }
-  #modes { margin: 1.1rem 0 .9rem; }
-  .mode-pick, .board-pick, .colour-pick, .side-pick { padding: .62rem 1.05rem; font-size: .78rem; }
+  .eyebrow { position: static; transform: none; margin: 0 0 .35rem; font-size: .66rem; }
+  #online { position: static; transform: none; justify-self: center; margin: 0 0 .5rem;
+    padding: .26rem .55rem; font-size: .62rem; }
+  h1 { font-size: clamp(1.9rem, 9vw, 2.8rem); }
+  .lang-pick { width: auto; font-size: .6rem; padding: .22rem .4rem; gap: .35rem; }
+  .lang-pick svg { width: 15px; height: 10px; }
+  #modes { margin: .7rem 0 .6rem; }
+  .mode-pick, .board-pick, .colour-pick, .side-pick { padding: .55rem 1rem; font-size: .74rem; }
   /* A phone is not wide enough for a name and a box side by side without one
      of them being squeezed, so the name goes above its box. */
-  #settings { gap: .7rem; margin: .2rem auto 1.2rem; padding: .9rem 1rem;
+  #settings { gap: .45rem; margin: .2rem auto .7rem; padding: .7rem .9rem;
     width: 100%; max-width: 20rem; }
-  .setting { grid-template-columns: 1fr; gap: .25rem; }
-  .setting-name { font-size: .66rem; }
-  .setting-value { padding: .6rem 2rem .6rem .85rem; font-size: .76rem; }
-  #start { margin-top: 1.3rem; padding: .78rem 2.2rem; }
+  .setting { grid-template-columns: 1fr; gap: .15rem; }
+  .setting-name { font-size: .62rem; }
+  .setting-value { padding: .5rem 1.9rem .5rem .8rem; font-size: .72rem; }
+  #start { margin-top: .8rem; padding: .68rem 2rem; }
 }
 
 /* A window too short to hold the door from its middle down starts it at the
