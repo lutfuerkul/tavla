@@ -242,14 +242,18 @@ const PIXEL_BUDGET = 7680 * 4320;
 const budgetNow = () =>
   Math.max(PIXEL_BUDGET, innerWidth * innerHeight * (devicePixelRatio || 1) ** 2);
 
-// No multisampling, on any screen. It exists to soften silhouettes in a buffer
-// the size of the screen, and there is no longer such a buffer anywhere: a
-// desktop draws at two samples or more even on its lowest rung — which softens
-// the silhouettes and sharpens the printed faces, which multisampling never
-// could — and a handheld screen is dense enough to do the same with its own
-// pixels. Four samples behind an 8K buffer is a gigabyte, for an edge that has
-// already been dealt with twice over.
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+// Multisampling on a fixed screen, and not in the hand. The argument for
+// turning it off everywhere was that supersampling already softens the
+// silhouettes and sharpens the printed faces both, which multisampling never
+// could — true as far as it goes, and it left the desktop looking worse. What
+// it leaves out is who does the shrinking: the browser, by a filter of its own
+// choosing, and that filter is coarser at the edges than the one the card runs.
+//
+// In the hand it stays off. A phone has three of its own pixels to every one of
+// the page's and does the same work with them for nothing, and four samples
+// behind that buffer was megabytes a frame on the machine least able to spare
+// them.
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !HANDHELD });
 
 // Which rung is actually being drawn, which is not always the one the frame
 // timer asked for: a window too large for the budget above is held further
