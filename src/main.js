@@ -155,6 +155,26 @@ const CAMERA_AIM = new THREE.Vector3(0, .4, 0);
 const HANDHELD = matchMedia?.("(pointer: coarse)").matches ?? false;
 const TABLET = HANDHELD && Math.min(innerWidth, innerHeight) >= 600;
 
+// A board that is not moving is a board whose next frame would be identical to
+// the one already on the screen. Drawing it sixty times a second costs a phone
+// its battery and — this is the part that shows — its heat budget: a chip that
+// has been painting the same picture for two minutes has throttled itself by
+// the time the dice are finally thrown, so the one moment that needed the
+// speed is the one moment it does not have.
+//
+// So in the hand nothing is drawn unless something changed. On a desk it is
+// left alone: a machine on mains power with a fan has nothing to gain, and
+// every frame not drawn is a frame that cannot be wrong.
+const ON_DEMAND = HANDHELD;
+let needsFrame = true;
+const wake = () => { needsFrame = true; };
+// Whatever is missed, missed for no longer than this. Every change the board
+// makes ought to call wake(), and a change that does not is a change that never
+// appears — so twice a second the frame is drawn anyway. Two frames against
+// sixty is nothing to pay for never being stuck with a stale picture.
+const HEARTBEAT_MS = 500;
+let lastDrawn = 0;
+
 const VIEW_KEY = "tavla.kamera";
 let chosenView = localStorage.getItem(VIEW_KEY);
 // Where the camera starts, until somebody says otherwise. Two people round one
@@ -167,6 +187,7 @@ const overhead = () =>
   (chosenView ?? (HANDHELD || mode === "hotseat" ? "tepe" : "koltuk")) === "tepe";
 
 function takeSeat() {
+  wake();
   if (overhead()) {
     camera.position.set(0, 17.6, 0);
     // Straight down is the one direction the default up vector cannot resolve,
@@ -1790,6 +1811,7 @@ const DICE_HOME = [[-4.1, .35, 5], [-3.0, -.5, 4]];
 const DICE_REST = [FIELD_HALF_X + 1.9, 1.4, 3];
 
 function resetDice() {
+  wake();
   const parked = game?.phase === "opening";
   diceMeshes.forEach((die, i) => {
     const [x, z, face] = parked && i === 1 ? DICE_REST : (DICE_HOME[i] ?? DICE_HOME[0]);
@@ -2701,6 +2723,7 @@ scene.add(piecesGroup);
 let pieceMeshes = [];
 
 function renderPieces() {
+  wake();
   piecesGroup.clear();
   pieceMeshes = [];
   // Every checker on the board is a new mesh, so the shadows are stale until
@@ -4672,6 +4695,7 @@ canvas.addEventListener("pointerdown", (e) => {
 });
 
 addEventListener("pointermove", (e) => {
+  wake();
   if (!heldDice && !dragging) return;
   setPointerFromEvent(e);
 
@@ -4887,7 +4911,7 @@ fitCamera();
 // A soft board at sixty and a sharp one at twenty are the same machine on two
 // different rungs, and either number on its own cannot tell you which.
 const SHOWING_FPS = /[?&]fps\b/.test(location.search);
-let fpsBox = null, fpsFrames = 0, fpsSince = 0;
+let fpsBox = null, fpsFrames = 0, fpsSince = 0, fpsShown = 0;
 if (SHOWING_FPS) {
   fpsBox = document.createElement("div");
   fpsBox.style.cssText = "position:fixed;z-index:9;left:.5rem;top:.5rem;padding:.35rem .55rem;"
@@ -4896,23 +4920,44 @@ if (SHOWING_FPS) {
   document.body.appendChild(fpsBox);
 }
 
-function showFps(now) {
+let lastFps = null;
+
+function showFps(now, busy = true) {
   if (!fpsBox) return;
-  fpsFrames++;
-  if (!fpsSince) { fpsSince = now; return; }
-  if (now - fpsSince < 500) return;
-  const fps = Math.round(fpsFrames * 1000 / (now - fpsSince));
-  fpsFrames = 0;
-  fpsSince = now;
+  // Counted over moving frames only. A still board draws twice a second on
+  // purpose, and a readout that turned that into "2 fps" would be read as the
+  // machine failing rather than as the panel working — so what is shown while
+  // nothing moves is the last real number, said to be standing.
+  if (busy) {
+    fpsFrames++;
+    if (!fpsSince) { fpsSince = now; return; }
+    if (now - fpsSince >= 500) {
+      lastFps = Math.round(fpsFrames * 1000 / (now - fpsSince));
+      fpsFrames = 0;
+      fpsSince = now;
+    }
+  } else {
+    fpsSince = 0;
+    fpsFrames = 0;
+  }
+  if (now - fpsShown < 500) return;
+  fpsShown = now;
+  const fps = lastFps ?? "—";
   // Two lines, which is what the two questions need: is the machine keeping up,
   // and is it drawing the screen it has. Everything else that was here — the
   // triangle count, the card's name, the heap — answered questions nobody was
   // asking while looking at a board.
   const drawn = canvas.width * canvas.height;
   const screen = innerWidth * innerHeight * devicePixelRatio ** 2;
-  fpsBox.textContent = `${fps} fps\n`
+  fpsBox.textContent = `${fps} fps${busy ? "" : " · durgun"}\n`
     + `${canvas.width}x${canvas.height} — ekranın %${Math.round(100 * drawn / screen)}'i`;
 }
+
+// Whether anything on the table is in the middle of moving. Everything that
+// moves is one of these: a throw being searched for, dice in the air, a checker
+// in the hand or crossing the board.
+const moving = () => !!pending || !!heldDice || !!sliding || !!dragging
+  || diceMeshes.some(die => die.userData.die.mode !== "rest");
 
 const clock = new THREE.Clock();
 function animate(now) {
@@ -4924,16 +4969,30 @@ function animate(now) {
   stepHeldDice(dt);
   stepSlide(dt);
   stepDicePhysics(dt);
-  renderer.shadowMap.needsUpdate = shadowsDirty || !!dragging || !!sliding || !!heldDice
-    || diceMeshes.some(die => die.userData.die.mode !== "rest");
-  shadowsDirty = false;
-  renderer.render(scene, camera);
-  showFps(now ?? performance.now());
+  const at = now ?? performance.now();
+  const busy = moving();
+  const draw = !ON_DEMAND || busy || needsFrame || shadowsDirty
+    || at - lastDrawn > HEARTBEAT_MS;
+  if (draw) {
+    renderer.shadowMap.needsUpdate = shadowsDirty || busy;
+    shadowsDirty = false;
+    needsFrame = false;
+    lastDrawn = at;
+    renderer.render(scene, camera);
+  }
+  // Counted over the frames that were actually drawn, and only while there is
+  // something to draw. Idling at two frames a second is the panel working, not
+  // the machine failing, and a readout that said "2 fps" over a still board
+  // would be read as the second thing.
+  // On a desk every frame is drawn, so every frame counts. In the hand only the
+  // moving ones do — see showFps.
+  showFps(at, busy || !ON_DEMAND);
   requestAnimationFrame(animate);
 }
 animate();
 
 addEventListener("resize", () => {
+  wake();
   fitCamera();
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
