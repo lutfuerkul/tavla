@@ -323,6 +323,7 @@ function buildSettings() {
   for (const setting of SETTINGS) {
     const row = document.createElement("div");
     row.className = "setting";
+    setting.row = row;
 
     const name = document.createElement("span");
     name.className = "setting-name";
@@ -352,6 +353,7 @@ function buildSettings() {
       },
     };
     drawers.push(drawer);
+    setting.drawer = drawer;
 
     for (const [value, label] of setting.options) {
       const choice = document.createElement("button");
@@ -396,9 +398,20 @@ addEventListener("pointerdown", event => {
 // rewrites them along with everything else.
 function showSettings() {
   for (const setting of SETTINGS) {
+    // Which colour you play is the room's to say, not yours: the one who was
+    // waiting takes black, and nobody knows which of the two of them pressed
+    // first. Left as a choice it is a choice that is quietly overruled — you
+    // pick black, you sit down ivory, and the game looks broken. So the row
+    // stays where it is and says what actually happens instead.
+    const assigned = setting.key === "colour" && mode === "online";
     const value = picked[setting.key];
     const label = setting.options.find(([v]) => v === value)?.[1];
-    if (setting.face && label) setting.face.textContent = t(label);
+    if (setting.face) {
+      setting.face.textContent = assigned ? t("option.assigned") : (label ? t(label) : "");
+      setting.face.disabled = assigned;
+    }
+    setting.row?.classList.toggle("assigned", assigned);
+    if (assigned) setting.drawer?.close();
     markChosen(setting.key, value);
   }
 }
@@ -545,6 +558,8 @@ function showLobby() {
   if (codeHint) codeHint.hidden = true;
   // Your colour comes from the room, so it is not asked for here.
   document.querySelector("#colours")?.toggleAttribute("hidden", online);
+  // The colour row reads differently online — see showSettings.
+  showSettings();
   refreshStart();
 }
 

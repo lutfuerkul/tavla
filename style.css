@@ -276,6 +276,14 @@ body.ideographic #hud span, body.ideographic #hud strong {
 #cancel:hover { border-color: #e5ad54; color: #f6ecd6; background: rgba(36,26,16,.9); }
 #cancel[hidden] { display: none; }
 
+/* A row that is not a choice. Online the colour belongs to the room, so the
+   row stays where it is — a row that vanishes is a row somebody goes looking
+   for — but it says what happens instead of offering something that would be
+   overruled a second later. */
+.setting.assigned .setting-value { color: #8e8474; cursor: default;
+  border-color: rgba(229,173,84,.14); background: rgba(8,6,4,.5); }
+.setting.assigned .setting-value::after { opacity: .25; }
+
 /* Which checkers are yours, and the door handle. */
 #colours { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin: 1.1rem 0 0; }
 
