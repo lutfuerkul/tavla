@@ -1141,6 +1141,26 @@ const black = new THREE.MeshPhysicalMaterial(THICK ? {
 } : {
   color: 0x141518, roughness: .16, metalness: .04, clearcoat: .7, clearcoatRoughness: .06,
 });
+
+// The lacquer comes off the checkers in the hand. A coat is a second surface
+// over the first: every pixel of it is lit twice and samples the room probe
+// twice, and thirty of them are on the board at once, moving, with their
+// shadows redrawn under them. It is the most expensive thing on a phone and
+// the least visible — a checker there is a centimetre across, and what the
+// coat does is put a highlight on it a few pixels wide.
+//
+// Stripped here rather than written as a setting, before anything has been
+// drawn, so the coat is left out of the shader entirely instead of being
+// computed and multiplied by nothing.
+//
+// Not the case and not the dice: the case is the largest flat thing on the
+// screen and its sheen is what the board is lit by, and there are two dice.
+if (HANDHELD) {
+  for (const piece of [ivory, black]) {
+    piece.clearcoat = 0;
+    piece.clearcoatRoughness = 0;
+  }
+}
 // Points alternate pale maple and dark walnut, both carrying the same inlay.
 const marquetryA = new THREE.MeshStandardMaterial({
   map: marquetryPointTexture(...BOARD.pale),
@@ -1277,7 +1297,9 @@ function addBoard() {
 // pins where the cases carry hinges.
 function addPanelBoard() {
   const frame = new THREE.MeshPhysicalMaterial({
-    color: 0x120d09, roughness: .45, metalness: .04, clearcoat: .3, clearcoatRoughness: .22,
+    color: 0x120d09, roughness: .45, metalness: .04,
+    // Bare in the hand, for the same reason the checkers are — see above.
+    clearcoat: HANDHELD ? 0 : .3, clearcoatRoughness: HANDHELD ? 0 : .22,
   });
   const panel = new THREE.MeshPhysicalMaterial({
     map: woodPanelTexture(1024, 640, BOARD.veneer.base, BOARD.veneer.grain,
