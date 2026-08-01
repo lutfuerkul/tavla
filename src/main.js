@@ -4817,6 +4817,37 @@ function watchFrames(now) {
 // side of that is not the machine struggling. The window starts again.
 addEventListener("visibilitychange", () => { recent = []; measuredSince = 0; });
 
+// A readout, for a phone that cannot be plugged into anything. Off unless it is
+// asked for by name in the address — ?fps — because it is an instrument and not
+// part of the game. It says the two numbers that only mean anything together:
+// how many frames a second, and how much of the screen is actually being drawn.
+// A soft board at sixty and a sharp one at twenty are the same machine on two
+// different rungs, and either number on its own cannot tell you which.
+const SHOWING_FPS = /[?&]fps\b/.test(location.search);
+let fpsBox = null, fpsFrames = 0, fpsSince = 0;
+if (SHOWING_FPS) {
+  fpsBox = document.createElement("div");
+  fpsBox.style.cssText = "position:fixed;z-index:9;left:.5rem;top:.5rem;padding:.35rem .55rem;"
+    + "font:500 .68rem/1.45 monospace;color:#e5ad54;background:rgba(0,0,0,.62);"
+    + "border-radius:.3rem;pointer-events:none;white-space:pre;";
+  document.body.appendChild(fpsBox);
+}
+
+function showFps(now) {
+  if (!fpsBox) return;
+  fpsFrames++;
+  if (!fpsSince) { fpsSince = now; return; }
+  if (now - fpsSince < 500) return;
+  const fps = Math.round(fpsFrames * 1000 / (now - fpsSince));
+  fpsFrames = 0;
+  fpsSince = now;
+  const drawn = canvas.width * canvas.height;
+  const screen = innerWidth * innerHeight * devicePixelRatio ** 2;
+  fpsBox.textContent = `${fps} fps · basamak ${sampleStep + 1}/${SAMPLE_STEPS.length}\n`
+    + `${canvas.width}x${canvas.height} — ekranın %${Math.round(100 * drawn / screen)}'i\n`
+    + `dpr ${devicePixelRatio}`;
+}
+
 const clock = new THREE.Clock();
 function animate(now) {
   const dt = Math.min(clock.getDelta(), .25);
@@ -4832,6 +4863,7 @@ function animate(now) {
   shadowsDirty = false;
   renderer.render(scene, camera);
   watchFrames(now ?? performance.now());
+  showFps(now ?? performance.now());
   requestAnimationFrame(animate);
 }
 animate();
