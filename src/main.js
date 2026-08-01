@@ -3051,9 +3051,12 @@ let replayOwed = false;
 // the die is yours and it still has to be thrown here, or the number simply
 // appears out of nowhere.
 let shownOpening = { black: null, ivory: null };
-// Which throw of the opening each of those numbers came from. Two throws can
-// carry the same face — a tie broken by throwing it again — and a board
-// reading the number alone takes the second for the first and never shows it.
+// When each of them last threw, as the match records it. Two throws can carry
+// the same face — a tie broken by throwing it again — and a board reading the
+// number alone takes the second for the first and never shows it. Kept per
+// player: one stamp for the whole opening moves when the other one throws, and
+// then every board shows its opponent's die a second time straight after its
+// own, which is exactly what it did.
 let shownOpeningAt = { black: -1, ivory: -1 };
 let shownTieAt = -1;
 // The other player's seat: whether anybody is in it, and whether the server
@@ -3213,7 +3216,7 @@ function showOpening(state) {
   const theirs = Rules.other(HUMAN);
   const value = state.opening?.[theirs] ?? null;
   if (value === null) { shownOpening[theirs] = null; shownOpeningAt[theirs] = -1; return; }
-  const at = state.openingSeq ?? 0;
+  const at = state.openingAt?.[theirs] ?? 0;
   if (shownOpening[theirs] === value && shownOpeningAt[theirs] === at) return;
   shownOpening[theirs] = value;
   shownOpeningAt[theirs] = at;
@@ -3400,9 +3403,8 @@ function applyServerState(state) {
   // shown: they are not news to anybody at this table.
   if (firstWord) {
     shownOpening = { ...state.opening };
-    const at = state.openingSeq ?? 0;
-    shownOpeningAt = { black: at, ivory: at };
-    shownTieAt = at;
+    shownOpeningAt = { black: state.openingAt?.black ?? 0, ivory: state.openingAt?.ivory ?? 0 };
+    shownTieAt = Math.max(shownOpeningAt.black, shownOpeningAt.ivory);
   }
 
   // The phase is settled with the turn and the dice rather than ahead of them.
@@ -3495,8 +3497,9 @@ function applyServerState(state) {
     // match until it is broken and every later word about the match carries it.
     const tied = state.phase === "opening" && state.opening
       && state.opening.ivory != null && state.opening.ivory === state.opening.black;
-    if (tied && (state.openingSeq ?? 0) !== shownTieAt) {
-      shownTieAt = state.openingSeq ?? 0;
+    const tieAt = Math.max(state.openingAt?.black ?? 0, state.openingAt?.ivory ?? 0);
+    if (tied && tieAt !== shownTieAt) {
+      shownTieAt = tieAt;
       announce(state.waitingOn === HUMAN ? "open.tieYou" : "open.tieThem");
     }
     // The opening is over: the pair goes back to the middle together, the one

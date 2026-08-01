@@ -117,8 +117,8 @@ function freshMatch(players, code) {
     phase: "opening",
     opening: { ivory: null, black: null },
     waitingOn: "black",
-    // Which throw of the opening the numbers above came from — see zarAt.
-    openingSeq: 0,
+    // When each of them last threw their opening die — see zarAt.
+    openingAt: {},
     turn: "black",
     dice: null,
     remaining: [],
@@ -499,11 +499,17 @@ export const zarAt = onCall(settings, async request => {
       }
       const value = d6();
       const opening = { ...match.opening, [mine]: value };
-      // Which throw of the opening this is. Two of them can carry the same
-      // number — a tie broken by throwing the same face again — and a board
-      // reading the number alone cannot tell a second throw from the first,
-      // so it never shows it.
-      const patch = { opening, openingSeq: match.seq + 1, updatedAt: now(), seq: match.seq + 1 };
+      // When each of them last threw. Two throws can carry the same number — a
+      // tie broken by throwing the same face again — and a board reading the
+      // number alone cannot tell the second from the first, so it never shows
+      // it. Kept per player, not for the opening as a whole: a stamp that
+      // moved when the other one threw made every board show its opponent's
+      // die a second time, straight after its own.
+      const patch = {
+        opening,
+        openingAt: { ...(match.openingAt ?? {}), [mine]: match.seq + 1 },
+        updatedAt: now(), seq: match.seq + 1,
+      };
 
       if (opening.ivory === null || opening.black === null) {
         patch.waitingOn = opening.black === null ? "black" : "ivory";
