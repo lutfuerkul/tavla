@@ -4895,12 +4895,19 @@ const SLOW_FRAME = 1000 / 30;
 const EASY_FRAME = SLOW_FRAME * .6;
 const EASY_WINDOWS = 3;
 let recent = [], measuredSince = 0, warmed = false;
-// How many comfortable seconds in a row are wanted before climbing. It doubles
-// every time a climb turns out to have been a mistake, so a machine that truly
-// cannot hold the rung asks less and less often instead of flickering — and
-// one that stumbled over a single throw is back where it belongs in three
-// seconds.
-let easyNeeded = EASY_WINDOWS, easyRun = 0, justClimbed = false;
+// How many comfortable seconds in a row are wanted before climbing.
+let easyRun = 0;
+// How many times each rung has been tried and lost. Doubling the wait after a
+// failed climb was not enough on its own: a machine sitting between two rungs —
+// too slow for the one above, fast enough on the one below to look ready for it
+// — walked up and down between them for minutes on end, and the board changing
+// sharpness every few seconds is worse to sit in front of than either rung.
+//
+// Twice and it is done: the first loss can be a throw that happened to land in
+// the wrong second, the second is the rung's own answer. After that the rung is
+// not asked for again, and the ladder settles where the machine actually lives.
+const RETRIES = 2;
+const lost = SAMPLE_STEPS.map(() => 0);
 
 // Whatever the rung, the second in which the buffer is thrown away and built
 // again is not a second that says anything about the machine.
@@ -4934,10 +4941,9 @@ function watchFrames(now) {
   const typical = gaps.length >= 8 ? gaps[gaps.length >> 1] : elapsed / Math.max(1, frames);
 
   if (typical > SLOW_FRAME) {
-    // Late. The rung below, if there is one — and if we had only just climbed
-    // to this one, the next attempt waits twice as long as this one did.
-    if (justClimbed) easyNeeded = Math.min(easyNeeded * 2, 64);
-    justClimbed = false;
+    // Late. This rung has been lost once more — and the rung below, if there is
+    // one.
+    lost[sampleStep]++;
     easyRun = 0;
     if (sampleStep >= SAMPLE_STEPS.length - 1) return;
     sampleStep++;
@@ -4946,12 +4952,13 @@ function watchFrames(now) {
   }
 
   // On the top rung there is nothing to climb to, and no reason to count.
-  if (sampleStep === 0) { easyRun = 0; justClimbed = false; return; }
+  if (sampleStep === 0) { easyRun = 0; return; }
+  // Asked for twice and lost twice: not asked for again.
+  if (lost[sampleStep - 1] >= RETRIES) { easyRun = 0; return; }
   // Not late, but not comfortable either. The run starts again.
   if (typical > EASY_FRAME) { easyRun = 0; return; }
-  if (++easyRun < easyNeeded) return;
+  if (++easyRun < EASY_WINDOWS) return;
   sampleStep--;
-  justClimbed = true;
   settleLadder(now);
 }
 
