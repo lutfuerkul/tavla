@@ -3269,27 +3269,34 @@ const OPENING_HELD_MS = 3500;
 const ROLL_SECONDS = 20, MOVE_SECONDS = 60;
 // The same minute the server holds an empty chair for.
 const HELD_SECONDS = 60;
-const clockBox = document.querySelector("#sayac");
+// One counter for each of the two things a turn is made of, each under the
+// reading it belongs to: the throw beneath the dice, the move beneath whose
+// turn it is. They were one number in one place, which meant reading the panel
+// to find out what the number was counting.
+const rollBox = document.querySelector("#sayac-zar");
+const moveBox = document.querySelector("#sayac-hamle");
 let clockUntil = 0;
+let clockWhich = null;
 
-// How long this board has left, and only this board. Each player keeps their
-// own time and plays to it; watching the other's run down is somebody else's
-// business, and a number on the panel that is not about you is a number to
-// misread.
-// How long is left, and counted from when. Two things are ever counted: your
-// own turn, and the minute an empty chair is waited for — which is the one
-// number worth having on the screen while nothing at all is happening.
+// How long is left on whatever the table is waiting for, and counted from
+// when. Shown to both of them, not only to whoever it is running against: the
+// clock decides when the server takes a turn over, and a player who cannot see
+// it is a player watching the board sit still with no idea whether anything is
+// about to happen. Both boards read the same start off the match, so the two
+// counters run together to the second and reach zero together.
 function runningClock(state) {
   if (mode !== "online" || !state || state.over) return 0;
   // Not while the chair opposite is being held. That minute is counted out in
   // the middle of the table beside the line that says what it is for: a bare
-  // number up in the corner, where the panel keeps your own time, is a number
+  // number up in the corner, where the panel keeps the turn's time, is a number
   // nobody looks at and nobody could read the meaning of.
   if (state.away && state.away !== HUMAN) return 0;
   // The opening keeps no time, so there is nothing to count out.
   if (state.phase === "opening") return 0;
-  if (state.turn !== HUMAN) return 0;
-  return { seconds: state.dice ? MOVE_SECONDS : ROLL_SECONDS, from: null };
+  if (!state.turn) return 0;
+  return state.dice
+    ? { seconds: MOVE_SECONDS, from: null, which: "move" }
+    : { seconds: ROLL_SECONDS, from: null, which: "roll" };
 }
 
 // The minute the server holds an empty chair for, counted where the news is.
@@ -3311,17 +3318,22 @@ function awayLine() {
 // dice a lone "18" reads as a die, and this way it needs no words in any of
 // the eight languages.
 function showClock() {
-  if (!clockBox) return;
   const left = clockUntil - Date.now();
-  if (left <= 0) {
-    clockBox.textContent = "";
-    clockBox.classList.remove("running", "nearly");
-    return;
-  }
   const seconds = Math.ceil(left / 1000);
-  clockBox.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-  clockBox.classList.add("running");
-  clockBox.classList.toggle("nearly", seconds <= 5);
+  // Only ever one of the two is running: a turn is waiting either for the dice
+  // or for the checkers, never for both. The other is emptied rather than left
+  // showing the number it stopped on.
+  for (const [which, box] of [["roll", rollBox], ["move", moveBox]]) {
+    if (!box) continue;
+    if (left <= 0 || which !== clockWhich) {
+      box.textContent = "";
+      box.classList.remove("running", "nearly");
+      continue;
+    }
+    box.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+    box.classList.add("running");
+    box.classList.toggle("nearly", seconds <= 5);
+  }
 }
 // A throw that was started and never landed leaves the board unable to do
 // anything at all: while it thinks it is in the middle of showing somebody's
@@ -3476,6 +3488,7 @@ function applyServerState(state) {
       ? counting.from
       : (state.clockFrom?.toMillis?.() ?? state.updatedAt?.toMillis?.() ?? Date.now());
     clockUntil = counting ? from + counting.seconds * 1000 : 0;
+    clockWhich = counting ? counting.which : null;
     showClock();
     game.phase = state.phase;
     game.pos = unpackServerPosition(state.pos);
