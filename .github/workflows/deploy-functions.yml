@@ -1,0 +1,53 @@
+name: Deploy Tavla functions
+
+# Sunucu tarafı, elle deploy edilmesin diye. Yalnızca sunucuya ait dosyalar
+# değiştiğinde çalışır — her main yazısında fonksiyonları yeniden yüklemenin
+# anlamı yok. Elle çalıştırmak için Actions sekmesinden "Run workflow".
+on:
+  push:
+    branches: [main]
+    paths:
+      - "functions/**"
+      - "firestore.rules"
+      - "firebase/database.rules.json"
+      - "firebase.json"
+      - ".github/workflows/deploy-functions.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "functions"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # functions/package.json ne diyorsa o: sunucu Node 22'de koşuyor.
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Bağımlılıklar
+        working-directory: functions
+        run: npm ci || npm install
+
+      # Kurallar iki yerde yazılı — tarayıcıda ve sunucuda. Aynı şeyi
+      # söylediklerini deploy'dan önce burada da doğruluyoruz; firebase.json
+      # zaten predeploy olarak çağırıyor, bu erken uyarı.
+      - name: Kural eşitliği
+        run: node functions/kural-esitligi.mjs
+
+      - name: Deploy
+        uses: w9jds/firebase-action@v14.10.1
+        with:
+          args: deploy --only functions,firestore:rules,database --project tavla3b
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /github/workspace/gcloud.json
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}

@@ -3051,9 +3051,12 @@ let replayOwed = false;
 // the die is yours and it still has to be thrown here, or the number simply
 // appears out of nowhere.
 let shownOpening = { black: null, ivory: null };
-// Which throw of the opening each of those numbers came from. Two throws can
-// carry the same face — a tie broken by throwing it again — and a board
-// reading the number alone takes the second for the first and never shows it.
+// When each of them last threw, as the match records it. Two throws can carry
+// the same face — a tie broken by throwing it again — and a board reading the
+// number alone takes the second for the first and never shows it. Kept per
+// player: one stamp for the whole opening moves when the other one throws, and
+// then every board shows its opponent's die a second time straight after its
+// own, which is exactly what it did.
 let shownOpeningAt = { black: -1, ivory: -1 };
 let shownTieAt = -1;
 // The other player's seat: whether anybody is in it, and whether the server
@@ -3213,7 +3216,7 @@ function showOpening(state) {
   const theirs = Rules.other(HUMAN);
   const value = state.opening?.[theirs] ?? null;
   if (value === null) { shownOpening[theirs] = null; shownOpeningAt[theirs] = -1; return; }
-  const at = state.openingSeq ?? 0;
+  const at = state.openingAt?.[theirs] ?? 0;
   if (shownOpening[theirs] === value && shownOpeningAt[theirs] === at) return;
   shownOpening[theirs] = value;
   shownOpeningAt[theirs] = at;
@@ -3320,7 +3323,33 @@ function showClock() {
   clockBox.classList.add("running");
   clockBox.classList.toggle("nearly", seconds <= 5);
 }
+// A throw that was started and never landed leaves the board unable to do
+// anything at all: while it thinks it is in the middle of showing somebody's
+// dice, nothing can be picked up and Tamam stays down with it. From the inside
+// there is nothing to notice — the thing that would clear the flag is the
+// throw coming to rest, which is exactly what did not happen. So it is watched
+// from the outside: if the felt has been still for four seconds and nothing is
+// in a hand, whatever was being waited for is not coming.
+let stuckSince = 0;
+function unstick() {
+  const busy = replayingFor || replayOwed || (heldDice && heldDice.released);
+  if (!busy || pending || diceMeshes.some(d => d.userData.die.mode !== "rest")) {
+    stuckSince = 0;
+    return;
+  }
+  if (!stuckSince) { stuckSince = Date.now(); return; }
+  if (Date.now() - stuckSince < 4000) return;
+  stuckSince = 0;
+  console.info("tavla: inmeyen atış bırakıldı — tahta serbest");
+  replayingFor = null;
+  replayOwed = false;
+  heldDice = null;
+  thrown = false;
+  updateHud();
+}
+
 setInterval(() => {
+  unstick();
   showClock();
   // The held chair counts down in the middle of the table, so the line it is
   // written in has to be redrawn as it goes.
@@ -3374,9 +3403,8 @@ function applyServerState(state) {
   // shown: they are not news to anybody at this table.
   if (firstWord) {
     shownOpening = { ...state.opening };
-    const at = state.openingSeq ?? 0;
-    shownOpeningAt = { black: at, ivory: at };
-    shownTieAt = at;
+    shownOpeningAt = { black: state.openingAt?.black ?? 0, ivory: state.openingAt?.ivory ?? 0 };
+    shownTieAt = Math.max(shownOpeningAt.black, shownOpeningAt.ivory);
   }
 
   // The phase is settled with the turn and the dice rather than ahead of them.
@@ -3469,8 +3497,9 @@ function applyServerState(state) {
     // match until it is broken and every later word about the match carries it.
     const tied = state.phase === "opening" && state.opening
       && state.opening.ivory != null && state.opening.ivory === state.opening.black;
-    if (tied && (state.openingSeq ?? 0) !== shownTieAt) {
-      shownTieAt = state.openingSeq ?? 0;
+    const tieAt = Math.max(state.openingAt?.black ?? 0, state.openingAt?.ivory ?? 0);
+    if (tied && tieAt !== shownTieAt) {
+      shownTieAt = tieAt;
       announce(state.waitingOn === HUMAN ? "open.tieYou" : "open.tieThem");
     }
     // The opening is over: the pair goes back to the middle together, the one
@@ -3502,11 +3531,12 @@ function applyServerState(state) {
     // Their dice, thrown here so they can be seen landing rather than simply
     // appearing. The numbers are the server's; the tumble is found the same
     // way ours is.
-    // Their opening die arrives in the same write that ends the opening — the
-    // server settles both at once — so it is looked for whether or not the
-    // phase has moved on. Reading only the opening phase left the second of
-    // the two dice unthrown on the board that was waiting to see it.
-    if (state.opening) showOpening(state);
+    // Only while the opening is still the opening. The write that ends it is
+    // caught by the branch at the bottom of this function, which shows the die
+    // and then waits for it — asking again from in here is asking a second
+    // time about a throw that has already been shown, and the board that lost
+    // the opening watched the winner's die cross the felt twice.
+    if (state.opening && state.phase === "opening") showOpening(state);
     if (state.phase === "opening" || !state.dice) return;
     // A turn's dice, on the other hand, are only worth showing while they are
     // still the turn's dice.
