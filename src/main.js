@@ -1095,6 +1095,21 @@ const veneerL = new THREE.MeshPhysicalMaterial({
   metalness: .03,
   ...BOARD.gloss,
 });
+// The case and the playing surface come out of the lacquer in the hand, the
+// same as the checkers did. These two cover most of the screen — far more of it
+// than thirty checkers do — so this is the largest saving left: the coat is a
+// second lit surface, and paying for it over that much of the picture is what
+// was keeping a tablet from holding thirty frames even at half its resolution.
+//
+// The dice keep theirs. They are two objects, they are what the eye follows
+// across the felt, and the wet shine on them is most of what makes them read as
+// dice rather than as cubes.
+if (HANDHELD) {
+  for (const wood of [shell, veneerL]) {
+    wood.clearcoat = 0;
+    wood.clearcoatRoughness = 0;
+  }
+}
 const veneerR = veneerL.clone();
 if (BOARD.veneer.mirrored) {
   veneerR.map = veneerTexture.clone();
@@ -1301,10 +1316,14 @@ function addPanelBoard() {
     // Bare in the hand, for the same reason the checkers are — see above.
     clearcoat: HANDHELD ? 0 : .3, clearcoatRoughness: HANDHELD ? 0 : .22,
   });
+  // The old board lays its playing surface out as one panel rather than two
+  // leaves of veneer, so it has a material of its own — and it wants the same
+  // treatment in the hand for the same reason: it is most of the screen.
   const panel = new THREE.MeshPhysicalMaterial({
     map: woodPanelTexture(1024, 640, BOARD.veneer.base, BOARD.veneer.grain,
       [[256, 320, 95], [768, 320, 95]], BOARD.veneer.figure),
     metalness: .03, ...BOARD.gloss,
+    ...(HANDHELD ? { clearcoat: 0, clearcoatRoughness: 0 } : {}),
   });
 
   // One floor, one leaf of veneer laid across the whole of it, and walls the
@@ -4895,12 +4914,19 @@ const SLOW_FRAME = 1000 / 30;
 const EASY_FRAME = SLOW_FRAME * .6;
 const EASY_WINDOWS = 3;
 let recent = [], measuredSince = 0, warmed = false;
-// How many comfortable seconds in a row are wanted before climbing. It doubles
-// every time a climb turns out to have been a mistake, so a machine that truly
-// cannot hold the rung asks less and less often instead of flickering — and
-// one that stumbled over a single throw is back where it belongs in three
-// seconds.
-let easyNeeded = EASY_WINDOWS, easyRun = 0, justClimbed = false;
+// How many comfortable seconds in a row are wanted before climbing.
+let easyRun = 0;
+// How many times each rung has been tried and lost. Doubling the wait after a
+// failed climb was not enough on its own: a machine sitting between two rungs —
+// too slow for the one above, fast enough on the one below to look ready for it
+// — walked up and down between them for minutes on end, and the board changing
+// sharpness every few seconds is worse to sit in front of than either rung.
+//
+// Twice and it is done: the first loss can be a throw that happened to land in
+// the wrong second, the second is the rung's own answer. After that the rung is
+// not asked for again, and the ladder settles where the machine actually lives.
+const RETRIES = 2;
+const lost = SAMPLE_STEPS.map(() => 0);
 
 // Whatever the rung, the second in which the buffer is thrown away and built
 // again is not a second that says anything about the machine.
@@ -4934,10 +4960,9 @@ function watchFrames(now) {
   const typical = gaps.length >= 8 ? gaps[gaps.length >> 1] : elapsed / Math.max(1, frames);
 
   if (typical > SLOW_FRAME) {
-    // Late. The rung below, if there is one — and if we had only just climbed
-    // to this one, the next attempt waits twice as long as this one did.
-    if (justClimbed) easyNeeded = Math.min(easyNeeded * 2, 64);
-    justClimbed = false;
+    // Late. This rung has been lost once more — and the rung below, if there is
+    // one.
+    lost[sampleStep]++;
     easyRun = 0;
     if (sampleStep >= SAMPLE_STEPS.length - 1) return;
     sampleStep++;
@@ -4946,12 +4971,13 @@ function watchFrames(now) {
   }
 
   // On the top rung there is nothing to climb to, and no reason to count.
-  if (sampleStep === 0) { easyRun = 0; justClimbed = false; return; }
+  if (sampleStep === 0) { easyRun = 0; return; }
+  // Asked for twice and lost twice: not asked for again.
+  if (lost[sampleStep - 1] >= RETRIES) { easyRun = 0; return; }
   // Not late, but not comfortable either. The run starts again.
   if (typical > EASY_FRAME) { easyRun = 0; return; }
-  if (++easyRun < easyNeeded) return;
+  if (++easyRun < EASY_WINDOWS) return;
   sampleStep--;
-  justClimbed = true;
   settleLadder(now);
 }
 
