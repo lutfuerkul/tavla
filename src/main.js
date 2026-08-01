@@ -4879,9 +4879,7 @@ const SHOWING_FPS = /[?&]fps\b/.test(location.search);
 let fpsBox = null, fpsFrames = 0, fpsSince = 0;
 if (SHOWING_FPS) {
   fpsBox = document.createElement("div");
-  // Out of the way of both the panel at the top and the buttons at the bottom,
-  // which is a narrower gap on a phone than anywhere else.
-  fpsBox.style.cssText = "position:fixed;z-index:9;left:.5rem;bottom:5.5rem;padding:.35rem .55rem;"
+  fpsBox.style.cssText = "position:fixed;z-index:9;left:.5rem;top:.5rem;padding:.35rem .55rem;"
     + "font:500 .68rem/1.45 monospace;color:#e5ad54;background:rgba(0,0,0,.62);"
     + "border-radius:.3rem;pointer-events:none;white-space:pre;";
   document.body.appendChild(fpsBox);
