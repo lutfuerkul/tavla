@@ -3531,11 +3531,12 @@ function applyServerState(state) {
     // Their dice, thrown here so they can be seen landing rather than simply
     // appearing. The numbers are the server's; the tumble is found the same
     // way ours is.
-    // Their opening die arrives in the same write that ends the opening — the
-    // server settles both at once — so it is looked for whether or not the
-    // phase has moved on. Reading only the opening phase left the second of
-    // the two dice unthrown on the board that was waiting to see it.
-    if (state.opening) showOpening(state);
+    // Only while the opening is still the opening. The write that ends it is
+    // caught by the branch at the bottom of this function, which shows the die
+    // and then waits for it — asking again from in here is asking a second
+    // time about a throw that has already been shown, and the board that lost
+    // the opening watched the winner's die cross the felt twice.
+    if (state.opening && state.phase === "opening") showOpening(state);
     if (state.phase === "opening" || !state.dice) return;
     // A turn's dice, on the other hand, are only worth showing while they are
     // still the turn's dice.
