@@ -233,10 +233,17 @@ let sampleStep = 0;
 // resolution.
 const PIXEL_BUDGET = 15e6;
 
+// Which rung is actually being drawn, which is not always the one the frame
+// timer asked for: a window too large for the budget above is held further
+// down whatever the timer thinks. The readout says this one, since the point
+// of a readout is what is happening rather than what was intended.
+let effectiveStep = 0;
+
 function applySampleRatio() {
   const room = PIXEL_BUDGET / (innerWidth * innerHeight);
   let step = sampleStep;
   while (step < SAMPLE_STEPS.length - 1 && SAMPLE_STEPS[step] ** 2 > room) step++;
+  effectiveStep = step;
   renderer.setPixelRatio(SAMPLE_STEPS[step]);
   renderer.setSize(innerWidth, innerHeight);
 }
@@ -4776,19 +4783,46 @@ fitCamera();
 // Four times the pixels is not free, and there is no knowing beforehand what
 // the machine can carry. So it starts at the top and gives a step back if the
 // frames are not arriving: a full second of them is timed, and if the middle
-// one took longer than a sixtieth of a second and a half, the next step down
-// is taken. It only ever steps down — a scale that has been given up is not
-// tried again, or a machine sitting right on the line would flicker between
-// two of them for as long as the game is open.
+// one took longer than a thirtieth of a second, the next step down is taken.
+//
+// And it climbs back. It used to be one way only, on the grounds that a
+// machine sitting right on the line would flicker between two rungs — but the
+// hardest second of a game of tavla is the one where the dice are tumbling and
+// the shadows are being redrawn every frame, and that second happens once a
+// turn. One-way meant a phone that stumbled on the very first throw spent the
+// rest of the game soft, with nothing left on the screen that needed the frames
+// it had given the sharpness up for. The flickering is answered where it comes
+// from instead: see EASY_FRAME and easyNeeded.
 // Thirty frames a second, not forty. A board that sits still between turns
 // does not need sixty, and every step down the ladder is paid for in
 // sharpness — so it is worth waiting until the frames are genuinely late
 // before giving any of it up.
 const SLOW_FRAME = 1000 / 30;
+// Fast enough to be worth trying the rung above, which is not the same as
+// "not slow": a window that only just cleared the threshold would climb, find
+// it cannot hold it, and come straight back down. Comfortably clear, and
+// comfortably for a while.
+const EASY_FRAME = SLOW_FRAME * .6;
+const EASY_WINDOWS = 3;
 let recent = [], measuredSince = 0, warmed = false;
+// How many comfortable seconds in a row are wanted before climbing. It doubles
+// every time a climb turns out to have been a mistake, so a machine that truly
+// cannot hold the rung asks less and less often instead of flickering — and
+// one that stumbled over a single throw is back where it belongs in three
+// seconds.
+let easyNeeded = EASY_WINDOWS, easyRun = 0, justClimbed = false;
+
+// Whatever the rung, the second in which the buffer is thrown away and built
+// again is not a second that says anything about the machine.
+function settleLadder(now) {
+  applySampleRatio();
+  recent = [];
+  measuredSince = now;
+  warmed = false;
+  easyRun = 0;
+}
 
 function watchFrames(now) {
-  if (sampleStep >= SAMPLE_STEPS.length - 1) return;
   if (!measuredSince) { measuredSince = now; return; }
   recent.push(now);
   const elapsed = now - measuredSince;
@@ -4808,9 +4842,27 @@ function watchFrames(now) {
   // would throw away exactly the windows this is here to catch.
   gaps.sort((a, b) => a - b);
   const typical = gaps.length >= 8 ? gaps[gaps.length >> 1] : elapsed / Math.max(1, frames);
-  if (typical <= SLOW_FRAME) return;
-  sampleStep++;
-  applySampleRatio();
+
+  if (typical > SLOW_FRAME) {
+    // Late. The rung below, if there is one — and if we had only just climbed
+    // to this one, the next attempt waits twice as long as this one did.
+    if (justClimbed) easyNeeded = Math.min(easyNeeded * 2, 64);
+    justClimbed = false;
+    easyRun = 0;
+    if (sampleStep >= SAMPLE_STEPS.length - 1) return;
+    sampleStep++;
+    settleLadder(now);
+    return;
+  }
+
+  // On the top rung there is nothing to climb to, and no reason to count.
+  if (sampleStep === 0) { easyRun = 0; justClimbed = false; return; }
+  // Not late, but not comfortable either. The run starts again.
+  if (typical > EASY_FRAME) { easyRun = 0; return; }
+  if (++easyRun < easyNeeded) return;
+  sampleStep--;
+  justClimbed = true;
+  settleLadder(now);
 }
 
 // Frames stop arriving while the tab is in the background, and the gap either
@@ -4845,7 +4897,7 @@ function showFps(now) {
   fpsSince = now;
   const drawn = canvas.width * canvas.height;
   const screen = innerWidth * innerHeight * devicePixelRatio ** 2;
-  fpsBox.textContent = `${fps} fps · basamak ${sampleStep + 1}/${SAMPLE_STEPS.length}\n`
+  fpsBox.textContent = `${fps} fps · basamak ${effectiveStep + 1}/${SAMPLE_STEPS.length}\n`
     + `${canvas.width}x${canvas.height} — ekranın %${Math.round(100 * drawn / screen)}'i\n`
     + `dpr ${devicePixelRatio}`;
 }
