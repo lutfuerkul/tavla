@@ -179,13 +179,14 @@ function takeSeat() {
 takeSeat();
 
 
-// A dense screen has two of its own pixels to every one the page asks for,
-// which does most of the work multisampling is there to do: an edge already
-// lands on two and the screen averages them. On a tablet four samples on top
-// of that cost four megapixels of bandwidth a frame and buy an edge that is
-// hard to see, and paying for them was what forced the board to be drawn below
-// its own resolution — which is not hard to see at all.
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !TABLET });
+// A dense screen has two or three of its own pixels to every one the page asks
+// for, which does most of the work multisampling is there to do: an edge
+// already lands on several and the screen averages them. Four samples on top of
+// that cost megapixels of bandwidth a frame and buy an edge that is hard to
+// see, and paying for them was what forced the board to be drawn below its own
+// resolution — which is not hard to see at all. Tablets were let off it and
+// phones were not, though a phone is the denser screen of the two.
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !HANDHELD });
 // The scene is drawn at more samples than the screen has pixels and the
 // browser shrinks it down. On a 1080p monitor, which reports a device ratio of
 // 1, the die comes out nineteen pixels across and each of its pips lands on
@@ -200,7 +201,24 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: !TABLET });
 // not keep up. That is exactly the machine that needs the room: a tablet
 // painting five or six megapixels of clearcoat has no other way out, and a
 // softer board that answers the finger beats a sharp one that does not.
-const SAMPLE_STEPS = [2, 1.5, 1];
+// What the screen actually has, which is the number that matters and the one
+// this was not asking. A desktop monitor reports one pixel per pixel, so
+// drawing at two is drawing beyond the screen and the extra is spent
+// sharpening. A phone reports two and three quarters — and drawing that at two
+// is not extra at all, it is drawing barely half the pixels the screen owns
+// and letting it stretch the result. The board was soft on every phone in the
+// world for exactly that reason, and sharp on the desktop it was tuned on.
+//
+// Capped at three: past that the buffer grows faster than anything anybody can
+// see, and it is the buffer that has to be paid for.
+const NATIVE = Math.min(devicePixelRatio || 1, 3);
+// The top rung is the screen's own resolution, or twice the page's on a screen
+// that has no more to give — never below what the old ladder started at. The
+// rungs under it are a proportion of that rather than fixed numbers, so a
+// dense screen steps down to something still worth looking at instead of
+// falling straight to a third of itself.
+const TOP = Math.max(2, NATIVE);
+const SAMPLE_STEPS = [TOP, TOP * .75, TOP * .55];
 let sampleStep = 0;
 
 // A ceiling on the drawing buffer itself, whatever the ladder would like. Two
@@ -225,7 +243,10 @@ function applySampleRatio() {
 
 applySampleRatio();
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// The soft filter takes several taps per pixel of a second full pass over the
+// board. On a screen held at arm's length the cheaper one is not the thing
+// anybody notices; the resolution it pays for is.
+renderer.shadowMap.type = HANDHELD ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
 // The shadows are drawn by rendering the whole board a second time from the
 // light's side, every frame. On a tavla board almost nothing moves for most of
 // the time — the player is looking at it, deciding — and drawing that second
@@ -1451,11 +1472,12 @@ const THICK_PROFILE = [
   mm(0, 6.000),
 ];
 
-// Ninety-six segments turn a checker that is an inch across on a desktop. On a
-// tablet it is a centimetre and forty-eight are past telling apart, so half the
-// triangles on the board go away for nothing.
+// Ninety-six segments turn a checker that is an inch across on a desktop. In
+// the hand it is a centimetre and forty-eight are past telling apart, so half
+// the triangles on the board go away for nothing. Phones were turning all
+// ninety-six, thirty times over, for a checker smaller than a tablet's.
 const checkerGeometry = new THREE.LatheGeometry(
-  THICK ? THICK_PROFILE : THIN_PROFILE, TABLET ? 48 : 96);
+  THICK ? THICK_PROFILE : THIN_PROFILE, HANDHELD ? 48 : 96);
 
 // --- Dice ------------------------------------------------------------
 // A real die: every face carries its own pips, opposite faces sum to 7,
@@ -4666,10 +4688,13 @@ function addRoom() {
   const key = new THREE.DirectionalLight(0xfff4e2, 2.5);
   key.position.set(6 * AWAY, 10, -6 * AWAY);
   key.castShadow = true;
-  // Half the map on a tablet: a texel is 0.9 mm across the board instead of
+  // Half the map in the hand: a texel is 0.9 mm across the board instead of
   // 0.46, which is under the width of the softening already applied to the
-  // edge, and the second pass costs a quarter of what it did.
-  const shadowPixels = TABLET ? 1024 : 2048;
+  // edge, and the second pass costs a quarter of what it did. A phone was
+  // paying for the full map — four megapixels of it, drawn from the light's
+  // side — at the same time as it was being told it could not afford its own
+  // screen.
+  const shadowPixels = HANDHELD ? 1024 : 2048;
   key.shadow.mapSize.set(shadowPixels, shadowPixels);
   key.shadow.bias = -0.0004;
   key.shadow.normalBias = .02;
