@@ -3320,7 +3320,33 @@ function showClock() {
   clockBox.classList.add("running");
   clockBox.classList.toggle("nearly", seconds <= 5);
 }
+// A throw that was started and never landed leaves the board unable to do
+// anything at all: while it thinks it is in the middle of showing somebody's
+// dice, nothing can be picked up and Tamam stays down with it. From the inside
+// there is nothing to notice — the thing that would clear the flag is the
+// throw coming to rest, which is exactly what did not happen. So it is watched
+// from the outside: if the felt has been still for four seconds and nothing is
+// in a hand, whatever was being waited for is not coming.
+let stuckSince = 0;
+function unstick() {
+  const busy = replayingFor || replayOwed || (heldDice && heldDice.released);
+  if (!busy || pending || diceMeshes.some(d => d.userData.die.mode !== "rest")) {
+    stuckSince = 0;
+    return;
+  }
+  if (!stuckSince) { stuckSince = Date.now(); return; }
+  if (Date.now() - stuckSince < 4000) return;
+  stuckSince = 0;
+  console.info("tavla: inmeyen atış bırakıldı — tahta serbest");
+  replayingFor = null;
+  replayOwed = false;
+  heldDice = null;
+  thrown = false;
+  updateHud();
+}
+
 setInterval(() => {
+  unstick();
   showClock();
   // The held chair counts down in the middle of the table, so the line it is
   // written in has to be redrawn as it goes.
