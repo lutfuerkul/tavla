@@ -44,10 +44,22 @@ jobs:
       - name: Kural eşitliği
         run: node functions/kural-esitligi.mjs
 
+      # firebase-tools doğrudan çağrılıyor. Hazır bir action'ın arkasına
+      # geçmek, sırrı hangi adla beklediğini bilmeyi gerektiriyor — ve yanlış
+      # ad, kimlik hiç ulaşmamış gibi görünüyor ("have you run firebase
+      # login?"). Anahtar burada bir dosyaya yazılıyor, Google kütüphaneleri
+      # onu GOOGLE_APPLICATION_CREDENTIALS'tan kendi buluyor. Dosya
+      # RUNNER_TEMP'te, iş bitince silinen yerde — depoya düşmüyor.
       - name: Deploy
-        uses: w9jds/firebase-action@v14.10.1
-        with:
-          args: deploy --only functions,firestore:rules,database --project tavla3b
         env:
-          GOOGLE_APPLICATION_CREDENTIALS: /github/workspace/gcloud.json
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "FIREBASE_SERVICE_ACCOUNT sırrı yok — repo Settings → Secrets → Actions"
+            exit 1
+          fi
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/gcloud.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/gcloud.json"
+          npx --yes firebase-tools@latest deploy \
+            --only functions,firestore:rules,database \
+            --project tavla3b --non-interactive --force
