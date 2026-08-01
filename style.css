@@ -3,6 +3,10 @@
 :root { color-scheme: dark; }
 * { box-sizing: border-box; }
 html, body, #app, #scene { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+/* A phone's address bar is part of the window as far as 100% is concerned, so
+   a page sized to it is taller than what can be seen. dvh is the height that
+   is actually there. */
+html, body, #app, #scene { height: 100dvh; }
 body { background: #090807; color: #f3ead7; font-family: "DM Mono", monospace; }
 /* On a tablet the board is played with a finger, and a finger dragging across
    a canvas is a page gesture as far as the browser is concerned — it takes the
@@ -276,6 +280,14 @@ body.ideographic #hud span, body.ideographic #hud strong {
 #cancel:hover { border-color: #e5ad54; color: #f6ecd6; background: rgba(36,26,16,.9); }
 #cancel[hidden] { display: none; }
 
+/* A row that is not a choice. Online the colour belongs to the room, so the
+   row stays where it is — a row that vanishes is a row somebody goes looking
+   for — but it says what happens instead of offering something that would be
+   overruled a second later. */
+.setting.assigned .setting-value { color: #8e8474; cursor: default;
+  border-color: rgba(229,173,84,.14); background: rgba(8,6,4,.5); }
+.setting.assigned .setting-value::after { opacity: .25; }
+
 /* Which checkers are yours, and the door handle. */
 #colours { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin: 1.1rem 0 0; }
 
@@ -300,26 +312,34 @@ body.ideographic #hud span, body.ideographic #hud strong {
    are tightened instead. Wide windows keep the heading on the middle of the
    board, which is where it was asked to sit. */
 @media (max-width: 600px) {
-  #intro { place-content: center; padding: 1.2rem; }
+  /* Not centred. A centred column taller than its box is cut off at both ends
+     and the top cannot be scrolled to at all — which is how the first row of
+     languages went missing while the way in went off the bottom. Started at
+     the top, everything is reachable, and the tightening below is so that on
+     most phones there is nothing to reach for. */
+  #intro { place-content: start center; padding: .7rem 1rem 1.6rem; }
   /* No room up the side of a phone, so the languages become a row of their
      own at the top of the door instead. */
   #langs { position: static; flex-direction: row; flex-wrap: wrap;
-    justify-content: center; gap: .3rem; margin-bottom: 1rem; }
+    justify-content: center; gap: .22rem; margin-bottom: .5rem; }
   /* No black band above the board on a phone — the languages are up there —
      so it goes back into the door where it came from. */
-  .eyebrow { position: static; transform: none; margin: 0 0 .6rem; }
-  #online { position: static; transform: none; justify-self: center; margin: 0 0 .9rem; }
-  .lang-pick { width: auto; font-size: .66rem; padding: .3rem .5rem; }
-  #modes { margin: 1.1rem 0 .9rem; }
-  .mode-pick, .board-pick, .colour-pick, .side-pick { padding: .62rem 1.05rem; font-size: .78rem; }
+  .eyebrow { position: static; transform: none; margin: 0 0 .35rem; font-size: .66rem; }
+  #online { position: static; transform: none; justify-self: center; margin: 0 0 .5rem;
+    padding: .26rem .55rem; font-size: .62rem; }
+  h1 { font-size: clamp(1.9rem, 9vw, 2.8rem); }
+  .lang-pick { width: auto; font-size: .6rem; padding: .22rem .4rem; gap: .35rem; }
+  .lang-pick svg { width: 15px; height: 10px; }
+  #modes { margin: .7rem 0 .6rem; }
+  .mode-pick, .board-pick, .colour-pick, .side-pick { padding: .55rem 1rem; font-size: .74rem; }
   /* A phone is not wide enough for a name and a box side by side without one
      of them being squeezed, so the name goes above its box. */
-  #settings { gap: .7rem; margin: .2rem auto 1.2rem; padding: .9rem 1rem;
+  #settings { gap: .45rem; margin: .2rem auto .7rem; padding: .7rem .9rem;
     width: 100%; max-width: 20rem; }
-  .setting { grid-template-columns: 1fr; gap: .25rem; }
-  .setting-name { font-size: .66rem; }
-  .setting-value { padding: .6rem 2rem .6rem .85rem; font-size: .76rem; }
-  #start { margin-top: 1.3rem; padding: .78rem 2.2rem; }
+  .setting { grid-template-columns: 1fr; gap: .15rem; }
+  .setting-name { font-size: .62rem; }
+  .setting-value { padding: .5rem 1.9rem .5rem .8rem; font-size: .72rem; }
+  #start { margin-top: .8rem; padding: .68rem 2rem; }
 }
 
 /* A window too short to hold the door from its middle down starts it at the
@@ -366,7 +386,9 @@ body.ideographic #hud span, body.ideographic #hud strong {
 #end-table:hover { border-color: #e5ad54; color: #f6ecd6; background: rgba(36,26,16,.95); }
 #end-table[hidden] { display: none; }
 @media (max-width: 600px) {
-  #table-code { top: 4.2rem; right: .8rem; padding: .45rem .65rem; }
+  /* Under the readout rather than beside it: on a phone the panel runs the
+     width of the screen and the corner it used to stand in is the score. */
+  #table-code { top: 7.2rem; right: .8rem; padding: .45rem .65rem; }
   #table-code strong { font-size: .82rem; letter-spacing: .22em; }
 }
 
@@ -454,4 +476,37 @@ body.ideographic #hud span, body.ideographic #hud strong {
   letter-spacing: .12em; text-transform: uppercase; }
 @media (orientation: landscape) and (pointer: coarse) {
   #rotate { display: flex; }
+}
+/* Unless the browser's own bars have gone. Sideways is the better shape for a
+   board — it is wider than it is deep — and what made it unusable was the
+   address bar and the tab strip eating the height, not the orientation. With
+   those gone the board is bigger than it ever is upright, so the warning has
+   nothing left to warn about. */
+html:fullscreen #rotate,
+html:-webkit-full-screen #rotate { display: none; }
+/* The way out of the warning, inside the warning: it covers the screen, so a
+   button anywhere else cannot be reached from here. */
+#rotate button { padding: .7rem 1.5rem; font: 500 .74rem/1 "DM Mono", monospace;
+  letter-spacing: .12em; text-transform: uppercase; }
+#rotate button[hidden] { display: none; }
+
+/* Sideways, with the bars gone: the board takes the whole height and the
+   readings go down one side of it, the buttons down the other. Upright the two
+   of them sit above and below because a phone held that way has height to
+   spare and no width; turned over, it is the other way round exactly. */
+@media (orientation: landscape) and (pointer: coarse) {
+  html:fullscreen #hud, html:-webkit-full-screen #hud {
+    top: 50%; left: .5rem; transform: translateY(-50%);
+    flex-direction: column; gap: .35rem; }
+  html:fullscreen #hud div, html:-webkit-full-screen #hud div {
+    min-width: 6.6rem; padding: .5rem .7rem; }
+  html:fullscreen #controls, html:-webkit-full-screen #controls {
+    top: 50%; bottom: auto; left: auto; right: .5rem;
+    width: auto; padding: 0; flex-wrap: nowrap;
+    transform: translateY(-50%); flex-direction: column; gap: .35rem; }
+  html:fullscreen #controls button, html:-webkit-full-screen #controls button {
+    width: 100%; }
+  html:fullscreen #table-code, html:-webkit-full-screen #table-code {
+    top: .5rem; right: .5rem; }
+  html:fullscreen #menu, html:-webkit-full-screen #menu { top: .5rem; right: .5rem; }
 }
