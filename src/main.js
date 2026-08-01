@@ -699,12 +699,62 @@ showLobby();
 // here, at the last moment, so pressing the button twice can give two
 // different tables rather than the same one it happened to pick on the way in.
 const sideName = SIDE === -1 ? "sag" : "sol";
+// Filling the window is not filling the screen: the browser's own bars stay
+// where they are, and on a phone they are a third of the height. Fullscreen is
+// only ever granted to a gesture — a page cannot ask for it on its own — so it
+// is asked for on the one press that starts the game.
+//
+// When the door has to load the page again (a different table, a different
+// colour) the request cannot survive the reload, so it is left behind as a
+// note and picked up by the first touch on the board, which is the throw.
+const FULLSCREEN_KEY = "tavla.tamekran";
+const fullscreenRoot = () => document.documentElement;
+const inFullscreen = () =>
+  !!(document.fullscreenElement ?? document.webkitFullscreenElement);
+
+function goFullscreen() {
+  if (inFullscreen()) return;
+  const root = fullscreenRoot();
+  const ask = root.requestFullscreen ?? root.webkitRequestFullscreen;
+  // Not everywhere: an iPhone will only ever do this for a video, and asking
+  // is how you find out. There is nothing to do about it but leave the page
+  // filling the window, which it already does.
+  try { ask?.call(root)?.catch?.(() => {}); } catch { /* no fullscreen here */ }
+}
+
+function leaveFullscreen() {
+  const exit = document.exitFullscreen ?? document.webkitExitFullscreen;
+  try { exit?.call(document)?.catch?.(() => {}); } catch { /* already out */ }
+}
+
+// The way back out, under the menu. Only there while there is something to
+// come out of — on a machine that cannot go fullscreen it never appears.
+const fullButton = document.querySelector("#unfull");
+const showFullscreen = () => fullButton?.toggleAttribute("hidden", !inFullscreen());
+document.addEventListener("fullscreenchange", showFullscreen);
+document.addEventListener("webkitfullscreenchange", showFullscreen);
+fullButton?.addEventListener("click", leaveFullscreen);
+showFullscreen();
+
+// The note the reload left. One touch, and only one — and taken as the hand
+// comes off rather than as it goes down, so the window is not resized under a
+// throw that is halfway through being made.
+if (sessionStorage.getItem(FULLSCREEN_KEY)) {
+  const take = () => {
+    sessionStorage.removeItem(FULLSCREEN_KEY);
+    removeEventListener("pointerup", take, true);
+    goFullscreen();
+  };
+  addEventListener("pointerup", take, true);
+}
+
 startButton?.addEventListener("click", () => {
   if (!pickedMode) return;
   const board = settle("board"), colour = settle("colour"), side = settle("side");
   const piece = settle("piece");
   if (board === boardName && colour === HUMAN && side === sideName
-      && piece === pieceType) return sitDown();
+      && piece === pieceType) { goFullscreen(); return sitDown(); }
+  sessionStorage.setItem(FULLSCREEN_KEY, "1");
   localStorage.setItem(BOARD_KEY, board);
   localStorage.setItem(COLOUR_KEY, colour);
   localStorage.setItem(SIDE_KEY, side);
