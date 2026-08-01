@@ -179,67 +179,77 @@ function takeSeat() {
 takeSeat();
 
 
-// A dense screen has two or three of its own pixels to every one the page asks
-// for, which does most of the work multisampling is there to do: an edge
-// already lands on several and the screen averages them. Four samples on top of
-// that cost megapixels of bandwidth a frame and buy an edge that is hard to
-// see, and paying for them was what forced the board to be drawn below its own
-// resolution — which is not hard to see at all. Tablets were let off it and
-// phones were not, though a phone is the denser screen of the two.
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !HANDHELD });
-// The scene is drawn at more samples than the screen has pixels and the
-// browser shrinks it down. On a 1080p monitor, which reports a device ratio of
-// 1, the die comes out nineteen pixels across and each of its pips lands on
-// two — drawing larger is the only thing that sharpens both the silhouette and
-// what is printed on the faces, because multisampling only ever touches the
-// silhouette. Two samples is also the ceiling: a screen already reporting two
-// or more is drawn at its own resolution, not beyond it.
+// The scene is drawn at more samples than the screen has pixels and the browser
+// shrinks it down. On a 1080p monitor, which reports one device pixel to every
+// one of the page's, the die comes out nineteen pixels across and each of its
+// pips lands on two — drawing larger is the only thing that sharpens both the
+// silhouette and what is printed on the faces, since multisampling only ever
+// touches the silhouette.
 //
-// The steps below it are the same for every screen. They used to be cut off at
-// whatever the screen reported, which left a tablet — every one of which
-// reports two — on a ladder with a single rung and nowhere to go when it could
-// not keep up. That is exactly the machine that needs the room: a tablet
-// painting five or six megapixels of clearcoat has no other way out, and a
-// softer board that answers the finger beats a sharp one that does not.
 // What the screen actually has, which is the number that matters and the one
-// this was not asking. A desktop monitor reports one pixel per pixel, so
-// drawing at two is drawing beyond the screen and the extra is spent
-// sharpening. A phone reports two and three quarters — and drawing that at two
-// is not extra at all, it is drawing barely half the pixels the screen owns
-// and letting it stretch the result. The board was soft on every phone in the
-// world for exactly that reason, and sharp on the desktop it was tuned on.
-//
-// Capped at three: past that the buffer grows faster than anything anybody can
-// see, and it is the buffer that has to be paid for.
+// this was not asking. A phone reports three of its own pixels to every one of
+// the page's — so drawing that at two is not extra at all, it is drawing barely
+// half the pixels the screen owns and letting it stretch the result. The board
+// was soft on every phone in the world for exactly that reason, and sharp on
+// the desktop it was tuned on.
 const NATIVE = Math.min(devicePixelRatio || 1, 3);
-// The top rung is the screen's own resolution, or twice the page's on a screen
-// that has no more to give — never below what the old ladder started at. The
-// rungs under it are a proportion of that rather than fixed numbers, so a
-// dense screen steps down to something still worth looking at instead of
-// falling straight to a third of itself.
-// In the hand, the screen's own resolution and no further. Drawing beyond it is
-// what sharpens a desktop monitor, where the page's pixel and the screen's are
-// the same size and there is room above — but a phone or a tablet already has
-// two or three of its own to every one of the page's, which is the sharpening
-// done. Anything past that is a bigger buffer for a picture nobody can tell
-// apart, paid for by the machine least able to pay.
-const TOP = HANDHELD ? NATIVE : Math.max(2, NATIVE);
-const SAMPLE_STEPS = [TOP, TOP * .75, TOP * .55];
-let sampleStep = 0;
-
-// A ceiling on the drawing buffer itself, whatever the ladder would like: 4K,
-// and not a pixel past it. Two samples across a 4K window is 7680x4320 —
-// thirty-three megapixels of colour and of depth, with four multisamples behind
-// every one of them, which is over a gigabyte asked for before a single frame
-// is drawn. The frame timer further down would give a step back a second later,
-// but the memory is asked for first.
+// In the hand: the screen's own resolution and not a pixel further. A phone or
+// a tablet already has two or three of its own to every one of the page's,
+// which is the sharpening done. Anything past that is a bigger buffer for a
+// picture nobody can tell apart, paid for by the machine least able to pay.
 //
-// And past 4K it buys nothing anybody can see: a 4K buffer already draws the
-// die thirty-eight pixels across, which is exactly what a 1080p window gets out
-// of drawing at two samples — the sharpest the board has ever looked. So 1080p
-// stays on the top rung (two samples is 4K exactly), 1440p comes down to where
-// it also lands on 4K, and a 4K window draws its own resolution.
-const PIXEL_BUDGET = 3840 * 2160;
+// On a desktop: as far up as the ceiling below allows. The room is there — a
+// monitor sitting at a hundred and eighty frames is not being asked for
+// anything — and all of it goes into the faces of the dice and the grain of
+// the wood, which are the two things a fixed screen is close enough to read.
+const TOP = HANDHELD ? NATIVE : 4;
+// The rungs under the top are a proportion of it rather than fixed numbers, so
+// a dense screen steps down to something still worth looking at instead of
+// falling straight to a fraction of itself. A desktop is given more of them,
+// because it is the one being asked for eight times the pixels and the machine
+// underneath it might be anything.
+// Fractions of whatever the top turns out to be, rather than samples in their
+// own right. The top is not known here: it is TOP or as much of it as the
+// ceiling below leaves, and which of the two it is depends on the size of the
+// window. Written as fixed numbers, the rungs missed the ceiling — a 4K monitor
+// allowed a buffer of exactly 8K would find its rungs sitting either side of it
+// and take the one underneath, drawing eighteen megapixels where thirty-three
+// were free.
+const LADDER = HANDHELD ? [1, .75, .55] : [1, .75, .55, .375, .25];
+// Where it starts, which is not the same as where it belongs. A handheld starts
+// at its own screen, which is a known quantity — that is what the screen has and
+// nothing more is being asked for.
+//
+// A desktop starts two rungs down. The top of a desktop ladder is 8K, and an
+// 8K buffer asked for by a laptop with no graphics card to speak of is a page
+// that does not move for two seconds while the memory is found and the first
+// frames crawl — and only then does the frame timer notice and give it back.
+// Climbing costs nothing by comparison: three comfortable seconds and it takes
+// the next rung, so the machine that can carry 8K is drawing it six seconds in,
+// and the one that cannot never asked.
+let sampleStep = HANDHELD ? 0 : 2;
+
+// A ceiling on the drawing buffer itself, whatever the ladder would like: 8K,
+// which is as large as screens are sold. Thirty-three megapixels of colour and
+// of depth is a quarter of a gigabyte asked for before a single frame is drawn,
+// and the frame timer further down is no help with that — it answers a second
+// later, and the memory is asked for first.
+//
+// Or the screen itself, should a screen ever be larger than that. A panel drawn
+// into a buffer smaller than itself is a screen being shown less than it has,
+// which is the fault this whole ladder was rewritten to stop.
+const PIXEL_BUDGET = 7680 * 4320;
+const budgetNow = () =>
+  Math.max(PIXEL_BUDGET, innerWidth * innerHeight * (devicePixelRatio || 1) ** 2);
+
+// No multisampling, on any screen. It exists to soften silhouettes in a buffer
+// the size of the screen, and there is no longer such a buffer anywhere: a
+// desktop draws at two samples or more even on its lowest rung — which softens
+// the silhouettes and sharpens the printed faces, which multisampling never
+// could — and a handheld screen is dense enough to do the same with its own
+// pixels. Four samples behind an 8K buffer is a gigabyte, for an edge that has
+// already been dealt with twice over.
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
 
 // Which rung is actually being drawn, which is not always the one the frame
 // timer asked for: a window too large for the budget above is held further
@@ -248,16 +258,11 @@ const PIXEL_BUDGET = 3840 * 2160;
 let effectiveStep = 0;
 
 function applySampleRatio() {
-  const room = PIXEL_BUDGET / (innerWidth * innerHeight);
-  let step = sampleStep;
-  while (step < SAMPLE_STEPS.length - 1 && SAMPLE_STEPS[step] ** 2 > room) step++;
-  effectiveStep = step;
-  // The bottom rung is not a floor for the ceiling. A window large enough that
-  // even the lowest rung overruns the budget used to be given that rung anyway
-  // and drawn over 4K regardless — the ladder ran out before the limit did. The
-  // ratio itself is held to what the budget allows, so the cap is a cap.
-  const capped = Math.sqrt(room);
-  renderer.setPixelRatio(Math.min(SAMPLE_STEPS[step], capped));
+  // As high as this window is allowed to go: what the screen is worth, held to
+  // what the buffer may cost.
+  const ceiling = Math.min(TOP, Math.sqrt(budgetNow() / (innerWidth * innerHeight)));
+  effectiveStep = Math.min(sampleStep, LADDER.length - 1);
+  renderer.setPixelRatio(ceiling * LADDER[effectiveStep]);
   renderer.setSize(innerWidth, innerHeight);
 }
 
@@ -4862,7 +4867,7 @@ function watchFrames(now) {
     if (justClimbed) easyNeeded = Math.min(easyNeeded * 2, 64);
     justClimbed = false;
     easyRun = 0;
-    if (sampleStep >= SAMPLE_STEPS.length - 1) return;
+    if (sampleStep >= LADDER.length - 1) return;
     sampleStep++;
     settleLadder(now);
     return;
@@ -4898,6 +4903,24 @@ if (SHOWING_FPS) {
   document.body.appendChild(fpsBox);
 }
 
+// The card the browser is willing to name. Asked once — it is behind an
+// extension the browser may or may not hand over, and on a phone it is often
+// the only way to know which chip is in there.
+function graphicsCard() {
+  try {
+    const gl = renderer.getContext();
+    const ext = gl.getExtension("WEBGL_debug_renderer_info");
+    const name = ext && gl.getParameter(ext.UNMASKED_RENDERER_WEBGL);
+    // Chrome wraps the answer in its own translation layer's name — ANGLE
+    // (Qualcomm, Adreno (TM) 642L, OpenGL ES 3.2) — and the part worth reading
+    // is inside the brackets.
+    return String(name ?? gl.getParameter(gl.RENDERER) ?? "?")
+      .replace(/^ANGLE \((.*)\)$/, "$1").slice(0, 46);
+  } catch { return "?"; }
+}
+const CARD = graphicsCard();
+const MB = bytes => Math.round(bytes / 1048576);
+
 function showFps(now) {
   if (!fpsBox) return;
   fpsFrames++;
@@ -4908,9 +4931,23 @@ function showFps(now) {
   fpsSince = now;
   const drawn = canvas.width * canvas.height;
   const screen = innerWidth * innerHeight * devicePixelRatio ** 2;
-  fpsBox.textContent = `${fps} fps · basamak ${effectiveStep + 1}/${SAMPLE_STEPS.length}\n`
+  // What the card is holding for us, as far as it can be worked out from here:
+  // the drawing buffer is colour and depth, four bytes each, and the shadow map
+  // is a second pass of its own. Textures are counted rather than measured —
+  // their sizes are not exposed — so this is a floor, not a total. Named as an
+  // estimate because it is one.
+  const shadowSide = HANDHELD ? 1024 : 2048;
+  const buffer = drawn * 8 + shadowSide * shadowSide * 4;
+  const info = renderer.info;
+  // Chrome alone offers this, and only over https or localhost.
+  const heap = performance.memory?.usedJSHeapSize;
+  fpsBox.textContent = `${fps} fps · basamak ${effectiveStep + 1}/${LADDER.length}\n`
     + `${canvas.width}x${canvas.height} — ekranın %${Math.round(100 * drawn / screen)}'i\n`
-    + `dpr ${devicePixelRatio}`;
+    + `dpr ${devicePixelRatio} · ${info.render.triangles.toLocaleString("tr")} üçgen`
+    + ` · ${info.render.calls} çizim\n`
+    + `tampon ~${MB(buffer)} MB · ${info.memory.textures} doku`
+    + `${heap ? ` · bellek ${MB(heap)} MB` : ""}\n`
+    + CARD;
 }
 
 const clock = new THREE.Clock();
