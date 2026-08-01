@@ -28,14 +28,17 @@ const MATCH_TARGET = 3;
 // a slow player and is not treated as one — see HELD_SECONDS.
 const ROLL_SECONDS = 20;
 const MOVE_SECONDS = 60;
-// The opening keeps no time at all. Nobody is thinking yet — they have just
-// sat down, and the first thing asked of them is a die that decides nothing
-// but who goes first. Taking that throw away from somebody who is still
-// finding the board buys nothing and reads as the game throwing dice by
-// itself, so it waits for them however long they take.
+// The opening used to keep no time at all: nobody is thinking yet, they have
+// just sat down, and the first thing asked of them is a die that decides
+// nothing but who goes first. Taking that throw away from somebody still
+// finding the board buys nothing.
 //
-// An empty chair is a different matter and is handled where all of them are.
-const OPEN_SECONDS = Infinity;
+// It is also the one place a table could be held for ever. A chair that empties
+// is noticed and waited out; a player who stays connected and never throws was
+// answered by nothing at all, since the clock that answers that is the same
+// clock the opening did not have. Shorter than the others, because it is not a
+// decision — there is one die and nothing to weigh up about it.
+const OPEN_SECONDS = 20;
 // How long an empty chair is waited for before the table closes. Nothing is
 // played in it and nothing sits down in it: the game stops where it stood and
 // the other board is told, with the minute counted out in front of them. Come
@@ -772,12 +775,23 @@ function actFor(match, colour) {
   if (match.phase === "opening") {
     const value = d6();
     const opening = { ...match.opening, [colour]: value };
-    const patch = { opening, updatedAt: now(), ...CLOCK(), seq: match.seq + 1 };
+    // Stamped, the same as a throw made by hand. Without it a board cannot tell
+    // this die from one it has already watched land, and the same face thrown
+    // twice — which is exactly what breaking a tie produces — went unshown.
+    const patch = {
+      opening,
+      openingAt: { ...(match.openingAt ?? {}), [colour]: match.seq + 1 },
+      updatedAt: now(), ...CLOCK(), seq: match.seq + 1,
+    };
     if (opening.ivory === null || opening.black === null) {
       patch.waitingOn = opening.black === null ? "black" : "ivory";
     } else if (opening.ivory === opening.black) {
-      patch.opening = { ivory: null, black: null };
-      patch.waitingOn = "black";
+      // The same rule the players play by: whoever threw second throws again,
+      // alone, against the number the two of them made. This was left behind
+      // when that rule changed — it still wiped both dice and started the
+      // opening over from black, so a tie broken by the clock was played by
+      // one set of rules and a tie broken by hand by another.
+      patch.waitingOn = colour;
     } else {
       patch.phase = "play";
       patch.waitingOn = null;

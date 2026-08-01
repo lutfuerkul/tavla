@@ -94,6 +94,10 @@ const MIRROR = (HUMAN === "black" ? -1 : 1) * SIDE;
 // built, because the picker that sets them runs there.
 const MODE_KEY = "tavla.mode";
 const MATCH_KEY = "tavla.mac";
+// A table this browser has got up from but may not have managed to say so
+// about. Written before the word is sent and cleared once it has arrived —
+// see leaveTable and the retry below it.
+const LEAVING_KEY = "tavla.kalkilan";
 const MODES = ["solo", "hotseat", "online"];
 let mode = MODES.includes(localStorage.getItem(MODE_KEY)) ? localStorage.getItem(MODE_KEY) : "solo";
 // The match this browser is sitting at, if it is sitting at one. Online is the
@@ -827,6 +831,17 @@ startButton?.addEventListener("click", () => {
 if (sessionStorage.getItem("tavla.sitOnLoad")) {
   sessionStorage.removeItem("tavla.sitOnLoad");
   sitDown();
+}
+
+// A table left behind unsaid: the page went before the server answered, or the
+// tab was closed on the way. Said now, from the door, before anybody at that
+// table has finished waiting out the minute. Harmless if it was said after all
+// — closing a table twice closes it once.
+const unsaid = localStorage.getItem(LEAVING_KEY);
+if (unsaid) {
+  ask("masayiBirak", { matchId: unsaid })
+    .catch(() => {})
+    .then(() => localStorage.removeItem(LEAVING_KEY));
 }
 
 // Advanced Perlin-like noise function for organic wood grain
@@ -3318,7 +3333,7 @@ const OPENING_HELD_MS = 3500;
 // the panel. Nothing is decided by these — the clock that matters runs on the
 // server and is read by the other board — but a turn that can be taken away
 // without warning is a turn taken away unfairly, so it is shown.
-const ROLL_SECONDS = 20, MOVE_SECONDS = 60;
+const ROLL_SECONDS = 20, MOVE_SECONDS = 60, OPEN_SECONDS = 20;
 // The same minute the server holds an empty chair for.
 const HELD_SECONDS = 60;
 // One counter for each of the two things a turn is made of, each under the
@@ -3343,8 +3358,14 @@ function runningClock(state) {
   // number up in the corner, where the panel keeps the turn's time, is a number
   // nobody looks at and nobody could read the meaning of.
   if (state.away && state.away !== HUMAN) return 0;
-  // The opening keeps no time, so there is nothing to count out.
-  if (state.phase === "opening") return 0;
+  // The opening has a clock of its own now, and a shorter one: there is a
+  // single die and nothing to weigh up about it. Counted under the dice, since
+  // what is being waited for is a throw.
+  if (state.phase === "opening") {
+    return state.waitingOn
+      ? { seconds: OPEN_SECONDS, from: null, which: "roll" }
+      : 0;
+  }
   if (!state.turn) return 0;
   return state.dice
     ? { seconds: MOVE_SECONDS, from: null, which: "move" }
@@ -3751,10 +3772,26 @@ function leaveTable() {
   // Not waited on for long. The door is where this player is going whatever
   // the answer, and a slow line is no reason to keep them at a game they have
   // already left.
+  // Waited on properly. It used to be raced against a second and a half, on
+  // the grounds that the door is where this player is going whatever the
+  // answer — but reloading the page cancels the request that is still in the
+  // air, and the first call to a server that has been idle takes several
+  // seconds to wake it. So getting up went unsaid, and the other board sat
+  // there being told its opponent's connection had dropped and a minute was
+  // being held for somebody who had walked off on purpose. It worked whenever
+  // the server happened to be warm, which is what made it look like chance.
+  //
+  // Written down first, so that even a page that goes before the answer comes
+  // back leaves something behind for the next one to finish — see below.
+  if (leaving) localStorage.setItem(LEAVING_KEY, leaving);
   const said = leaving
-    ? ask("masayiBirak", { matchId: leaving }).catch(() => {})
+    ? ask("masayiBirak", { matchId: leaving })
+        .then(() => localStorage.removeItem(LEAVING_KEY))
+        .catch(() => {})
     : Promise.resolve();
-  Promise.race([said, new Promise(done => setTimeout(done, 1500))])
+  // Not for ever: a line that never answers must not strand somebody at a board
+  // they have left. Ten seconds covers a server being woken from cold.
+  Promise.race([said, new Promise(done => setTimeout(done, 10000))])
     .then(() => location.reload());
 }
 
@@ -4924,11 +4961,7 @@ function showFps(now) {
   const fps = Math.round(fpsFrames * 1000 / (now - fpsSince));
   fpsFrames = 0;
   fpsSince = now;
-  const drawn = canvas.width * canvas.height;
-  const screen = innerWidth * innerHeight * devicePixelRatio ** 2;
-  fpsBox.textContent = `${fps} fps · basamak ${effectiveStep + 1}/${SAMPLE_STEPS.length}\n`
-    + `${canvas.width}x${canvas.height} — ekranın %${Math.round(100 * drawn / screen)}'i\n`
-    + `dpr ${devicePixelRatio}`;
+  fpsBox.textContent = `${fps} fps`;
 }
 
 const clock = new THREE.Clock();
