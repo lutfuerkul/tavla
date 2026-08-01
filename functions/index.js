@@ -395,23 +395,62 @@ const stale = entry => {
 export const eslesmeyeGir = onCall(settings, async request => {
   const uid = whoIsAsking(request);
   const queue = db.collection("sira");
+  const mineRef = queue.doc(uid);
+
+  // Our own place, before anything else. Whoever finds us writes the table
+  // onto it, and that record is the only way we are told — so asking again
+  // while an answer is already lying there has to return the answer rather
+  // than start a fresh search. It did not, and the search ended by writing a
+  // waiting place over the top of it: a player who had just been matched
+  // erased their own match, with their own hand, and then waited for ever in
+  // front of a screen that said it was looking. It needed the two boards to
+  // press the button close enough together that one of them was still mid
+  // search when the other found it, which is why it was rare.
+  const first = await mineRef.get();
+  if (first.exists && first.data().matchId) {
+    await mineRef.delete().catch(() => {});
+    return { matchId: first.data().matchId, colour: first.data().colour ?? "black" };
+  }
 
   // The longest wait is served first; ten is plenty to look through, since
   // anybody past that has been waiting long enough to be a stale entry.
   const waiting = await queue.orderBy("at").limit(10).get();
   for (const entry of waiting.docs) {
-    if (entry.id === uid || entry.data().matchId) continue;
+    if (entry.id === uid) continue;
+    // Swept whatever is written on it. A place with a table already on it used
+    // to be stepped over and left where it was — and it is stepped over by its
+    // own timestamp, which never moves again, so it sits at the head of the
+    // queue for as long as it lives. Ten of those and the ten oldest places
+    // are all dead ones: everybody arriving looks at the same ten corpses,
+    // finds nobody, and sits down to wait behind them. Nobody in the world is
+    // ever matched with anybody, and nothing anywhere says why.
     if (stale(entry.data())) {
       await entry.ref.delete().catch(() => {});
       continue;
     }
+    // Somebody found in the last few seconds, whose board has not yet read
+    // the news off their place. Theirs to clear, not ours.
+    if (entry.data().matchId) continue;
 
     const match = db.collection("matches").doc();
     // Claimed before the pairing, since a code cannot be minted inside the
     // transaction that needs it. Given back if the pairing does not happen.
     const wanted = await freeCode();
     const paired = await db.runTransaction(async tx => {
-      const found = await tx.get(entry.ref);
+      // Both places, not just theirs. Pairing used to lock only the person
+      // being found, which meant two players searching in the same breath each
+      // found the other and each built a table: two matches, both valid,
+      // written to two different records so nothing collided. Each of them
+      // then heard about the other's table as well as their own and sat down
+      // at whichever arrived last — often not the same one. Two people looking
+      // at two empty boards, having just been matched with each other.
+      //
+      // Reading our own place makes the two attempts collide properly: the
+      // second one to commit finds a match already written against its name
+      // and takes that one instead of making another.
+      const [found, mine] = await Promise.all([tx.get(entry.ref), tx.get(mineRef)]);
+      const already = mine.exists ? mine.data().matchId : null;
+      if (already) return { matchId: already, colour: mine.data().colour ?? "black", theirs: true };
       // Somebody else reached them first between the search and here.
       if (!found.exists || found.data().matchId) return null;
       // The one who waited takes black, and black opens — the small courtesy
@@ -434,12 +473,20 @@ export const eslesmeyeGir = onCall(settings, async request => {
         matchId: match.id, colour: "black",
         silinecek: sweptIn(KEPT_IN_QUEUE_MINUTES * 60 * 1000),
       });
+      // Ours goes in the same breath. Left for afterwards, it was a place with
+      // no match on it that somebody arriving in between could still be paired
+      // with — and by then we were already sitting down somewhere else.
+      tx.delete(mineRef);
       return { matchId: match.id, colour: "ivory" };
     });
-    if (paired) {
-      await queue.doc(uid).delete().catch(() => {});
-      return paired;
+    // The table we were about to build was not built: somebody had already
+    // built one with us in it. The code claimed for it goes back.
+    if (paired?.theirs) {
+      await db.collection("rooms").doc(wanted).delete().catch(() => {});
+      await mineRef.delete().catch(() => {});
+      return { matchId: paired.matchId, colour: paired.colour };
     }
+    if (paired) return paired;
     await db.collection("rooms").doc(wanted).delete().catch(() => {});
   }
 
@@ -449,7 +496,20 @@ export const eslesmeyeGir = onCall(settings, async request => {
   // queue on the way past — so two people who arrived in the same breath and
   // both sat down to wait find each other on their next ask rather than
   // waiting for a third.
-  await queue.doc(uid).set({ at: now(), matchId: null, silinecek: sweptIn(KEPT_IN_QUEUE_MINUTES * 60 * 1000) });
+  // Sitting down to wait, and saying so again on every ask. In one write with
+  // the reading that decides whether to make it, because between the two a
+  // table can be written onto our place — and the blind version of this is
+  // what erased it.
+  const claimed = await db.runTransaction(async tx => {
+    const mine = await tx.get(mineRef);
+    if (mine.exists && mine.data().matchId) return mine.data();
+    tx.set(mineRef, { at: now(), matchId: null, silinecek: sweptIn(KEPT_IN_QUEUE_MINUTES * 60 * 1000) });
+    return null;
+  });
+  if (claimed) {
+    await mineRef.delete().catch(() => {});
+    return { matchId: claimed.matchId, colour: claimed.colour ?? "black" };
+  }
   return { waiting: true, refresh: QUEUE_FRESH_SECONDS };
 });
 

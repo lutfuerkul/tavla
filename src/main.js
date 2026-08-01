@@ -642,16 +642,26 @@ findButton?.addEventListener("click", async () => {
     // closed tab stops being one somebody can be sent to. It looks again on
     // the way past, which is also how two people who sat down to wait in the
     // same breath find each other rather than waiting for a third.
-    const every = Math.max(10, Math.round((answer?.refresh ?? 45) / 3)) * 1000;
-    clearInterval(stillHere);
-    stillHere = setInterval(async () => {
-      if (!looking) return clearInterval(stillHere);
+    const lookAgain = async () => {
+      if (!looking) return;
       try {
         const again = await ask("eslesmeyeGir", {});
         if (looking && again?.matchId) sitDownTo(again.matchId, again.colour ?? "ivory");
       } catch (reason) {
         console.info("tavla: sırada kalınamadı —", reason?.message ?? reason);
       }
+    };
+    // One quick look straight away, before the slow rhythm starts. Two people
+    // pressing the button in the same breath each read the queue before the
+    // other's place was in it, so neither found anybody and both sat down to
+    // wait — for a quarter of a minute, in front of a screen that said it was
+    // looking. They are a second apart, not fifteen.
+    setTimeout(lookAgain, 2000);
+    const every = Math.max(10, Math.round((answer?.refresh ?? 45) / 3)) * 1000;
+    clearInterval(stillHere);
+    stillHere = setInterval(() => {
+      if (!looking) return clearInterval(stillHere);
+      lookAgain();
     }, every);
   } catch (reason) {
     console.info("tavla: eşleşme aranamadı —", reason?.message ?? reason);
