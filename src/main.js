@@ -1095,6 +1095,21 @@ const veneerL = new THREE.MeshPhysicalMaterial({
   metalness: .03,
   ...BOARD.gloss,
 });
+// The case and the playing surface come out of the lacquer in the hand, the
+// same as the checkers did. These two cover most of the screen — far more of it
+// than thirty checkers do — so this is the largest saving left: the coat is a
+// second lit surface, and paying for it over that much of the picture is what
+// was keeping a tablet from holding thirty frames even at half its resolution.
+//
+// The dice keep theirs. They are two objects, they are what the eye follows
+// across the felt, and the wet shine on them is most of what makes them read as
+// dice rather than as cubes.
+if (HANDHELD) {
+  for (const wood of [shell, veneerL]) {
+    wood.clearcoat = 0;
+    wood.clearcoatRoughness = 0;
+  }
+}
 const veneerR = veneerL.clone();
 if (BOARD.veneer.mirrored) {
   veneerR.map = veneerTexture.clone();
@@ -1301,10 +1316,14 @@ function addPanelBoard() {
     // Bare in the hand, for the same reason the checkers are — see above.
     clearcoat: HANDHELD ? 0 : .3, clearcoatRoughness: HANDHELD ? 0 : .22,
   });
+  // The old board lays its playing surface out as one panel rather than two
+  // leaves of veneer, so it has a material of its own — and it wants the same
+  // treatment in the hand for the same reason: it is most of the screen.
   const panel = new THREE.MeshPhysicalMaterial({
     map: woodPanelTexture(1024, 640, BOARD.veneer.base, BOARD.veneer.grain,
       [[256, 320, 95], [768, 320, 95]], BOARD.veneer.figure),
     metalness: .03, ...BOARD.gloss,
+    ...(HANDHELD ? { clearcoat: 0, clearcoatRoughness: 0 } : {}),
   });
 
   // One floor, one leaf of veneer laid across the whole of it, and walls the
