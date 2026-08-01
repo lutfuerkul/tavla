@@ -65,9 +65,6 @@ const ROOM_MINUTES = 20;
 const KEPT_DAYS = 1;
 const KEPT_AFTER_CLOSING_HOURS = 1;
 const KEPT_IN_QUEUE_MINUTES = 5;
-// A code that never became a table. Long enough to read down a telephone and
-// be typed in at the other end, and no longer.
-const KEPT_ROOM_MINUTES = 30;
 const sweptIn = ms => new Date(Date.now() + ms);
 const KEPT = () => sweptIn(KEPT_DAYS * 24 * 60 * 60 * 1000);
 const SWEPT_SOON = () => sweptIn(KEPT_AFTER_CLOSING_HOURS * 60 * 60 * 1000);
@@ -218,11 +215,11 @@ async function freeCode() {
         host: null, hostColour: null, guest: null,
         status: "holding", matchId: null,
         createdAt: now(),
+        // Two things at once, and it has to be: the deadline for somebody to
+        // walk through this code, and the date the sweeper deletes it on —
+        // rooms are swept by a TTL policy on this very field. A code nobody
+        // ever used goes with it, twenty minutes after it was minted.
         expiresAt: new Date(Date.now() + ROOM_MINUTES * 60 * 1000),
-        // A code is deleted with the table it belongs to. What was left over
-        // is the codes that never became tables — a room made and never
-        // joined, a tab closed at the door — and nothing deleted those.
-        silinecek: sweptIn(KEPT_ROOM_MINUTES * 60 * 1000),
       });
       return false;
     });
@@ -237,10 +234,7 @@ export const odaKur = onCall(settings, async request => {
   const wants = request.data?.colour === "ivory" ? "ivory" : "black";
 
   const wanted = await freeCode();
-  await db.collection("rooms").doc(wanted).update({
-    host: uid, hostColour: wants, status: "waiting",
-    silinecek: sweptIn(KEPT_ROOM_MINUTES * 60 * 1000),
-  });
+  await db.collection("rooms").doc(wanted).update({ host: uid, hostColour: wants, status: "waiting" });
   return { code: wanted, colour: wants };
 });
 
@@ -301,8 +295,12 @@ export const odayaKatil = onCall(settings, async request => {
       ? { black: it.host, ivory: uid }
       : { ivory: it.host, black: uid };
     tx.set(match, freshMatch(players, wanted));
-    // A matched code lives as long as its table: it is the way back to it.
-    tx.update(room, { status: "matched", guest: uid, matchId: match.id, silinecek: KEPT() });
+    // A matched code lives as long as its table, because it is the way back to
+    // it — and twenty minutes is a short game. The sweeper reads this field, so
+    // a matched room left on the door's own deadline was being deleted out from
+    // under a game still being played: twenty minutes in, the code stopped
+    // working, and whoever dropped out after that had no way back at all.
+    tx.update(room, { status: "matched", guest: uid, matchId: match.id, expiresAt: KEPT() });
     // Which colour the one arriving is playing is the server's to say, not
     // something the client should have to work out from what it asked for.
     return { matchId: match.id, colour: it.hostColour === "black" ? "ivory" : "black" };
@@ -409,8 +407,8 @@ export const eslesmeyeGir = onCall(settings, async request => {
         host: entry.id, hostColour: "black", guest: uid,
         status: "matched", matchId: match.id,
         createdAt: now(),
-        expiresAt: new Date(Date.now() + ROOM_MINUTES * 60 * 1000),
-        silinecek: KEPT(),
+        // As long as the table it belongs to — see odayaKatil.
+        expiresAt: KEPT(),
       });
       // Read by the board that is waiting and then of no further use — but it
       // is written to rather than deleted, since deleting it is how the board
