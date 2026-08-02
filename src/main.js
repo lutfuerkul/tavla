@@ -1774,7 +1774,12 @@ function roundedDieGeometry(size, radius, segments = 10) {
 // broken, not just eased — the collider uses this same radius, so the die
 // bounces on the corner you can see rather than on a sharp one hidden inside
 // it. Enough segments that the corner reads as turned rather than chamfered.
-const DIE_SIZE = 10 * MM;
+// A little over life size in the hand: a 10mm die is read at arm's length
+// across a real board, and on a phone the same die is a few pixels of pip.
+// Twelve keeps the proportion against the checker recognisable — a third of
+// its width rather than a quarter — and everything below is derived from it,
+// physics included, so the throw itself is unchanged.
+const DIE_SIZE = (HANDHELD ? 12 : 10) * MM;
 const DIE_RADIUS = DIE_SIZE * .15;
 const dieGeometry = roundedDieGeometry(DIE_SIZE, DIE_RADIUS, 24);
 // BoxGeometry material order is +x, -x, +y, -y, +z, -z. Opposite faces sum
