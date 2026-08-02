@@ -5099,10 +5099,7 @@ function showFps(now) {
   // and is it drawing the screen it has. Everything else that was here — the
   // triangle count, the card's name, the heap — answered questions nobody was
   // asking while looking at a board.
-  const drawn = canvas.width * canvas.height;
-  const screen = innerWidth * innerHeight * devicePixelRatio ** 2;
-  fpsBox.textContent = `${fps} fps\n`
-    + `${canvas.width}x${canvas.height} — ekranın %${Math.round(100 * drawn / screen)}'i`;
+  fpsBox.textContent = `${fps} fps`;
 }
 
 // Whether anything on the table is in the middle of moving. Everything that
