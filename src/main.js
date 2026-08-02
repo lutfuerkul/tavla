@@ -1314,8 +1314,8 @@ const FIELD_HALF_X = starts[starts.length - 1] + COLUMN_OFF;
 // really the two inner walls meeting, and what used to be an invisible line at
 // the edge of the field is really the inside face of the outer wall.
 const FELT_Y = .47;                       // top of the playing surface
-const SEAM = 1 / 36;                      // 1mm, the gap the hinge knuckle sits in
-const WALL_T = BAR_HALF - SEAM / 2;       // 14.5mm walls, so the seam comes out right
+const SEAM = .5 / 36;                     // half a mm, the gap the hinge sits in
+const WALL_T = BAR_HALF - SEAM / 2;       // 14.75mm walls, so the seam comes out right
 const WALL_H = .7;                        // 25mm of wall standing above the surface
 const FLOOR_T = .26;                      // 9mm of case floor under it
 const CASE_TOP = FELT_Y + WALL_H;
@@ -5024,12 +5024,22 @@ function fitCamera() {
   // How much of the frame the case is allowed to fill. From overhead the board
   // is looked at rather than along, so it needs no room for its own depth and
   // can sit closer to the edges.
-  const fill = overhead() ? .99 : .94;
+  // A phone is tall and the board is wide, so the seat view backs off until
+  // the case fits across the screen and then leaves two thirds of the height
+  // empty. What has to be on the screen is the playing field — every point and
+  // the bar; the outer rail can run off the edge, since nothing is ever played
+  // on it. Fitted to that instead, and with the margin taken in, the board
+  // comes 12% closer: 41.3 units back becomes 37.0, and the field goes from
+  // 86% of the frame's width to 97%. Overhead and the desktop are untouched.
+  const snug = HANDHELD && !overhead();
+  const fill = overhead() ? .99 : snug ? .995 : .94;
+  const halfX = snug ? FIELD_HALF_X : CASE_HALF_X;
+  const halfZ = snug ? FIELD_HALF_Z : CASE_HALF_Z;
 
   const corners = [];
-  for (const x of [-CASE_HALF_X, CASE_HALF_X]) {
+  for (const x of [-halfX, halfX]) {
     for (const y of [CASE_BOTTOM, CASE_TOP]) {
-      for (const z of [-CASE_HALF_Z, CASE_HALF_Z]) corners.push(new THREE.Vector3(x, y, z));
+      for (const z of [-halfZ, halfZ]) corners.push(new THREE.Vector3(x, y, z));
     }
   }
 
