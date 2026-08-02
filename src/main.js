@@ -115,10 +115,18 @@ const THICK = pieceType === "kalin";
 
 // Which cloth the table is dressed with, chosen at the door like the board.
 const CLOTH_KEY = "tavla.cuha";
+// One weave, three colours. The photographs it replaces were three separate
+// pictures of three separate cloths — three downloads, three textures in
+// memory, and three different threads under the same board. A grey cloth is a
+// white one as far as the tint is concerned: the colour multiplies through it,
+// so the same photograph serves green, blue and the grey it already is.
+// The tints are worked back from the cloths they replace: what the light has
+// to be multiplied by for the weave's own grey to land on the colour the old
+// photograph averaged.
 const CLOTHS = {
-  yesil:  { file: "cuha-yesil.jpg",  tile: 14 },
-  mavi:   { file: "cuha-mavi.jpg",   tile: 14 },
-  kadife: { file: "cuha-kadife.jpg", tile: 9 },
+  yesil: { file: "cuha-gri.jpg", tile: 8, tint: 0x54dd9d },
+  mavi:  { file: "cuha-gri.jpg", tile: 8, tint: 0x5a9beb },
+  gri:   { file: "cuha-gri.jpg", tile: 8, tint: 0xffffff },
 };
 const clothName = CLOTHS[localStorage.getItem(CLOTH_KEY)] ? localStorage.getItem(CLOTH_KEY) : "mavi";
 const CLOTH = CLOTHS[clothName];
@@ -324,6 +332,31 @@ renderer.shadowMap.type = HANDHELD ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap
 // across the board, or the board being laid out again.
 renderer.shadowMap.autoUpdate = false;
 let shadowsDirty = true;
+let drawnFrames = 0;
+let lightCount = 0;
+// A phone can take the drawing surface away from a page — the driver gives up
+// under memory pressure, or the tab goes to the background long enough — and
+// what is left behind is a canvas that will never draw again: a black screen
+// with a game running perfectly behind it. Said out loud rather than left to
+// look like a bug in the board, and taken back up when the browser offers it.
+let contextLost = false;
+canvas.addEventListener("webglcontextlost", event => {
+  // Without this the context is gone for good; with it the browser may hand a
+  // new one back.
+  event.preventDefault();
+  contextLost = true;
+  console.warn("tavla: çizim bağlamı kayboldu");
+  notice(t("gpu.lost"));
+});
+canvas.addEventListener("webglcontextrestored", () => {
+  contextLost = false;
+  console.info("tavla: çizim bağlamı geri geldi");
+  notice("");
+  // Everything the renderer had is gone with the old context; the simplest
+  // way back to a board that draws is the one the board already knows.
+  location.reload();
+});
+
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 // A tenth open in the hand. A phone with auto-brightness reads the frame it is
 // showing and dims to it, and the seat view fills most of the frame with case
@@ -376,7 +409,7 @@ const SETTINGS = [
   // where the board is a third of the screen and the rest was soot.
   { key: "cloth", label: "setting.cloth", hidden: !HANDHELD,
     options: [["auto", "option.auto"], ["yesil", "cloth.green"],
-              ["mavi", "cloth.blue"], ["kadife", "cloth.velvet"]] },
+              ["mavi", "cloth.blue"], ["gri", "cloth.grey"]] },
   // Kept in the list even where it is not shown, because Otomatik is settled by
   // looking the key up here — a row that vanished would take its answer with it.
   { key: "piece", label: "setting.piece", hidden: HANDHELD,
@@ -4952,11 +4985,17 @@ function addRoom() {
   if (HANDHELD) {
     new THREE.TextureLoader().load(`./doku/${CLOTH.file}`, map => {
       map.colorSpace = THREE.SRGBColorSpace;
-      map.wrapS = map.wrapT = THREE.RepeatWrapping;
+      // Mirrored rather than repeated: a photograph of cloth has no reason for
+      // its left edge to meet its right, and butting them together drew a grid
+      // of seams across the table. Turned over at each join there is nothing to
+      // meet — and a weave this fine has no direction for the eye to catch the
+      // turn by.
+      map.wrapS = map.wrapT = THREE.MirroredRepeatWrapping;
       map.repeat.set(CLOTH.tile, CLOTH.tile);
       map.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
       cloth.map = map;
-      cloth.color.setHex(0xffffff);
+      // The colour multiplies the weave rather than replacing it.
+      cloth.color.setHex(CLOTH.tint ?? 0xffffff);
       cloth.needsUpdate = true;
       wake();
     }, undefined, () => {});
@@ -5005,6 +5044,7 @@ function addRoom() {
   key.shadow.camera.near = 1;
   key.shadow.camera.far = 40;
   scene.add(key);
+  lightCount++;
 
   // And its mirror image across the board, for the seat view in the hand: the
   // same lamp — same colour, same strength — hung over the other far corner,
@@ -5024,6 +5064,7 @@ function addRoom() {
     // the seat view on 76.4, which is where it was when both lamps cast.
     keyMate.intensity = 1.95;
     scene.add(keyMate);
+    lightCount++;
   }
 
   // Quadrant fills keep the corners of the board level with the middle, but
@@ -5046,6 +5087,7 @@ function addRoom() {
     const fill = new THREE.DirectionalLight(0xeef1f4, lift);
     fill.position.set(x * 11, 7, HANDHELD ? 11 : z * 11);
     scene.add(fill);
+    lightCount++;
   });
 
   // Just enough lift to keep the darks open rather than crushed.
@@ -5163,6 +5205,37 @@ fitCamera();
 // how many frames a second, and how much of the screen is actually being drawn.
 // A soft board at sixty and a sharp one at twenty are the same machine on two
 // different rungs, and either number on its own cannot tell you which.
+// A phone cannot be plugged into anything, so it has to be able to say what it
+// is doing out loud. ?tani puts the numbers that decide whether a black screen
+// is a camera pointing at nothing, a canvas that was never drawn, or a driver
+// that has given up — on the screen, where they can be photographed.
+const SHOWING_DIAG = /[?&]tani\b/.test(location.search);
+let diagBox = null;
+if (SHOWING_DIAG) {
+  diagBox = document.createElement("div");
+  diagBox.id = "tani";
+  diagBox.style.cssText = "position:fixed;z-index:9;left:.4rem;bottom:4.6rem;padding:.35rem .5rem;"
+    + "font:500 .6rem/1.35 monospace;color:#cfe3ff;background:rgba(0,0,0,.72);"
+    + "border-radius:.3rem;pointer-events:none;white-space:pre;max-width:92vw;";
+  document.body.appendChild(diagBox);
+}
+
+function showDiag(drawn) {
+  if (!diagBox) return;
+  const p = camera.position;
+  const look = new THREE.Vector3();
+  camera.getWorldDirection(look);
+  const gl = renderer.getContext();
+  diagBox.textContent = [
+    `kamera ${overhead() ? "tepe" : "koltuk"}  ${p.x.toFixed(1)},${p.y.toFixed(1)},${p.z.toFixed(1)}`,
+    `bakış ${look.x.toFixed(2)},${look.y.toFixed(2)},${look.z.toFixed(2)}  fov ${camera.fov}`,
+    `tuval ${canvas.width}x${canvas.height}  dpr ${renderer.getPixelRatio().toFixed(2)}`,
+    `ekran ${innerWidth}x${innerHeight}  çizilen ${drawn}`,
+    `bağlam ${contextLost ? "KAYIP" : gl.isContextLost() ? "KAYIP" : "sağlam"}`,
+    `ışık ${lightCount}  gölge ${renderer.shadowMap.enabled ? "açık" : "kapalı"}`,
+  ].join("\n");
+}
+
 const SHOWING_FPS = /[?&]fps\b/.test(location.search);
 let fpsBox = null, fpsFrames = 0, fpsSince = 0;
 if (SHOWING_FPS) {
@@ -5218,6 +5291,7 @@ function animate(now) {
     shadowsDirty = false;
     needsFrame = false;
     lastDrawn = at;
+    drawnFrames++;
     renderer.render(scene, camera);
   }
   // Counted over the frames that were actually drawn, and only while there is
@@ -5225,6 +5299,7 @@ function animate(now) {
   // the machine failing, and a readout that said "2 fps" over a still board
   // would be read as the second thing.
   showFps(at);
+  showDiag(drawnFrames);
   requestAnimationFrame(animate);
 }
 animate();
