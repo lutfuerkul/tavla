@@ -1314,8 +1314,8 @@ const FIELD_HALF_X = starts[starts.length - 1] + COLUMN_OFF;
 // really the two inner walls meeting, and what used to be an invisible line at
 // the edge of the field is really the inside face of the outer wall.
 const FELT_Y = .47;                       // top of the playing surface
-const SEAM = .5 / 36;                     // half a mm, the gap the hinge sits in
-const WALL_T = BAR_HALF - SEAM / 2;       // 14.75mm walls, so the seam comes out right
+const SEAM = .8 / 36;                     // 0.8mm, the gap the hinge sits in
+const WALL_T = BAR_HALF - SEAM / 2;       // 14.6mm walls, so the seam comes out right
 const WALL_H = .7;                        // 25mm of wall standing above the surface
 const FLOOR_T = .26;                      // 9mm of case floor under it
 const CASE_TOP = FELT_Y + WALL_H;
@@ -5043,7 +5043,12 @@ function fitCamera() {
     }
   }
 
-  for (let step = 0; step < 60; step++) {
+  // The seat and the overhead both sit at a fixed distance and this only ever
+  // backed away from it, so a screen with room to spare kept the board at
+  // arm's length: turned sideways, the case was using 87% of the height and
+  // half the width and the camera never moved. In the hand it may come in as
+  // well as go out — the same test decides when to stop either way.
+  for (let step = HANDHELD ? -15 : 0; step < 60; step++) {
     camera.position.copy(CAMERA_AIM).addScaledVector(direction, base * (1 + step * .04));
     camera.lookAt(CAMERA_AIM);
     camera.updateProjectionMatrix();
