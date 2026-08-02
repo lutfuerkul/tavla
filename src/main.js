@@ -5225,6 +5225,25 @@ if (SHOWING_DIAG) {
 
 // Asked once a second at most: reading it is a round trip to the driver.
 let glHata = 0, glSorulan = 0;
+// And what the frame actually came out as. A screen that looks black is either
+// a frame drawn black or a frame drawn properly and never shown, and from the
+// page those two are the same picture — unless the buffer itself is read back.
+let bufferMean = -1;
+const bufferPixels = new Uint8Array(16 * 16 * 4);
+function readBuffer() {
+  const gl = renderer.getContext();
+  if (gl.isContextLost()) { bufferMean = -1; return; }
+  const w = renderer.domElement.width, h = renderer.domElement.height;
+  if (!w || !h) { bufferMean = -2; return; }
+  renderer.setRenderTarget(null);
+  gl.readPixels(Math.max(0, (w >> 1) - 8), Math.max(0, (h >> 1) - 8), 16, 16,
+    gl.RGBA, gl.UNSIGNED_BYTE, bufferPixels);
+  let sum = 0;
+  for (let i = 0; i < bufferPixels.length; i += 4) {
+    sum += .2126 * bufferPixels[i] + .7152 * bufferPixels[i + 1] + .0722 * bufferPixels[i + 2];
+  }
+  bufferMean = +(sum / (bufferPixels.length / 4)).toFixed(1);
+}
 function showDiag(drawn) {
   if (!diagBox) return;
   const now = performance.now();
@@ -5232,6 +5251,7 @@ function showDiag(drawn) {
     glSorulan = now;
     const err = renderer.getContext().getError();
     if (err) glHata = err;
+    readBuffer();
   }
   const p = camera.position;
   const look = new THREE.Vector3();
@@ -5248,6 +5268,7 @@ function showDiag(drawn) {
     // from everything drawn onto a screen that is not being shown.
     `çizim ${renderer.info.render.calls}  üçgen ${renderer.info.render.triangles}`,
     `program ${renderer.info.programs?.length ?? "?"}  hata ${glHata}`,
+    `tamponun ortası ${bufferMean}`,
   ].join("\n");
 }
 
