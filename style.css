@@ -110,8 +110,18 @@ body.ideographic #hud span, body.ideographic #hud strong {
    about one row's worth of height between them. */
 #settings { display: grid; gap: .45rem; justify-content: center;
   margin: .35rem auto .25rem; padding: .85rem 1.1rem;
+  /* Five rows now, and a laptop window is not always tall. */
   background: rgba(9,7,5,.82); border: 1px solid rgba(229,173,84,.18);
   border-radius: .7rem; box-shadow: 0 20px 50px rgba(0,0,0,.5); }
+@media (min-width: 601px) and (max-height: 860px) {
+  #settings { gap: .32rem; margin: .2rem auto .2rem; padding: .6rem 1rem; }
+  .setting-value { padding: .45rem 1.9rem .45rem .8rem; }
+  #start { margin-top: .6rem; }
+  /* The heading is sized off the width, which on a wide short window leaves it
+     taller than the rows it sits above. */
+  h1 { font-size: clamp(2rem, 4.4vw, 3.4rem); }
+  #intro { padding-top: 1.6rem; }
+}
 .setting { display: grid; grid-template-columns: 8.6rem 11rem; gap: .8rem;
   align-items: center; text-align: left; }
 .setting-name { font-size: .7rem; letter-spacing: .09em; text-transform: uppercase;
@@ -338,6 +348,17 @@ body.ideographic #hud span, body.ideographic #hud strong {
      of them being squeezed, so the name goes above its box. */
   #settings { gap: .45rem; margin: .2rem auto .7rem; padding: .7rem .9rem;
     width: 100%; max-width: 20rem; }
+  /* A fourth row arrived with the table cloth, and a short phone had no room
+     left for it — the way in went below the fold. Every row gives up a little
+     more where the screen is short, which is about one row's worth between
+     them. */
+  @media (max-height: 680px) {
+    #settings { gap: .3rem; margin: .1rem auto .4rem; padding: .5rem .8rem; }
+    .setting-value { padding: .4rem 1.8rem .4rem .7rem; font-size: .68rem; }
+    .setting-name { font-size: .58rem; }
+    #start { margin-top: .5rem; padding: .58rem 1.8rem; }
+    #modes { gap: .3rem; }
+  }
   .setting { grid-template-columns: 1fr; gap: .15rem; }
   .setting-name { font-size: .62rem; }
   .setting-value { padding: .5rem 1.9rem .5rem .8rem; font-size: .72rem; }
