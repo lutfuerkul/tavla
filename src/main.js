@@ -127,6 +127,9 @@ const CLOTHS = {
   yesil: { file: "cuha-gri.jpg", tile: 8, tint: 0x54dd9d },
   mavi:  { file: "cuha-gri.jpg", tile: 8, tint: 0x5a9beb },
   gri:   { file: "cuha-gri.jpg", tile: 8, tint: 0xffffff },
+  // The velvet stays its own photograph: a pile is not a weave with the colour
+  // turned up, and tinting the one into the other would lose what it is.
+  kadife: { file: "cuha-kadife.jpg", tile: 9 },
 };
 const clothName = CLOTHS[localStorage.getItem(CLOTH_KEY)] ? localStorage.getItem(CLOTH_KEY) : "mavi";
 const CLOTH = CLOTHS[clothName];
@@ -408,8 +411,8 @@ const SETTINGS = [
   // any ground to see; the cloth was answering a darkness that only a phone has,
   // where the board is a third of the screen and the rest was soot.
   { key: "cloth", label: "setting.cloth", hidden: !HANDHELD,
-    options: [["auto", "option.auto"], ["yesil", "cloth.green"],
-              ["mavi", "cloth.blue"], ["gri", "cloth.grey"]] },
+    options: [["auto", "option.auto"], ["yesil", "cloth.green"], ["mavi", "cloth.blue"],
+              ["gri", "cloth.grey"], ["kadife", "cloth.velvet"]] },
   // Kept in the list even where it is not shown, because Otomatik is settled by
   // looking the key up here — a row that vanished would take its answer with it.
   { key: "piece", label: "setting.piece", hidden: HANDHELD,
