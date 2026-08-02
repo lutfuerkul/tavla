@@ -308,7 +308,12 @@ renderer.shadowMap.type = HANDHELD ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap
 renderer.shadowMap.autoUpdate = false;
 let shadowsDirty = true;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+// A tenth open in the hand. A phone with auto-brightness reads the frame it is
+// showing and dims to it, and the seat view fills most of the frame with case
+// wall, near rail and dark floor — so the screen is turned down on exactly the
+// picture that was already the darker of the two. Measured on a phone-sized
+// frame: the seat view goes 52.9 → 55.9 and the overhead 57.6 → 60.7.
+renderer.toneMappingExposure = 1.05 * (HANDHELD ? 1.1 : 1);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 // Soft studio-style reflections for the lacquer and clearcoat surfaces
@@ -1779,7 +1784,7 @@ function roundedDieGeometry(size, radius, segments = 10) {
 // Twelve keeps the proportion against the checker recognisable — a third of
 // its width rather than a quarter — and everything below is derived from it,
 // physics included, so the throw itself is unchanged.
-const DIE_SIZE = (HANDHELD ? 12 : 10) * MM;
+const DIE_SIZE = (HANDHELD ? 13 : 10) * MM;
 const DIE_RADIUS = DIE_SIZE * .15;
 const dieGeometry = roundedDieGeometry(DIE_SIZE, DIE_RADIUS, 24);
 // BoxGeometry material order is +x, -x, +y, -y, +z, -z. Opposite faces sum
@@ -1864,6 +1869,12 @@ const DICE_REST = [FIELD_HALF_X + 1.9, 1.4, 3];
 
 function resetDice() {
   wake();
+  // The dice are put back by hand rather than thrown, so nothing in the loop
+  // knows they moved. In the hand the board is only drawn when something asks
+  // for it and the shadow map only when something says so — and without this
+  // the pair came back to the middle of the board carrying the shadow of where
+  // it used to be, which is a die standing on the felt with nothing under it.
+  shadowsDirty = true;
   const parked = game?.phase === "opening";
   diceMeshes.forEach((die, i) => {
     const [x, z, face] = parked && i === 1 ? DICE_REST : (DICE_HOME[i] ?? DICE_HOME[0]);
@@ -1929,6 +1940,10 @@ function settleDie(die) {
   // A search runs the same physics with nothing drawn and nobody told: it is
   // asking where a throw would land, not throwing one.
   if (simulating) return;
+  // Straightening it moved it, and it is the last thing that will move it: the
+  // shadow it leaves behind has to be drawn against where it actually stopped
+  // rather than the frame before.
+  shadowsDirty = true;
   showDiceValues();
   if (diceMeshes.every(d => d.userData.die.mode === "rest")) onDiceSettled();
 }
@@ -5059,7 +5074,11 @@ function addRoom() {
   // at a third again of what the four came to between them, which is what it
   // takes to land on the same brightness. Measured rather than guessed: the
   // screen comes out at 68.31 against the four lights' 68.23.
-  const corners = HANDHELD ? [[1, 0]] : [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  // One of them lifts the board as well as four did — looked at from overhead.
+  // From the seat the single fill comes from one side only, so the near half
+  // of the board is left to the key alone and reads dark. A second one facing
+  // it costs a light rather than three, and the seat view comes up 4.8%.
+  const corners = HANDHELD ? [[1, 0], [-1, 0]] : [[1, 0], [-1, 0], [0, 1], [0, -1]];
   const lift = BOARD.room.fill * (HANDHELD ? 4 * 1.3 : 1);
   corners.forEach(([x, z]) => {
     const fill = new THREE.DirectionalLight(0xeef1f4, lift);
