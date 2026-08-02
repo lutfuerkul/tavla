@@ -213,17 +213,22 @@ function takeSeat() {
 // In the hand, where the screen is dim to start with, the light is worth more
 // than the modelling. On a desk it is not, and nothing there moves.
 let keyLight = null;
-// The second lamp, over the other far corner. It burns for the seat view only:
-// from overhead the one lamp over your shoulder is what gives the board its
-// shading, and a second one facing it would cancel half of that.
+// The second lamp, over the other corner: the pair is what makes the seat view
+// bright, and the overhead was left with one and looked dark beside it. Both
+// burn for both views now — but from overhead they stay on your own side of
+// the table rather than crossing it. Overhead the sheen already comes back off
+// the wood from a lamp over your shoulder, so crossing buys nothing and costs
+// the shading: 72.2 against 70.4, with the shadows falling away from you
+// rather than towards you. The seat view is not touched by any of this.
 let keyMate = null;
 function aimKey() {
   if (!keyLight || !HANDHELD) return;
   const seat = !overhead();
-  keyLight.position.set(6 * AWAY, 10, (seat ? 6 : -6) * AWAY);
+  const side = (seat ? 6 : -6) * AWAY;
+  keyLight.position.set(6 * AWAY, 10, side);
   if (keyMate) {
-    keyMate.position.set(-6 * AWAY, 10, 6 * AWAY);
-    keyMate.visible = seat;
+    keyMate.position.set(-6 * AWAY, 10, side);
+    keyMate.visible = true;
   }
   shadowsDirty = true;
   wake();
