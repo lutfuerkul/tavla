@@ -311,6 +311,23 @@ const TOP = HANDHELD ? NATIVE : Math.max(2, NATIVE);
 // it also lands on 4K, and a 4K window draws its own resolution.
 const PIXEL_BUDGET = 3840 * 2160;
 
+// A phone has been seen going black on the change of camera: the board draws —
+// frames counted, context healthy, every corner of the case in front of the
+// camera — and the screen shows the cleared surface anyway. What the browser
+// is holding then is a frame it never latched, and the surest way to make it
+// take a new one is to hand it a different surface: the drawing buffer is
+// resized by a pixel and back, which costs one reallocation on the one press
+// where it might matter and nothing anywhere else.
+function nudgeCanvas() {
+  if (!HANDHELD) return;
+  renderer.setSize(innerWidth, Math.max(1, innerHeight - 1), false);
+  renderer.setSize(innerWidth, innerHeight, false);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  shadowsDirty = true;
+  wake();
+}
+
 function applySampleRatio() {
   // What the screen is worth, held to what the buffer may cost. The budget is
   // about memory rather than speed — it is asked for before a single frame is
@@ -4171,6 +4188,7 @@ viewButton?.addEventListener("click", () => {
   chosenView = overhead() ? "koltuk" : "tepe";
   localStorage.setItem(VIEW_KEY, chosenView);
   fitCamera();
+  nudgeCanvas();
   updateHud();
 });
 
