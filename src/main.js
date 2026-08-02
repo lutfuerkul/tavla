@@ -197,6 +197,27 @@ function takeSeat() {
     camera.up.set(0, 1, 0);
   }
   camera.lookAt(CAMERA_AIM);
+  aimKey();
+}
+
+// The board is looked at from two places and the light was only ever set for
+// one of them. The felt is flat, so a light over your own shoulder throws its
+// sheen away from you: from overhead that comes back off the wood and into the
+// eye, and from the seat it goes over the far rail and is lost — which is why
+// the seat view reads darker than the overhead on the same board. Moved across
+// the table for the seat, the sheen comes back: the readout on a phone-sized
+// frame goes 56.6 to 63.4, a lift of 12%, against the overhead's own 62.2.
+//
+// It costs what it costs: with the light opposite you the shadows fall towards
+// you rather than away, and the dish in the face of a checker reads shallower.
+// In the hand, where the screen is dim to start with, the light is worth more
+// than the modelling. On a desk it is not, and nothing there moves.
+let keyLight = null;
+function aimKey() {
+  if (!keyLight || !HANDHELD) return;
+  keyLight.position.set(6 * AWAY, 10, (overhead() ? -6 : 6) * AWAY);
+  shadowsDirty = true;
+  wake();
 }
 
 takeSeat();
@@ -4943,6 +4964,7 @@ function addRoom() {
   // table, so the light takes the same half turn and arrives over the same
   // shoulder whichever colour you play.
   const key = new THREE.DirectionalLight(0xfff4e2, 2.5);
+  keyLight = key;
   key.position.set(6 * AWAY, 10, -6 * AWAY);
   key.castShadow = true;
   // Half the map in the hand: a texel is 0.9 mm across the board instead of
@@ -4998,6 +5020,9 @@ function addRoom() {
 }
 
 addRoom();
+// The light knows which of the two views it is lighting; the view was taken
+// before there was a light to tell.
+aimKey();
 addBoard();
 resetState();
 renderPieces();
@@ -5060,6 +5085,32 @@ function fitCamera() {
       tallest = Math.max(tallest, Math.abs(seen.y));
     }
     if (widest <= fill && tallest <= fill) break;
+  }
+
+  // Aimed at the middle of the table, which is not the middle of what ends up
+  // on the screen: the near half of the board is closer to the camera than the
+  // far half, so it projects larger and the whole thing sits low in the frame.
+  // Turned sideways that came to a twentieth of the screen's height — the near
+  // rail off the bottom edge and a band of cloth left over at the top. The
+  // aim is lifted until what is drawn is centred on what is looked at.
+  if (!HANDHELD) return;
+  const aim = CAMERA_AIM.clone();
+  for (let pass = 0; pass < 8; pass++) {
+    camera.lookAt(aim);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+    let top = -Infinity, bottom = Infinity;
+    for (const corner of corners) {
+      const seen = corner.clone().project(camera);
+      top = Math.max(top, seen.y);
+      bottom = Math.min(bottom, seen.y);
+    }
+    const off = (top + bottom) / 2;
+    if (Math.abs(off) < .004) break;
+    // How much of the world a half-frame covers at the distance being looked
+    // at: that is what one unit of the projection is worth in board units.
+    const half = camera.position.distanceTo(aim) * Math.tan(camera.fov * Math.PI / 360);
+    aim.y += off * half;
   }
 }
 
