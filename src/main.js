@@ -2983,7 +2983,9 @@ function onDiceSettled() {
     setTimeout(() => throwDice(-AWAY), 1400);
     return;
   }
-  // The throw stood, so the board is nobody's proxy any more.
+  // The throw stood, so the board is nobody's proxy any more — and the number
+  // it was standing in for is now on the felt, so the panel may read it out.
+  if (openingHidden && openingHidden === replayingFor) { openingHidden = null; updateHud(); }
   replayingFor = null;
   game.cocked = false;
   thrownDice = null;
@@ -3274,6 +3276,10 @@ let shownOpening = { black: null, ivory: null };
 // own, which is exactly what it did.
 let shownOpeningAt = { black: -1, ivory: -1 };
 let shownTieAt = -1;
+// Whose opening number the panel may not read out yet: the server has named a
+// die that is still waiting to be thrown on this board. It is let go of when
+// the die comes to rest, or when the throw is given up on.
+let openingHidden = null;
 // The other player's seat: whether anybody is in it, and whether the server
 // has given up on them coming back. Nothing here decides anything — it asks,
 // and the server reads the seat itself before it acts.
@@ -3430,11 +3436,30 @@ function showOpening(state) {
   // opening keeps no time, so there is no case left that wanted it.
   const theirs = Rules.other(HUMAN);
   const value = state.opening?.[theirs] ?? null;
-  if (value === null) { shownOpening[theirs] = null; shownOpeningAt[theirs] = -1; return; }
+  if (value === null) {
+    shownOpening[theirs] = null;
+    shownOpeningAt[theirs] = -1;
+    if (openingHidden === theirs) openingHidden = null;
+    return;
+  }
   const at = state.openingAt?.[theirs] ?? 0;
   if (shownOpening[theirs] === value && shownOpeningAt[theirs] === at) return;
   shownOpening[theirs] = value;
   shownOpeningAt[theirs] = at;
+  // The number is the server's word about a die that has not been thrown on
+  // this felt yet, so it is kept off the panel until it has. It was going up
+  // in the readout the moment the word arrived — seconds before the die it
+  // names crossed the board — so the throw was read before it was watched.
+  openingHidden = theirs;
+  // A number held back for ever is worse than one shown early, so the hold has
+  // an end to it: longer than the throw can take to find its turn on this
+  // board, and it is let go of by the die landing well before this.
+  setTimeout(() => {
+    if (openingHidden === theirs && shownOpeningAt[theirs] === at) {
+      openingHidden = null;
+      if (game) updateHud();
+    }
+  }, 20000);
   replayThrow(theirs, [value], () => shownOpeningAt[theirs] !== at);
 }
 
@@ -3446,7 +3471,13 @@ function showOpening(state) {
 function replayThrow(colour, values, stale, tries = 0) {
   if (stale()) { replayOwed = false; return; }
   if (thrown || heldDice || pending) {
-    if (tries > 40) { replayOwed = false; return; }
+    if (tries > 40) {
+      replayOwed = false;
+      // Given up on: the die is never going to be thrown here, so the number
+      // is better read late than never.
+      if (openingHidden === colour) { openingHidden = null; updateHud(); }
+      return;
+    }
     replayOwed = true;
     setTimeout(() => replayThrow(colour, values, stale, tries + 1), 400);
     return;
@@ -4143,7 +4174,9 @@ function notice(text) {
 // The opening, a die each with a name against it: two people round one device
 // are named, and across a network or against the computer it is you and them.
 function openingLine() {
-  const mine = game.opening[HUMAN], theirs = game.opening[COMPUTER];
+  // A number nobody has watched land here is not on the table yet.
+  const shown = colour => (openingHidden === colour ? null : game.opening[colour]);
+  const mine = shown(HUMAN), theirs = shown(COMPUTER);
   if (mine == null && theirs == null) return "—";
   const [ours, others] = mode === "hotseat"
     ? [nameOf(HUMAN), nameOf(COMPUTER)]
