@@ -131,6 +131,16 @@ const stored = localStorage.getItem(PIECE_KEY);
 const pieceType = HANDHELD ? "ince" : (PIECES.includes(stored) ? stored : "ince");
 const THICK = pieceType === "kalin";
 
+// Which cloth the table is dressed with, chosen at the door like the board.
+const CLOTH_KEY = "tavla.cuha";
+const CLOTHS = {
+  yesil:  { file: "cuha-yesil.jpg",  tile: 14 },
+  mavi:   { file: "cuha-mavi.jpg",   tile: 14 },
+  kadife: { file: "cuha-kadife.jpg", tile: 9 },
+};
+const clothName = CLOTHS[localStorage.getItem(CLOTH_KEY)] ? localStorage.getItem(CLOTH_KEY) : "mavi";
+const CLOTH = CLOTHS[clothName];
+
 const BOARD_KEY = "tavla.board";
 const boardName = BOARDS[localStorage.getItem(BOARD_KEY)] ? localStorage.getItem(BOARD_KEY) : "klasik";
 const BOARD = BOARDS[boardName];
@@ -336,6 +346,12 @@ const SETTINGS = [
     options: [["auto", "option.auto"], ["black", "colour.black"], ["ivory", "colour.ivory"]] },
   { key: "side", label: "setting.side",
     options: [["auto", "option.auto"], ["sol", "side.left"], ["sag", "side.right"]] },
+  // What the board is standing on. Until now it stood on almost nothing: a
+  // plane the colour of soot, which on a phone is half the screen and reads as
+  // the board being darker than it is.
+  { key: "cloth", label: "setting.cloth",
+    options: [["auto", "option.auto"], ["yesil", "cloth.green"],
+              ["mavi", "cloth.blue"], ["kadife", "cloth.velvet"]] },
   // Kept in the list even where it is not shown, because Otomatik is settled by
   // looking the key up here — a row that vanished would take its answer with it.
   { key: "piece", label: "setting.piece", hidden: HANDHELD,
@@ -345,7 +361,7 @@ const SETTINGS = [
 ];
 
 let pickedMode = null;
-const picked = { board: "auto", colour: "auto", side: "auto", piece: "auto" };
+const picked = { board: "auto", colour: "auto", side: "auto", piece: "auto", cloth: "auto" };
 const startButton = document.querySelector("#start");
 
 function markChosen(attribute, value) {
@@ -651,6 +667,7 @@ function sitDownTo(id, colour) {
   localStorage.setItem(BOARD_KEY, settle("board"));
   localStorage.setItem(SIDE_KEY, settle("side"));
   localStorage.setItem(PIECE_KEY, settle("piece"));
+  localStorage.setItem(CLOTH_KEY, settle("cloth"));
   sessionStorage.setItem("tavla.sitOnLoad", "1");
   say("lobby.found");
   location.reload();
@@ -840,13 +857,14 @@ const sideName = SIDE === -1 ? "sag" : "sol";
 startButton?.addEventListener("click", () => {
   if (!pickedMode) return;
   const board = settle("board"), colour = settle("colour"), side = settle("side");
-  const piece = settle("piece");
+  const piece = settle("piece"), cloth = settle("cloth");
   if (board === boardName && colour === HUMAN && side === sideName
-      && piece === pieceType) return sitDown();
+      && piece === pieceType && cloth === clothName) return sitDown();
   localStorage.setItem(BOARD_KEY, board);
   localStorage.setItem(COLOUR_KEY, colour);
   localStorage.setItem(SIDE_KEY, side);
   localStorage.setItem(PIECE_KEY, piece);
+  localStorage.setItem(CLOTH_KEY, cloth);
   sessionStorage.setItem("tavla.sitOnLoad", "1");
   location.reload();
 });
@@ -4873,12 +4891,55 @@ addEventListener("pointercancel", () => {
   renderPieces();
 });
 
+// The cloth, darkened towards its edges. Painted into the corners of the mesh
+// rather than into the texture: the weave stays as crisp as the photograph is,
+// nothing extra is read per pixel, and the fall-off is smooth because the
+// surface is divided finely enough to carry it. What it buys is a picture that
+// ends rather than one that runs out — the board sits in the middle of a lit
+// table instead of on a lit floor with black edges.
+function clothPlane(size, divisions) {
+  const geometry = new THREE.PlaneGeometry(size, size, divisions, divisions);
+  const position = geometry.attributes.position;
+  const colours = new Float32Array(position.count * 3);
+  const reach = size / 2;
+  for (let i = 0; i < position.count; i++) {
+    const away = Math.hypot(position.getX(i), position.getY(i)) / reach;
+    // Full brightness out to a third of the way, then down to almost nothing
+    // at the rim. Squared, so the darkening starts gently and finishes fast.
+    const lit = 1 - .93 * Math.min(1, Math.max(0, (away - .28) / .62)) ** 2;
+    colours[i * 3] = colours[i * 3 + 1] = colours[i * 3 + 2] = lit;
+  }
+  geometry.setAttribute("color", new THREE.BufferAttribute(colours, 3));
+  return geometry;
+}
+
 function addRoom() {
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: 0x050301, roughness: .95 }));
+  // The cloth the board stands on. It used to be a plane the colour of soot,
+  // and on a phone that is half the screen: a board with nothing under it, and
+  // an eye that reads the whole picture as darker than it is because most of
+  // what it can see is black. A table under it fixes the look and the darkness
+  // at the same time, and costs one texture read on pixels that were already
+  // being drawn.
+  const cloth = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .92,
+    vertexColors: true });
+  const floor = new THREE.Mesh(clothPlane(80, 24), cloth);
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -.25;
   floor.receiveShadow = true;
   scene.add(floor);
+  // Loaded rather than drawn, and loaded late: the board does not wait on it,
+  // and until it arrives the cloth is the flat colour underneath.
+  cloth.color.setHex(0x2a2f38);
+  new THREE.TextureLoader().load(`./doku/${CLOTH.file}`, map => {
+    map.colorSpace = THREE.SRGBColorSpace;
+    map.wrapS = map.wrapT = THREE.RepeatWrapping;
+    map.repeat.set(CLOTH.tile, CLOTH.tile);
+    map.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+    cloth.map = map;
+    cloth.color.setHex(0xffffff);
+    cloth.needsUpdate = true;
+    wake();
+  }, undefined, () => {});
 
   // Even coverage across the board, but still directional on each surface.
   // Flooding it equally from four sides did make every corner the same
@@ -4909,10 +4970,15 @@ function addRoom() {
   key.shadow.bias = -0.0004;
   key.shadow.normalBias = .02;
   key.shadow.radius = 3;
-  key.shadow.camera.left = -13;
-  key.shadow.camera.right = 13;
-  key.shadow.camera.top = 13;
-  key.shadow.camera.bottom = -13;
+  // Wide enough to take in the cloth around the board, not only the board. The
+  // shadow it throws onto the table is what makes the board stand on something
+  // rather than float above it — and it was falling outside the map and being
+  // dropped. A third more ground for the same number of texels, which on a
+  // board this size is a millimetre of softening nobody will find.
+  key.shadow.camera.left = -18;
+  key.shadow.camera.right = 18;
+  key.shadow.camera.top = 18;
+  key.shadow.camera.bottom = -18;
   key.shadow.camera.near = 1;
   key.shadow.camera.far = 40;
   scene.add(key);
