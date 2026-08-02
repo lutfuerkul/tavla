@@ -2985,7 +2985,7 @@ function onDiceSettled() {
   }
   // The throw stood, so the board is nobody's proxy any more — and the number
   // it was standing in for is now on the felt, so the panel may read it out.
-  if (openingHidden && openingHidden === replayingFor) { openingHidden = null; updateHud(); }
+  if (openingHidden && openingHidden === replayingFor) releaseOpening();
   replayingFor = null;
   game.cocked = false;
   thrownDice = null;
@@ -3280,6 +3280,20 @@ let shownTieAt = -1;
 // die that is still waiting to be thrown on this board. It is let go of when
 // the die comes to rest, or when the throw is given up on.
 let openingHidden = null;
+// A tie waiting on that same die. Two equal numbers is news about both of
+// them, so it cannot be said while one is still in the air — it would say
+// what the die is going to be before anybody has seen it land.
+let pendingTie = null;
+
+// The held number let go of: the panel may read it out, and anything that was
+// waiting on it gets said.
+function releaseOpening() {
+  openingHidden = null;
+  const say = pendingTie;
+  pendingTie = null;
+  if (game) updateHud();
+  if (say) say();
+}
 // The other player's seat: whether anybody is in it, and whether the server
 // has given up on them coming back. Nothing here decides anything — it asks,
 // and the server reads the seat itself before it acts.
@@ -3439,7 +3453,9 @@ function showOpening(state) {
   if (value === null) {
     shownOpening[theirs] = null;
     shownOpeningAt[theirs] = -1;
-    if (openingHidden === theirs) openingHidden = null;
+    // The opening wiped: anything that was waiting on their die goes with it,
+    // since it was about numbers that are no longer on the match.
+    if (openingHidden === theirs) { openingHidden = null; pendingTie = null; }
     return;
   }
   const at = state.openingAt?.[theirs] ?? 0;
@@ -3455,10 +3471,7 @@ function showOpening(state) {
   // an end to it: longer than the throw can take to find its turn on this
   // board, and it is let go of by the die landing well before this.
   setTimeout(() => {
-    if (openingHidden === theirs && shownOpeningAt[theirs] === at) {
-      openingHidden = null;
-      if (game) updateHud();
-    }
+    if (openingHidden === theirs && shownOpeningAt[theirs] === at) releaseOpening();
   }, 20000);
   replayThrow(theirs, [value], () => shownOpeningAt[theirs] !== at);
 }
@@ -3475,7 +3488,7 @@ function replayThrow(colour, values, stale, tries = 0) {
       replayOwed = false;
       // Given up on: the die is never going to be thrown here, so the number
       // is better read late than never.
-      if (openingHidden === colour) { openingHidden = null; updateHud(); }
+      if (openingHidden === colour) releaseOpening();
       return;
     }
     replayOwed = true;
@@ -3780,17 +3793,6 @@ function applyServerState(state) {
     // it was holding the throw it had already made — so nothing could be picked
     // up on the side that threw first, and the other player's die, waiting for
     // a clear hand before it could be shown, was never shown either.
-    // Two equal opening dice. Nothing is cleared and nothing is swept: the one
-    // who threw second throws again, over their own number, and the board says
-    // so. Announced once per throw of the opening, since the tie stands on the
-    // match until it is broken and every later word about the match carries it.
-    const tied = state.phase === "opening" && state.opening
-      && state.opening.ivory != null && state.opening.ivory === state.opening.black;
-    const tieAt = Math.max(state.openingAt?.black ?? 0, state.openingAt?.ivory ?? 0);
-    if (tied && tieAt !== shownTieAt) {
-      shownTieAt = tieAt;
-      announce(state.waitingOn === HUMAN ? "open.tieYou" : "open.tieThem");
-    }
     // The opening is over: the pair goes back to the middle together, the one
     // that was waiting off the board along with it.
     if (wasOpening && state.phase === "play") { resetDice(); openingStands = true; }
@@ -3827,6 +3829,23 @@ function applyServerState(state) {
     // their number is not on the panel yet, and written afterwards the number
     // went up in the readout for as long as it took the next word to arrive.
     if (state.opening && state.phase === "opening") showOpening(state);
+    // Two equal opening dice. Nothing is cleared and nothing is swept: the one
+    // who threw second throws again, over their own number, and the board says
+    // so. Announced once per throw of the opening, since the tie stands on the
+    // match until it is broken and every later word about the match carries it.
+    // Said after the die it is about has been asked for above, and held back
+    // until it has landed here: a tie is the two numbers being equal, so
+    // saying it while one of them is still crossing the felt gives the throw
+    // away before it can be watched.
+    const tied = state.phase === "opening" && state.opening
+      && state.opening.ivory != null && state.opening.ivory === state.opening.black;
+    const tieAt = Math.max(state.openingAt?.black ?? 0, state.openingAt?.ivory ?? 0);
+    if (tied && tieAt !== shownTieAt) {
+      shownTieAt = tieAt;
+      const waiting = state.waitingOn;
+      const say = () => announce(waiting === HUMAN ? "open.tieYou" : "open.tieThem");
+      if (openingHidden) pendingTie = say; else say();
+    }
     renderPieces();
     updateHud();
     if (state.phase === "opening" || !state.dice) return;
