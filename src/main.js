@@ -5085,12 +5085,18 @@ function fitCamera() {
     }
   }
 
-  // The seat and the overhead both sit at a fixed distance and this only ever
-  // backed away from it, so a screen with room to spare kept the board at
-  // arm's length: turned sideways, the case was using 87% of the height and
-  // half the width and the camera never moved. In the hand it may come in as
-  // well as go out — the same test decides when to stop either way.
-  for (let step = HANDHELD ? -15 : 0; step < 60; step++) {
+  // The seat sits at a fixed distance and this only ever backed away from it,
+  // so a screen with room to spare kept the board at arm's length: turned
+  // sideways, the case was using 87% of the height and half the width and the
+  // camera never moved. From the seat it may now come in as well as go out —
+  // the same test decides when to stop either way.
+  //
+  // The overhead stays where it was put. Coming closer costs it more than it
+  // gains: from above, a shorter throw is a wider angle at the edges of the
+  // frame, and the inside faces of the outer walls come into view. Sideways
+  // that took the rail from 56 pixels to 68 — the board itself only grew 9% —
+  // and a thick dark border round the felt is what the board is read against.
+  for (let step = snug ? -15 : 0; step < 60; step++) {
     camera.position.copy(CAMERA_AIM).addScaledVector(direction, base * (1 + step * .04));
     camera.lookAt(CAMERA_AIM);
     camera.updateProjectionMatrix();
