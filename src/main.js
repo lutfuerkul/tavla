@@ -213,9 +213,18 @@ function takeSeat() {
 // In the hand, where the screen is dim to start with, the light is worth more
 // than the modelling. On a desk it is not, and nothing there moves.
 let keyLight = null;
+// The second lamp, over the other far corner. It burns for the seat view only:
+// from overhead the one lamp over your shoulder is what gives the board its
+// shading, and a second one facing it would cancel half of that.
+let keyMate = null;
 function aimKey() {
   if (!keyLight || !HANDHELD) return;
-  keyLight.position.set(6 * AWAY, 10, (overhead() ? -6 : 6) * AWAY);
+  const seat = !overhead();
+  keyLight.position.set(6 * AWAY, 10, (seat ? 6 : -6) * AWAY);
+  if (keyMate) {
+    keyMate.position.set(-6 * AWAY, 10, 6 * AWAY);
+    keyMate.visible = seat;
+  }
   shadowsDirty = true;
   wake();
 }
@@ -4991,6 +5000,14 @@ function addRoom() {
   key.shadow.camera.near = 1;
   key.shadow.camera.far = 40;
   scene.add(key);
+
+  // And its mirror image across the board, for the seat view in the hand: the
+  // same lamp — same colour, same strength, same shadow — hung over the other
+  // far corner, so the board is lit from both top corners rather than one.
+  if (HANDHELD) {
+    keyMate = key.clone();
+    scene.add(keyMate);
+  }
 
   // Quadrant fills keep the corners of the board level with the middle, but
   // stay well under the key so they do not cancel its shading.
