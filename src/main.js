@@ -197,6 +197,41 @@ function takeSeat() {
     camera.up.set(0, 1, 0);
   }
   camera.lookAt(CAMERA_AIM);
+  aimKey();
+}
+
+// The board is looked at from two places and the light was only ever set for
+// one of them. The felt is flat, so a light over your own shoulder throws its
+// sheen away from you: from overhead that comes back off the wood and into the
+// eye, and from the seat it goes over the far rail and is lost — which is why
+// the seat view reads darker than the overhead on the same board. Moved across
+// the table for the seat, the sheen comes back: the readout on a phone-sized
+// frame goes 56.6 to 63.4, a lift of 12%, against the overhead's own 62.2.
+//
+// It costs what it costs: with the light opposite you the shadows fall towards
+// you rather than away, and the dish in the face of a checker reads shallower.
+// In the hand, where the screen is dim to start with, the light is worth more
+// than the modelling. On a desk it is not, and nothing there moves.
+let keyLight = null;
+// The second lamp, over the other corner: the pair is what makes the seat view
+// bright, and the overhead was left with one and looked dark beside it. Both
+// burn for both views now — but from overhead they stay on your own side of
+// the table rather than crossing it. Overhead the sheen already comes back off
+// the wood from a lamp over your shoulder, so crossing buys nothing and costs
+// the shading: 72.2 against 70.4, with the shadows falling away from you
+// rather than towards you. The seat view is not touched by any of this.
+let keyMate = null;
+function aimKey() {
+  if (!keyLight || !HANDHELD) return;
+  const seat = !overhead();
+  const side = (seat ? 6 : -6) * AWAY;
+  keyLight.position.set(6 * AWAY, 10, side);
+  if (keyMate) {
+    keyMate.position.set(-6 * AWAY, 10, side);
+    keyMate.visible = true;
+  }
+  shadowsDirty = true;
+  wake();
 }
 
 takeSeat();
@@ -2943,11 +2978,7 @@ let sliding = null;
 function slideChecker(colour, from, to, onDone) {
   const mesh = new THREE.Mesh(checkerGeometry, colour === "ivory" ? ivory : black);
   mesh.position.set(from.x, from.y, from.z);
-  // A checker crossing the board throws no shadow. What it would throw is a
-  // second shadow map every frame it moves, drawn for a shape nobody is
-  // looking at — the eye is on the checker, not on the felt under it — and
-  // the one that matters is the one it has when it comes down.
-  mesh.castShadow = false;
+  mesh.castShadow = true;
   scene.add(mesh);
   sliding = { mesh, from, to, t: 0, span: .62, onDone };
 }
@@ -4770,8 +4801,7 @@ canvas.addEventListener("pointerdown", (e) => {
   // move is visible while it is happening.
   game.lifted = { key };
   const carried = new THREE.Mesh(checkerGeometry, game.turn === "ivory" ? ivory : black);
-  // In the hand, and casting nothing — see slideChecker.
-  carried.castShadow = false;
+  carried.castShadow = true;
   carried.position.copy(seat.position).setY(CARRY_Y);
   scene.add(carried);
 
@@ -4947,14 +4977,9 @@ function addRoom() {
   // Taking the seat to the other end is a half turn about the middle of the
   // table, so the light takes the same half turn and arrives over the same
   // shoulder whichever colour you play.
-  // In the hand it stands across the table instead, and stays there for both
-  // views. The felt is flat: a lamp over your own shoulder throws its sheen
-  // away from you, and a lamp opposite throws it back into your eye. From the
-  // seat that is the whole difference between a dim board and a bright one,
-  // and from overhead it costs a little of the shading — 70.4 against 72.2 —
-  // for one lighting that does not move when the camera does.
   const key = new THREE.DirectionalLight(0xfff4e2, 2.5);
-  key.position.set(6 * AWAY, 10, (HANDHELD ? 6 : -6) * AWAY);
+  keyLight = key;
+  key.position.set(6 * AWAY, 10, -6 * AWAY);
   key.castShadow = true;
   // Half the map in the hand: a texel is 0.9 mm across the board instead of
   // 0.46, which is under the width of the softening already applied to the
@@ -4981,13 +5006,12 @@ function addRoom() {
   key.shadow.camera.far = 40;
   scene.add(key);
 
-  // And its mirror image over the other far corner: the same lamp — same
-  // colour, same strength, same shadow — so the board is lit from both far
-  // corners rather than one. In the hand only.
+  // And its mirror image across the board, for the seat view in the hand: the
+  // same lamp — same colour, same strength, same shadow — hung over the other
+  // far corner, so the board is lit from both top corners rather than one.
   if (HANDHELD) {
-    const mate = key.clone();
-    mate.position.set(-6 * AWAY, 10, 6 * AWAY);
-    scene.add(mate);
+    keyMate = key.clone();
+    scene.add(keyMate);
   }
 
   // Quadrant fills keep the corners of the board level with the middle, but
@@ -5018,6 +5042,9 @@ function addRoom() {
 }
 
 addRoom();
+// The light knows which of the two views it is lighting; the view was taken
+// before there was a light to tell.
+aimKey();
 addBoard();
 resetState();
 renderPieces();
@@ -5172,25 +5199,10 @@ function animate(now) {
   stepDicePhysics(dt);
   const at = now ?? performance.now();
   const busy = moving();
-  // A die in the air throws no shadow either, and for the same reason: the
-  // shadow map is a second drawing of the whole board, made from the light's
-  // side, and it was being made again on every frame of a throw for two dice
-  // in flight. They get their shadow back the moment they stop — which is
-  // where it is looked for, since a die lying on the felt with nothing under
-  // it is a die that has not landed.
-  for (const die of diceMeshes) {
-    const grounded = die.userData.die.mode === "rest";
-    if (die.castShadow === grounded) continue;
-    die.castShadow = grounded;
-    shadowsDirty = true;
-  }
   const draw = !ON_DEMAND || busy || needsFrame || shadowsDirty
     || at - lastDrawn > HEARTBEAT_MS;
   if (draw) {
-    // Nothing that moves casts any more, so the map only wants drawing when
-    // something has been said to have changed — not on every frame of every
-    // throw and every move.
-    renderer.shadowMap.needsUpdate = shadowsDirty;
+    renderer.shadowMap.needsUpdate = shadowsDirty || busy;
     shadowsDirty = false;
     needsFrame = false;
     lastDrawn = at;
