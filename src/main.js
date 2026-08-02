@@ -197,41 +197,6 @@ function takeSeat() {
     camera.up.set(0, 1, 0);
   }
   camera.lookAt(CAMERA_AIM);
-  aimKey();
-}
-
-// The board is looked at from two places and the light was only ever set for
-// one of them. The felt is flat, so a light over your own shoulder throws its
-// sheen away from you: from overhead that comes back off the wood and into the
-// eye, and from the seat it goes over the far rail and is lost — which is why
-// the seat view reads darker than the overhead on the same board. Moved across
-// the table for the seat, the sheen comes back: the readout on a phone-sized
-// frame goes 56.6 to 63.4, a lift of 12%, against the overhead's own 62.2.
-//
-// It costs what it costs: with the light opposite you the shadows fall towards
-// you rather than away, and the dish in the face of a checker reads shallower.
-// In the hand, where the screen is dim to start with, the light is worth more
-// than the modelling. On a desk it is not, and nothing there moves.
-let keyLight = null;
-// The second lamp, over the other corner: the pair is what makes the seat view
-// bright, and the overhead was left with one and looked dark beside it. Both
-// burn for both views now — but from overhead they stay on your own side of
-// the table rather than crossing it. Overhead the sheen already comes back off
-// the wood from a lamp over your shoulder, so crossing buys nothing and costs
-// the shading: 72.2 against 70.4, with the shadows falling away from you
-// rather than towards you. The seat view is not touched by any of this.
-let keyMate = null;
-function aimKey() {
-  if (!keyLight || !HANDHELD) return;
-  const seat = !overhead();
-  const side = (seat ? 6 : -6) * AWAY;
-  keyLight.position.set(6 * AWAY, 10, side);
-  if (keyMate) {
-    keyMate.position.set(-6 * AWAY, 10, side);
-    keyMate.visible = true;
-  }
-  shadowsDirty = true;
-  wake();
 }
 
 takeSeat();
@@ -4977,9 +4942,14 @@ function addRoom() {
   // Taking the seat to the other end is a half turn about the middle of the
   // table, so the light takes the same half turn and arrives over the same
   // shoulder whichever colour you play.
+  // In the hand it stands across the table instead, and stays there for both
+  // views. The felt is flat: a lamp over your own shoulder throws its sheen
+  // away from you, and a lamp opposite throws it back into your eye. From the
+  // seat that is the whole difference between a dim board and a bright one,
+  // and from overhead it costs a little of the shading — 70.4 against 72.2 —
+  // for one lighting that does not move when the camera does.
   const key = new THREE.DirectionalLight(0xfff4e2, 2.5);
-  keyLight = key;
-  key.position.set(6 * AWAY, 10, -6 * AWAY);
+  key.position.set(6 * AWAY, 10, (HANDHELD ? 6 : -6) * AWAY);
   key.castShadow = true;
   // Half the map in the hand: a texel is 0.9 mm across the board instead of
   // 0.46, which is under the width of the softening already applied to the
@@ -5006,12 +4976,13 @@ function addRoom() {
   key.shadow.camera.far = 40;
   scene.add(key);
 
-  // And its mirror image across the board, for the seat view in the hand: the
-  // same lamp — same colour, same strength, same shadow — hung over the other
-  // far corner, so the board is lit from both top corners rather than one.
+  // And its mirror image over the other far corner: the same lamp — same
+  // colour, same strength, same shadow — so the board is lit from both far
+  // corners rather than one. In the hand only.
   if (HANDHELD) {
-    keyMate = key.clone();
-    scene.add(keyMate);
+    const mate = key.clone();
+    mate.position.set(-6 * AWAY, 10, 6 * AWAY);
+    scene.add(mate);
   }
 
   // Quadrant fills keep the corners of the board level with the middle, but
@@ -5042,9 +5013,6 @@ function addRoom() {
 }
 
 addRoom();
-// The light knows which of the two views it is lighting; the view was taken
-// before there was a light to tell.
-aimKey();
 addBoard();
 resetState();
 renderPieces();
