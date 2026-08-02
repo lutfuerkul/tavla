@@ -107,15 +107,28 @@ if (mode === "online" && !matchId) mode = "solo";
 // Across a network only your own colour is yours; on one device both are.
 const isHuman = colour => mode === "hotseat" || colour === HUMAN;
 
+// Fingers rather than a mouse, and how much screen there is to fill. A tablet
+// and a phone are both handhelds and want opposite things: the tablet paints
+// three times the phone's pixels off a chip that is not three times the phone's
+// and could not hold its own resolution, so its frame is made cheaper. The
+// phone's frame was never the problem, and the same economies were visible on
+// it — so the phone keeps everything it had.
+const HANDHELD = matchMedia?.("(pointer: coarse)").matches ?? false;
+
 // Two sets of pieces to play with. The thin ones are the game's own — a
 // dished face with a rim round it — and the thick ones are cut from the
 // photographs of a real set: a plain cylinder, a millimetre of radius on each
 // corner, and one shallow saucer in the middle of the top. Which is on the
 // table is a setting at the door, like the board and the colour.
+//
+// In the hand there is one set and no setting. A checker there is a centimetre
+// across; the difference between the two mouldings is a millimetre of rim and
+// a shallower dish, which is not a choice anybody can see on a phone — and the
+// row it costs at the door is a row on a page that already has to fit.
 const PIECE_KEY = "tavla.tas";
 const PIECES = ["ince", "kalin"];
-const pieceType = PIECES.includes(localStorage.getItem(PIECE_KEY))
-  ? localStorage.getItem(PIECE_KEY) : "ince";
+const stored = localStorage.getItem(PIECE_KEY);
+const pieceType = HANDHELD ? "ince" : (PIECES.includes(stored) ? stored : "ince");
 const THICK = pieceType === "kalin";
 
 const BOARD_KEY = "tavla.board";
@@ -146,13 +159,6 @@ const CAMERA_AIM = new THREE.Vector3(0, .4, 0);
 // asked for from the board. An answer given is remembered and outranks the
 // mode's own preference; until one is given, changing the mode at the door
 // changes the view with it.
-// Fingers rather than a mouse, and how much screen there is to fill. A tablet
-// and a phone are both handhelds and want opposite things: the tablet paints
-// three times the phone's pixels off a chip that is not three times the phone's
-// and could not hold its own resolution, so its frame is made cheaper. The
-// phone's frame was never the problem, and the same economies were visible on
-// it — so the phone keeps everything it had.
-const HANDHELD = matchMedia?.("(pointer: coarse)").matches ?? false;
 const TABLET = HANDHELD && Math.min(innerWidth, innerHeight) >= 600;
 
 // A board that is not moving is a board whose next frame would be identical to
@@ -330,8 +336,12 @@ const SETTINGS = [
     options: [["auto", "option.auto"], ["black", "colour.black"], ["ivory", "colour.ivory"]] },
   { key: "side", label: "setting.side",
     options: [["auto", "option.auto"], ["sol", "side.left"], ["sag", "side.right"]] },
-  { key: "piece", label: "setting.piece",
-    options: [["auto", "option.auto"], ["ince", "piece.thin"], ["kalin", "piece.thick"]] },
+  // Kept in the list even where it is not shown, because Otomatik is settled by
+  // looking the key up here — a row that vanished would take its answer with it.
+  { key: "piece", label: "setting.piece", hidden: HANDHELD,
+    options: HANDHELD
+      ? [["auto", "option.auto"], ["ince", "piece.thin"]]
+      : [["auto", "option.auto"], ["ince", "piece.thin"], ["kalin", "piece.thick"]] },
 ];
 
 let pickedMode = null;
@@ -377,6 +387,7 @@ function closeDrawers(except) {
 function buildSettings() {
   if (!settingsBox) return;
   for (const setting of SETTINGS) {
+    if (setting.hidden) continue;
     const row = document.createElement("div");
     row.className = "setting";
     setting.row = row;
@@ -454,6 +465,7 @@ addEventListener("pointerdown", event => {
 // rewrites them along with everything else.
 function showSettings() {
   for (const setting of SETTINGS) {
+    if (setting.hidden) continue;
     // Which colour you play is the room's to say, not yours: the one who was
     // waiting takes black, and nobody knows which of the two of them pressed
     // first. Left as a choice it is a choice that is quietly overruled — you
@@ -2215,7 +2227,7 @@ function pushOffBar(die) {
 
 function pushOffCheckers(die) {
   const reach = DIE_INNER * Math.sqrt(3) + DIE_RADIUS;
-  for (const checker of pieceMeshes) {
+  for (const checker of pieceSeats) {
     const dx = die.position.x - checker.position.x;
     const dz = die.position.z - checker.position.z;
     if (dx * dx + dz * dz > CHECKER_RANGE) continue;
@@ -2457,7 +2469,7 @@ function checkerContacts(die) {
   if (s.mode !== "throw") return;
   boxAxes(die, _axA);
   const reach = DIE_INNER * Math.sqrt(3) + DIE_RADIUS;
-  for (const checker of pieceMeshes) {
+  for (const checker of pieceSeats) {
     const dx = die.position.x - checker.position.x;
     const dz = die.position.z - checker.position.z;
     if (dx * dx + dz * dz > CHECKER_RANGE) continue;
@@ -2720,15 +2732,67 @@ function offSeat(colour, standing = 0) {
 
 const piecesGroup = new THREE.Group();
 scene.add(piecesGroup);
-let pieceMeshes = [];
+
+// One drawn object for each colour, holding every checker of that colour at
+// once. They used to be thirty separate meshes — thirty separate commands to
+// the card for what is one shape and one material, redrawn as a set on every
+// move. Nothing about the picture changes; what changes is how many times the
+// card is asked for it.
+//
+// Fifteen a side is the whole set: what is on the board and what has been
+// borne off come out of the same fifteen, and the one in the hand is drawn on
+// its own. So fifteen seats each is the ceiling and it cannot be exceeded.
+const CHECKERS_EACH = 15;
+const UP = new THREE.Vector3(0, 1, 0);
+const _seatMatrix = new THREE.Matrix4();
+const _seatAt = new THREE.Vector3();
+const _seatTurn = new THREE.Quaternion();
+const _seatSize = new THREE.Vector3(1, 1, 1);
+const checkerSets = {
+  ivory: new THREE.InstancedMesh(checkerGeometry, ivory, CHECKERS_EACH),
+  black: new THREE.InstancedMesh(checkerGeometry, black, CHECKERS_EACH),
+};
+for (const colour of Rules.COLOURS) {
+  checkerSets[colour].castShadow = true;
+  checkerSets[colour].receiveShadow = true;
+  checkerSets[colour].count = 0;
+  // The board never leaves the view, and the sphere it would be tested against
+  // would have to be rebuilt after every move to be worth asking about.
+  checkerSets[colour].frustumCulled = false;
+  piecesGroup.add(checkerSets[colour]);
+}
+
+// Every checker that is in play, as a record rather than an object: where it
+// sits, which point it belongs to, whose it is. That is all anything wanted
+// from them — the dice read the position, the pointer reads the rest — which
+// is what makes one drawn object for all of them possible.
+let pieceSeats = [];
+// And which record each drawn seat belongs to, for the pointer: a ray against
+// an instanced object comes back with a number rather than a thing. Checkers
+// borne off are drawn but not listed, so their seats are empty here: nobody
+// may pick one up and no die ever reaches them.
+const seatOfInstance = { ivory: [], black: [] };
 
 function renderPieces() {
   wake();
-  piecesGroup.clear();
-  pieceMeshes = [];
-  // Every checker on the board is a new mesh, so the shadows are stale until
-  // they have been drawn against these.
+  pieceSeats = [];
+  seatOfInstance.ivory = [];
+  seatOfInstance.black = [];
+  const used = { ivory: 0, black: 0 };
+  // The checkers have moved, so the shadows are stale until they have been
+  // drawn against these.
   shadowsDirty = true;
+
+  // A hair of yaw per checker so a row reads as hand-placed rather than
+  // stamped.
+  const seatChecker = (colour, seat, yaw, held) => {
+    const at = used[colour]++;
+    _seatMatrix.compose(_seatAt.set(seat.x, seat.y, seat.z),
+      _seatTurn.setFromAxisAngle(UP, yaw), _seatSize);
+    checkerSets[colour].setMatrixAt(at, _seatMatrix);
+    seatOfInstance[colour][at] = held ?? null;
+    if (held) pieceSeats.push(held);
+  };
 
   const stacks = [];
   for (let point = 1; point <= 24; point++) {
@@ -2744,36 +2808,31 @@ function renderPieces() {
   for (const colour of Rules.COLOURS) {
     const taken = game.pos.off[colour];
     if (!taken) continue;
-    const material = colour === "ivory" ? ivory : black;
     for (let i = 0; i < taken; i++) {
-      const seat = offSeat(colour, i);
-      const body = new THREE.Mesh(checkerGeometry, material);
-      body.position.set(seat.x, seat.y, seat.z);
-      body.rotation.y = (Math.random() - .5) * .3;
-      body.castShadow = true;
-      body.receiveShadow = true;
-      piecesGroup.add(body);
+      seatChecker(colour, offSeat(colour, i), (Math.random() - .5) * .3, null);
     }
   }
 
   for (const [key, colour, count] of stacks) {
-    const material = colour === "ivory" ? ivory : black;
     // The checker currently in the player's hand is drawn separately, so its
     // seat on the point is left empty while the drag is in progress.
     const onBoard = count - (game.lifted && game.lifted.key === key ? 1 : 0);
     for (let i = 0; i < onBoard; i++) {
       const seat = checkerSeat(key, i);
-      const body = new THREE.Mesh(checkerGeometry, material);
-      body.position.set(seat.x, seat.y, seat.z);
-      // A hair of yaw per checker so the row reads as hand-placed.
-      body.rotation.y = (Math.random() - .5) * .5;
-      body.castShadow = true;
-      body.receiveShadow = true;
-      body.userData.pointKey = key;
-      body.userData.colour = colour;
-      piecesGroup.add(body);
-      pieceMeshes.push(body);
+      seatChecker(colour, seat, (Math.random() - .5) * .5, {
+        position: new THREE.Vector3(seat.x, seat.y, seat.z),
+        pointKey: key,
+        colour,
+      });
     }
+  }
+  for (const colour of Rules.COLOURS) {
+    checkerSets[colour].count = used[colour];
+    checkerSets[colour].instanceMatrix.needsUpdate = true;
+    // Built from the seats, so it has to be given up whenever they move — the
+    // ray is tested against it before any seat is looked at, and a stale one
+    // is a checker that cannot be picked up.
+    checkerSets[colour].boundingSphere = null;
   }
   dropUnsupportedDice();
 }
@@ -4670,10 +4729,17 @@ canvas.addEventListener("pointerdown", (e) => {
   // the next release dropping it wherever the pointer happened to be.
   if (heldDice) return;
 
-  const hits = raycaster.intersectObjects(pieceMeshes, false);
+  // A ray against an instanced object comes back with a seat number rather
+  // than a thing, so which checker was hit is looked up rather than read off.
+  const hits = raycaster.intersectObjects([checkerSets.ivory, checkerSets.black], false);
   if (!hits.length) return;
-  const key = hits[0].object.userData.pointKey;
-  if (hits[0].object.userData.colour !== game.turn || !isHuman(game.turn)) return;
+  const hit = hits[0];
+  const seat = seatOfInstance[hit.object === checkerSets.ivory ? "ivory" : "black"][hit.instanceId];
+  // Drawn but not in play: a checker already borne off, sitting outside the
+  // wall. There is nothing to pick up there.
+  if (!seat) return;
+  const key = seat.pointKey;
+  if (seat.colour !== game.turn || !isHuman(game.turn)) return;
 
   // Only a checker with somewhere legal to go can be picked up. Lifting one
   // that cannot move and dropping it back is a move you did not make.
@@ -4685,7 +4751,7 @@ canvas.addEventListener("pointerdown", (e) => {
   game.lifted = { key };
   const carried = new THREE.Mesh(checkerGeometry, game.turn === "ivory" ? ivory : black);
   carried.castShadow = true;
-  carried.position.copy(hits[0].object.position).setY(CARRY_Y);
+  carried.position.copy(seat.position).setY(CARRY_Y);
   scene.add(carried);
 
   dragging = { fromKey: key, from, mesh: carried };
