@@ -3815,8 +3815,6 @@ function applyServerState(state) {
     // The board that pressed took its own box down and would otherwise be left
     // with the dice where the last throw of the last game put them.
     else if (restarted) resetDice();
-    renderPieces();
-    updateHud();
     // Their dice, thrown here so they can be seen landing rather than simply
     // appearing. The numbers are the server's; the tumble is found the same
     // way ours is.
@@ -3825,7 +3823,12 @@ function applyServerState(state) {
     // and then waits for it — asking again from in here is asking a second
     // time about a throw that has already been shown, and the board that lost
     // the opening watched the winner's die cross the felt twice.
+    // Before the panel is written rather than after: it is what decides that
+    // their number is not on the panel yet, and written afterwards the number
+    // went up in the readout for as long as it took the next word to arrive.
     if (state.opening && state.phase === "opening") showOpening(state);
+    renderPieces();
+    updateHud();
     if (state.phase === "opening" || !state.dice) return;
     // A turn's dice, on the other hand, are only worth showing while they are
     // still the turn's dice.
