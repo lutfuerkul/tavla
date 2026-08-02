@@ -349,7 +349,10 @@ const SETTINGS = [
   // What the board is standing on. Until now it stood on almost nothing: a
   // plane the colour of soot, which on a phone is half the screen and reads as
   // the board being darker than it is.
-  { key: "cloth", label: "setting.cloth",
+  // In the hand only. On a desk the board fills the window and there is barely
+  // any ground to see; the cloth was answering a darkness that only a phone has,
+  // where the board is a third of the screen and the rest was soot.
+  { key: "cloth", label: "setting.cloth", hidden: !HANDHELD,
     options: [["auto", "option.auto"], ["yesil", "cloth.green"],
               ["mavi", "cloth.blue"], ["kadife", "cloth.velvet"]] },
   // Kept in the list even where it is not shown, because Otomatik is settled by
@@ -4920,26 +4923,28 @@ function addRoom() {
   // what it can see is black. A table under it fixes the look and the darkness
   // at the same time, and costs one texture read on pixels that were already
   // being drawn.
-  const cloth = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .92,
-    vertexColors: true });
-  const floor = new THREE.Mesh(clothPlane(80, 24), cloth);
+  const cloth = new THREE.MeshStandardMaterial({
+    color: HANDHELD ? 0x2a2f38 : 0x050301, roughness: HANDHELD ? .92 : .95,
+    vertexColors: HANDHELD });
+  const floor = new THREE.Mesh(HANDHELD ? clothPlane(80, 24) : new THREE.PlaneGeometry(80, 80), cloth);
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -.25;
   floor.receiveShadow = true;
   scene.add(floor);
   // Loaded rather than drawn, and loaded late: the board does not wait on it,
   // and until it arrives the cloth is the flat colour underneath.
-  cloth.color.setHex(0x2a2f38);
-  new THREE.TextureLoader().load(`./doku/${CLOTH.file}`, map => {
-    map.colorSpace = THREE.SRGBColorSpace;
-    map.wrapS = map.wrapT = THREE.RepeatWrapping;
-    map.repeat.set(CLOTH.tile, CLOTH.tile);
-    map.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
-    cloth.map = map;
-    cloth.color.setHex(0xffffff);
-    cloth.needsUpdate = true;
-    wake();
-  }, undefined, () => {});
+  if (HANDHELD) {
+    new THREE.TextureLoader().load(`./doku/${CLOTH.file}`, map => {
+      map.colorSpace = THREE.SRGBColorSpace;
+      map.wrapS = map.wrapT = THREE.RepeatWrapping;
+      map.repeat.set(CLOTH.tile, CLOTH.tile);
+      map.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+      cloth.map = map;
+      cloth.color.setHex(0xffffff);
+      cloth.needsUpdate = true;
+      wake();
+    }, undefined, () => {});
+  }
 
   // Even coverage across the board, but still directional on each surface.
   // Flooding it equally from four sides did make every corner the same
@@ -4975,10 +4980,11 @@ function addRoom() {
   // rather than float above it — and it was falling outside the map and being
   // dropped. A third more ground for the same number of texels, which on a
   // board this size is a millimetre of softening nobody will find.
-  key.shadow.camera.left = -18;
-  key.shadow.camera.right = 18;
-  key.shadow.camera.top = 18;
-  key.shadow.camera.bottom = -18;
+  const reach = HANDHELD ? 18 : 13;
+  key.shadow.camera.left = -reach;
+  key.shadow.camera.right = reach;
+  key.shadow.camera.top = reach;
+  key.shadow.camera.bottom = -reach;
   key.shadow.camera.near = 1;
   key.shadow.camera.far = 40;
   scene.add(key);
@@ -5067,7 +5073,7 @@ fitCamera();
 // A soft board at sixty and a sharp one at twenty are the same machine on two
 // different rungs, and either number on its own cannot tell you which.
 const SHOWING_FPS = /[?&]fps\b/.test(location.search);
-let fpsBox = null, fpsFrames = 0, fpsSince = 0, fpsShown = 0;
+let fpsBox = null, fpsFrames = 0, fpsSince = 0;
 if (SHOWING_FPS) {
   fpsBox = document.createElement("div");
   fpsBox.style.cssText = "position:fixed;z-index:9;left:.5rem;top:.5rem;padding:.35rem .55rem;"
@@ -5076,36 +5082,26 @@ if (SHOWING_FPS) {
   document.body.appendChild(fpsBox);
 }
 
-let lastFps = null;
-
-function showFps(now, busy = true) {
+// Counted over the loop's own turns rather than over the frames it chose to
+// draw. In the hand a still board is drawn twice a second on purpose, and a
+// readout that turned that into "2 fps" reads as the machine failing rather
+// than as the panel working. What the loop manages is the number anybody
+// asking "is it smooth" wants.
+function showFps(now) {
   if (!fpsBox) return;
-  // Counted over moving frames only. A still board draws twice a second on
-  // purpose, and a readout that turned that into "2 fps" would be read as the
-  // machine failing rather than as the panel working — so what is shown while
-  // nothing moves is the last real number, said to be standing.
-  if (busy) {
-    fpsFrames++;
-    if (!fpsSince) { fpsSince = now; return; }
-    if (now - fpsSince >= 500) {
-      lastFps = Math.round(fpsFrames * 1000 / (now - fpsSince));
-      fpsFrames = 0;
-      fpsSince = now;
-    }
-  } else {
-    fpsSince = 0;
-    fpsFrames = 0;
-  }
-  if (now - fpsShown < 500) return;
-  fpsShown = now;
-  const fps = lastFps ?? "—";
+  fpsFrames++;
+  if (!fpsSince) { fpsSince = now; return; }
+  if (now - fpsSince < 500) return;
+  const fps = Math.round(fpsFrames * 1000 / (now - fpsSince));
+  fpsFrames = 0;
+  fpsSince = now;
   // Two lines, which is what the two questions need: is the machine keeping up,
   // and is it drawing the screen it has. Everything else that was here — the
   // triangle count, the card's name, the heap — answered questions nobody was
   // asking while looking at a board.
   const drawn = canvas.width * canvas.height;
   const screen = innerWidth * innerHeight * devicePixelRatio ** 2;
-  fpsBox.textContent = `${fps} fps${busy ? "" : " · durgun"}\n`
+  fpsBox.textContent = `${fps} fps\n`
     + `${canvas.width}x${canvas.height} — ekranın %${Math.round(100 * drawn / screen)}'i`;
 }
 
@@ -5140,9 +5136,7 @@ function animate(now) {
   // something to draw. Idling at two frames a second is the panel working, not
   // the machine failing, and a readout that said "2 fps" over a still board
   // would be read as the second thing.
-  // On a desk every frame is drawn, so every frame counts. In the hand only the
-  // moving ones do — see showFps.
-  showFps(at, busy || !ON_DEMAND);
+  showFps(at);
   requestAnimationFrame(animate);
 }
 animate();
