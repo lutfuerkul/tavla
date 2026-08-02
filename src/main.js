@@ -2943,7 +2943,11 @@ let sliding = null;
 function slideChecker(colour, from, to, onDone) {
   const mesh = new THREE.Mesh(checkerGeometry, colour === "ivory" ? ivory : black);
   mesh.position.set(from.x, from.y, from.z);
-  mesh.castShadow = true;
+  // A checker crossing the board throws no shadow. What it would throw is a
+  // second shadow map every frame it moves, drawn for a shape nobody is
+  // looking at — the eye is on the checker, not on the felt under it — and
+  // the one that matters is the one it has when it comes down.
+  mesh.castShadow = false;
   scene.add(mesh);
   sliding = { mesh, from, to, t: 0, span: .62, onDone };
 }
@@ -4766,7 +4770,8 @@ canvas.addEventListener("pointerdown", (e) => {
   // move is visible while it is happening.
   game.lifted = { key };
   const carried = new THREE.Mesh(checkerGeometry, game.turn === "ivory" ? ivory : black);
-  carried.castShadow = true;
+  // In the hand, and casting nothing — see slideChecker.
+  carried.castShadow = false;
   carried.position.copy(seat.position).setY(CARRY_Y);
   scene.add(carried);
 
@@ -5167,10 +5172,25 @@ function animate(now) {
   stepDicePhysics(dt);
   const at = now ?? performance.now();
   const busy = moving();
+  // A die in the air throws no shadow either, and for the same reason: the
+  // shadow map is a second drawing of the whole board, made from the light's
+  // side, and it was being made again on every frame of a throw for two dice
+  // in flight. They get their shadow back the moment they stop — which is
+  // where it is looked for, since a die lying on the felt with nothing under
+  // it is a die that has not landed.
+  for (const die of diceMeshes) {
+    const grounded = die.userData.die.mode === "rest";
+    if (die.castShadow === grounded) continue;
+    die.castShadow = grounded;
+    shadowsDirty = true;
+  }
   const draw = !ON_DEMAND || busy || needsFrame || shadowsDirty
     || at - lastDrawn > HEARTBEAT_MS;
   if (draw) {
-    renderer.shadowMap.needsUpdate = shadowsDirty || busy;
+    // Nothing that moves casts any more, so the map only wants drawing when
+    // something has been said to have changed — not on every frame of every
+    // throw and every move.
+    renderer.shadowMap.needsUpdate = shadowsDirty;
     shadowsDirty = false;
     needsFrame = false;
     lastDrawn = at;
