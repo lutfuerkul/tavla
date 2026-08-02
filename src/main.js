@@ -1314,8 +1314,8 @@ const FIELD_HALF_X = starts[starts.length - 1] + COLUMN_OFF;
 // really the two inner walls meeting, and what used to be an invisible line at
 // the edge of the field is really the inside face of the outer wall.
 const FELT_Y = .47;                       // top of the playing surface
-const SEAM = .12;                         // 4mm, the gap the hinge knuckle sits in
-const WALL_T = BAR_HALF - SEAM / 2;       // 13mm walls, so the seam comes out right
+const SEAM = 1 / 36;                      // 1mm, the gap the hinge knuckle sits in
+const WALL_T = BAR_HALF - SEAM / 2;       // 14.5mm walls, so the seam comes out right
 const WALL_H = .7;                        // 25mm of wall standing above the surface
 const FLOOR_T = .26;                      // 9mm of case floor under it
 const CASE_TOP = FELT_Y + WALL_H;
