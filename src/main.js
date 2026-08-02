@@ -5223,8 +5223,16 @@ if (SHOWING_DIAG) {
   document.body.appendChild(diagBox);
 }
 
+// Asked once a second at most: reading it is a round trip to the driver.
+let glHata = 0, glSorulan = 0;
 function showDiag(drawn) {
   if (!diagBox) return;
+  const now = performance.now();
+  if (now - glSorulan > 1000) {
+    glSorulan = now;
+    const err = renderer.getContext().getError();
+    if (err) glHata = err;
+  }
   const p = camera.position;
   const look = new THREE.Vector3();
   camera.getWorldDirection(look);
@@ -5236,6 +5244,10 @@ function showDiag(drawn) {
     `ekran ${innerWidth}x${innerHeight}  çizilen ${drawn}`,
     `bağlam ${contextLost ? "KAYIP" : gl.isContextLost() ? "KAYIP" : "sağlam"}`,
     `ışık ${lightCount}  gölge ${renderer.shadowMap.enabled ? "açık" : "kapalı"}`,
+    // What the last frame actually did. Nothing drawn is a different fault
+    // from everything drawn onto a screen that is not being shown.
+    `çizim ${renderer.info.render.calls}  üçgen ${renderer.info.render.triangles}`,
+    `program ${renderer.info.programs?.length ?? "?"}  hata ${glHata}`,
   ].join("\n");
 }
 
