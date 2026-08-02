@@ -1111,8 +1111,21 @@ const shell = new THREE.MeshPhysicalMaterial({
 });
 // One leaf of veneer, split and opened out, so the two halves mirror each
 // other and the figure lands at the centre of both.
-const veneerTexture = woodPanelTexture(768, 900, BOARD.veneer.base, BOARD.veneer.grain,
-  [[384, 450, BOARD.veneer.eye]], BOARD.veneer.figure);
+// Half in the hand. These panels are not loaded, they are drawn pixel by pixel
+// in a canvas while the page opens, and they are almost the whole of that wait:
+// halving each side quarters the pixels and takes three hundred milliseconds
+// off the way in. The board there is a thousand pixels across, so a panel this
+// size was already close to the screen's own sampling rate — what comes off is
+// a little of the grain's fineness and nothing else.
+//
+// The marquetry is left alone. It costs almost nothing to draw, and it is a
+// fine repeating pattern: halved, the zigzag inlay down the edge of every point
+// goes visibly chunky. Measured both ways — with the inlay halved as well the
+// wait came out the same, so it was a loss bought for nothing.
+const PANEL = HANDHELD ? .5 : 1;
+const veneerTexture = woodPanelTexture(768 * PANEL, 900 * PANEL,
+  BOARD.veneer.base, BOARD.veneer.grain,
+  [[384 * PANEL, 450 * PANEL, BOARD.veneer.eye]], BOARD.veneer.figure);
 const veneerL = new THREE.MeshPhysicalMaterial({
   map: veneerTexture,
   metalness: .03,
@@ -1343,8 +1356,9 @@ function addPanelBoard() {
   // leaves of veneer, so it has a material of its own — and it wants the same
   // treatment in the hand for the same reason: it is most of the screen.
   const panel = new THREE.MeshPhysicalMaterial({
-    map: woodPanelTexture(1024, 640, BOARD.veneer.base, BOARD.veneer.grain,
-      [[256, 320, 95], [768, 320, 95]], BOARD.veneer.figure),
+    map: woodPanelTexture(1024 * PANEL, 640 * PANEL,
+      BOARD.veneer.base, BOARD.veneer.grain,
+      [[256 * PANEL, 320 * PANEL, 95], [768 * PANEL, 320 * PANEL, 95]], BOARD.veneer.figure),
     metalness: .03, ...BOARD.gloss,
     ...(HANDHELD ? { clearcoat: 0, clearcoatRoughness: 0 } : {}),
   });
