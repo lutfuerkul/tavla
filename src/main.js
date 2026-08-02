@@ -5018,6 +5018,11 @@ function addRoom() {
   if (HANDHELD) {
     keyMate = key.clone();
     keyMate.castShadow = false;
+    // Its shadow was taking light out of the room as well as putting shape
+    // into it, so dropping the shadow lifted the whole board by 4%. The lamp
+    // gives back what its shadow was taking: 1.95 against the key's 2.5 lands
+    // the seat view on 76.4, which is where it was when both lamps cast.
+    keyMate.intensity = 1.95;
     scene.add(keyMate);
   }
 
