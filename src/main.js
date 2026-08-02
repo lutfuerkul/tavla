@@ -20,24 +20,7 @@ const hud = document.querySelector("#hud");
 // only in what is laid inside it: how long the points run, how heavy the
 // braid is, and how the veneer is figured.
 const BOARDS = {
-  // The board that was on the table before any of this: a flat panel with a
-  // low frame round it, a strip down the middle, and two brass pins for the
-  // hinges. It is lit the way it was lit, which is darker than the trays can
-  // stand — they have walls to shade their own interiors, and this has none.
-  eski: {
-    shape: "panel",
-    pointLen: 5,
-    pointHalf: .5,
-    braidBand: 13,
-    braidStep: 17,
-    veneer: { base: "#54381c", grain: "#1d0e03", eye: 95, figure: .35, mirrored: false },
-    pale: ["#e4d6a6", "#c9b884"],
-    dark: ["#432a13", "#2c1a09"],
-    gloss: { roughness: .4, clearcoat: .34, clearcoatRoughness: .18 },
-    room: { env: .22, fill: .16, hemi: .42, ambient: .1 },
-  },
   klasik: {
-    shape: "tray",
     pointLen: 5,
     pointHalf: .5,
     braidBand: 13,
@@ -49,7 +32,6 @@ const BOARDS = {
     room: { env: .22, fill: .16, hemi: .42, ambient: .1 },
   },
   star: {
-    shape: "tray",
     pointLen: 5.35,
     pointHalf: null,                 // bases meet: one braid serves two points
     braidBand: 26,
@@ -345,7 +327,7 @@ function sitDown() {
 // wants to play presses one button.
 const SETTINGS = [
   { key: "board", label: "setting.board",
-    options: [["auto", "option.auto"], ["eski", "board.eski"],
+    options: [["auto", "option.auto"],
               ["klasik", "board.klasik"], ["star", "board.star"]] },
   { key: "colour", label: "setting.colour",
     options: [["auto", "option.auto"], ["black", "colour.black"], ["ivory", "colour.ivory"]] },
@@ -1360,88 +1342,12 @@ const BAR_RISE = WALL_H / 2;
 const BAR_TOP = CASE_TOP;
 
 function addBoard() {
-  if (BOARD.shape === "panel") addPanelBoard(); else addTrayBoard();
+  addTrayBoard();
 
   starts.forEach((start, i) => {
     const x = MIRROR * start;
     point(x - POINT_HALF, x + POINT_HALF, -FIELD_HALF, -TIP_Z, i % 2 ? marquetryB : marquetryA);
     point(x - POINT_HALF, x + POINT_HALF, FIELD_HALF, TIP_Z, i % 2 ? marquetryA : marquetryB);
-  });
-}
-
-// The old board: one tray rather than two, with the middle of the board a low
-// ridge you can throw a die over rather than a wall it stops at, and brass
-// pins where the cases carry hinges.
-function addPanelBoard() {
-  const frame = new THREE.MeshPhysicalMaterial({
-    color: 0x120d09, roughness: .45, metalness: .04,
-    // Bare in the hand, for the same reason the checkers are — see above.
-    clearcoat: HANDHELD ? 0 : .3, clearcoatRoughness: HANDHELD ? 0 : .22,
-  });
-  // The old board lays its playing surface out as one panel rather than two
-  // leaves of veneer, so it has a material of its own — and it wants the same
-  // treatment in the hand for the same reason: it is most of the screen.
-  const panel = new THREE.MeshPhysicalMaterial({
-    map: woodPanelTexture(1024 * PANEL, 640 * PANEL,
-      BOARD.veneer.base, BOARD.veneer.grain,
-      [[256 * PANEL, 320 * PANEL, 95], [768 * PANEL, 320 * PANEL, 95]], BOARD.veneer.figure),
-    metalness: .03, ...BOARD.gloss,
-    ...(HANDHELD ? { clearcoat: 0, clearcoatRoughness: 0 } : {}),
-  });
-
-  // One floor, one leaf of veneer laid across the whole of it, and walls the
-  // same thickness and height as the cases carry. The wide flat frame this
-  // board used to sit on is gone: its edge is the outside of the wall.
-  //
-  // The veneer and the ridge keep the sizes they always had, running a
-  // quarter unit past the field and disappearing under the walls. Trimming
-  // them to the field would fit the same figure into a smaller panel, which
-  // rescales it — the inside of this board is meant to be untouched.
-  const PANEL_W = FIELD_HALF_X * 2 + .5;
-  const PANEL_D = FIELD_HALF * 2 + .5;
-  const wallH = CASE_TOP - CASE_BOTTOM;
-  const wallY = (CASE_BOTTOM + CASE_TOP) / 2;
-  // The floor stops under the veneer rather than level with it. Bringing the
-  // two to the same height puts two surfaces in the same plane, and the depth
-  // buffer cannot choose between them: the wood comes out as dark banding
-  // instead of wood.
-  const floorTop = FELT_Y - .1;
-  box(CASE_HALF_X * 2, floorTop - CASE_BOTTOM, CASE_HALF_Z * 2, frame,
-    0, (CASE_BOTTOM + floorTop) / 2, 0);
-  box(PANEL_W, .1, PANEL_D, panel, 0, .42, 0);
-  // Each half carries its own walls, the middle one included, so the seam runs
-  // from one end of the board to the other. An end wall drawn in one piece
-  // across the middle closes the seam off at the ends, and the board stops
-  // reading as two halves that fold. The veneer runs underneath, untouched.
-  const endSpan = FIELD_HALF_X - (BAR_HALF - WALL_T);
-  const endMid = (FIELD_HALF_X + BAR_HALF - WALL_T) / 2;
-  [-1, 1].forEach(side => {
-    box(WALL_T, wallH, CASE_HALF_Z * 2, frame, side * (FIELD_HALF_X + WALL_T / 2), wallY, 0);
-    box(WALL_T, wallH, CASE_HALF_Z * 2, frame, side * (BAR_HALF - WALL_T / 2), wallY, 0);
-    [-1, 1].forEach(end => {
-      box(endSpan, wallH, WALL_T, frame, side * endMid, wallY, end * (FIELD_HALF_Z + WALL_T / 2));
-    });
-  });
-
-  // The seam is a groove in one continuous tray here, not a gap between two,
-  // so the veneer lies across the bottom of it and shows through. The groove
-  // is floored just above the veneer — which is left alone — in something
-  // darker than the walls either side of it, because a floor the same colour
-  // as those walls makes the whole middle read as one slab. On the cases the
-  // seam is black against lit wall tops, and that is the line it wants to be.
-  const seamFloor = new THREE.MeshStandardMaterial({ color: 0x030202, roughness: .95 });
-  box(BAR_HALF * 2 - WALL_T * 2, FELT_Y + .02 - CASE_BOTTOM, CASE_HALF_Z * 2, seamFloor,
-    0, (CASE_BOTTOM + FELT_Y + .02) / 2, 0);
-
-  addHinges();
-
-  // Pearl markers set into the tops of the long walls.
-  [-1, 1].forEach(side => {
-    [-3.6, 3.6].forEach(z => {
-      const dot = new THREE.Mesh(new THREE.SphereGeometry(.055, 12, 10), pearl);
-      dot.position.set(side * (FIELD_HALF_X + WALL_T / 2), CASE_TOP - .012, z);
-      scene.add(dot);
-    });
   });
 }
 
