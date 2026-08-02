@@ -5061,6 +5061,32 @@ function fitCamera() {
     }
     if (widest <= fill && tallest <= fill) break;
   }
+
+  // Aimed at the middle of the table, which is not the middle of what ends up
+  // on the screen: the near half of the board is closer to the camera than the
+  // far half, so it projects larger and the whole thing sits low in the frame.
+  // Turned sideways that came to a twentieth of the screen's height — the near
+  // rail off the bottom edge and a band of cloth left over at the top. The
+  // aim is lifted until what is drawn is centred on what is looked at.
+  if (!HANDHELD) return;
+  const aim = CAMERA_AIM.clone();
+  for (let pass = 0; pass < 8; pass++) {
+    camera.lookAt(aim);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+    let top = -Infinity, bottom = Infinity;
+    for (const corner of corners) {
+      const seen = corner.clone().project(camera);
+      top = Math.max(top, seen.y);
+      bottom = Math.min(bottom, seen.y);
+    }
+    const off = (top + bottom) / 2;
+    if (Math.abs(off) < .004) break;
+    // How much of the world a half-frame covers at the distance being looked
+    // at: that is what one unit of the projection is worth in board units.
+    const half = camera.position.distanceTo(aim) * Math.tan(camera.fov * Math.PI / 360);
+    aim.y += off * half;
+  }
 }
 
 fitCamera();
