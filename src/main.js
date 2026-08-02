@@ -311,6 +311,23 @@ const TOP = HANDHELD ? NATIVE : Math.max(2, NATIVE);
 // it also lands on 4K, and a 4K window draws its own resolution.
 const PIXEL_BUDGET = 3840 * 2160;
 
+// A phone has been seen going black on the change of camera: the board draws —
+// frames counted, context healthy, every corner of the case in front of the
+// camera — and the screen shows the cleared surface anyway. What the browser
+// is holding then is a frame it never latched, and the surest way to make it
+// take a new one is to hand it a different surface: the drawing buffer is
+// resized by a pixel and back, which costs one reallocation on the one press
+// where it might matter and nothing anywhere else.
+function nudgeCanvas() {
+  if (!HANDHELD) return;
+  renderer.setSize(innerWidth, Math.max(1, innerHeight - 1), false);
+  renderer.setSize(innerWidth, innerHeight, false);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  shadowsDirty = true;
+  wake();
+}
+
 function applySampleRatio() {
   // What the screen is worth, held to what the buffer may cost. The budget is
   // about memory rather than speed — it is asked for before a single frame is
@@ -4171,6 +4188,7 @@ viewButton?.addEventListener("click", () => {
   chosenView = overhead() ? "koltuk" : "tepe";
   localStorage.setItem(VIEW_KEY, chosenView);
   fitCamera();
+  nudgeCanvas();
   updateHud();
 });
 
@@ -5223,8 +5241,36 @@ if (SHOWING_DIAG) {
   document.body.appendChild(diagBox);
 }
 
+// Asked once a second at most: reading it is a round trip to the driver.
+let glHata = 0, glSorulan = 0;
+// And what the frame actually came out as. A screen that looks black is either
+// a frame drawn black or a frame drawn properly and never shown, and from the
+// page those two are the same picture — unless the buffer itself is read back.
+let bufferMean = -1;
+const bufferPixels = new Uint8Array(16 * 16 * 4);
+function readBuffer() {
+  const gl = renderer.getContext();
+  if (gl.isContextLost()) { bufferMean = -1; return; }
+  const w = renderer.domElement.width, h = renderer.domElement.height;
+  if (!w || !h) { bufferMean = -2; return; }
+  renderer.setRenderTarget(null);
+  gl.readPixels(Math.max(0, (w >> 1) - 8), Math.max(0, (h >> 1) - 8), 16, 16,
+    gl.RGBA, gl.UNSIGNED_BYTE, bufferPixels);
+  let sum = 0;
+  for (let i = 0; i < bufferPixels.length; i += 4) {
+    sum += .2126 * bufferPixels[i] + .7152 * bufferPixels[i + 1] + .0722 * bufferPixels[i + 2];
+  }
+  bufferMean = +(sum / (bufferPixels.length / 4)).toFixed(1);
+}
 function showDiag(drawn) {
   if (!diagBox) return;
+  const now = performance.now();
+  if (now - glSorulan > 1000) {
+    glSorulan = now;
+    const err = renderer.getContext().getError();
+    if (err) glHata = err;
+    readBuffer();
+  }
   const p = camera.position;
   const look = new THREE.Vector3();
   camera.getWorldDirection(look);
@@ -5236,6 +5282,11 @@ function showDiag(drawn) {
     `ekran ${innerWidth}x${innerHeight}  çizilen ${drawn}`,
     `bağlam ${contextLost ? "KAYIP" : gl.isContextLost() ? "KAYIP" : "sağlam"}`,
     `ışık ${lightCount}  gölge ${renderer.shadowMap.enabled ? "açık" : "kapalı"}`,
+    // What the last frame actually did. Nothing drawn is a different fault
+    // from everything drawn onto a screen that is not being shown.
+    `çizim ${renderer.info.render.calls}  üçgen ${renderer.info.render.triangles}`,
+    `program ${renderer.info.programs?.length ?? "?"}  hata ${glHata}`,
+    `tamponun ortası ${bufferMean}`,
   ].join("\n");
 }
 
