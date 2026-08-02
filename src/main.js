@@ -5007,10 +5007,17 @@ function addRoom() {
   scene.add(key);
 
   // And its mirror image across the board, for the seat view in the hand: the
-  // same lamp — same colour, same strength, same shadow — hung over the other
-  // far corner, so the board is lit from both top corners rather than one.
+  // same lamp — same colour, same strength — hung over the other far corner,
+  // so the board is lit from both top corners rather than one.
+  //
+  // It throws no shadow of its own. A second caster is a second drawing of the
+  // whole board made from its side, on every frame anything moves, and what it
+  // buys is a second shadow under every checker at an opposing angle — light
+  // from both corners with one set of shadows reads as a lit room, two sets
+  // read as a mistake. The light is what this lamp is for.
   if (HANDHELD) {
     keyMate = key.clone();
+    keyMate.castShadow = false;
     scene.add(keyMate);
   }
 
