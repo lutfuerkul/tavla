@@ -2941,6 +2941,21 @@ function finishIfWon() {
   if (game.over) return;
   const won = Rules.winner(game.pos);
   if (!won) return;
+  // Across a network the result is not ours to write. The score, the mars and
+  // the end of the match are the server's, and they come back on the next
+  // snapshot — but only if the turn that won is sent, and this used to be what
+  // stopped it: the board was marked over before the moves left the table, and
+  // endTurn refuses to hand over a game it thinks is finished. So the last turn
+  // of every online game went unsent, and the server had to play it back for
+  // the winner half a minute later, marking them as the one who did not.
+  //
+  // Sent from here rather than left to the button: the board has just been
+  // emptied and nobody is going to press Tamam on it. The wait is one turn of
+  // the loop, so tryMove finishes putting the move down first.
+  if (mode === "online") {
+    if (isHuman(game.turn)) setTimeout(endTurn, 0);
+    return;
+  }
   const value = Rules.gameValue(game.pos);
   game.over = { winner: won, value };
   match[won] += value;
