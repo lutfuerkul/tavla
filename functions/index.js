@@ -993,6 +993,22 @@ export const geriGeldim = onCall(settings, async request => {
     // opposite was sitting there through every one of them, and a minute that
     // begins again on every reload is not a minute. Come back too late and the
     // server plays the turn, the same as for anybody sitting still.
+    //
+    // And only when there is actually a mark of our own to withdraw. Without
+    // this guard every call still wrote — clearing nothing and bumping seq —
+    // and seq is what `sure` reads to know whether the match has moved on under
+    // it: a player who keeps the tab open (so the seat stays filled and no
+    // absence is ever stamped) but stops playing could sit in the console
+    // calling this in a loop, and each bump made `sure`'s next act see a match
+    // that had "moved on" and refuse to play their clock out. The turn never
+    // timed out, the abandon count never rose, and the one certain to lose
+    // could hang the match for ever. A board that comes back to a stamped
+    // absence still has the mark, so the real case is untouched; a board that
+    // never went anywhere leaves nothing here to clear. This is the guard
+    // `sure` already uses at its own back-in-the-chair branch.
+    if (!(match.away === mine || match.awaySince?.[mine])) {
+      return { ok: true, back: false };
+    }
     const since = { ...(match.awaySince ?? {}) };
     delete since[mine];
     tx.update(ref, {
