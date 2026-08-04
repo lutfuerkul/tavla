@@ -203,6 +203,21 @@ function handOver(pos, from, patch) {
   patch.skipped = null;
 }
 
+// A player who has just done something at the board is plainly sitting at it,
+// so whatever was said about their being away is withdrawn. The stamp is only
+// ever meant to measure a current absence — how long a chair has been empty
+// right now — and one that outlived the move disproving it was being read
+// minutes later as a fresh minute's absence and closing tables on players
+// sitting in front of them. Folded into whatever write records the action, so
+// rolling, playing a turn or opening the next game all clear it. The drop count
+// is a different thing and is left alone: it is the tally of how many times the
+// chair has emptied across the whole match, not a mark of the moment.
+function present(match, colour) {
+  const awaySince = { ...(match.awaySince ?? {}) };
+  delete awaySince[colour];
+  return { away: match.away === colour ? null : (match.away ?? null), awaySince };
+}
+
 // Closing a table takes its code with it. A code outliving its match is a code
 // that lets somebody in through the door of a room that is not there any more:
 // they are seated, the board opens, and then it tells them the table has gone.
@@ -296,28 +311,40 @@ export const odayaKatil = onCall(settings, async request => {
       // being told at the door.
       const still = it.matchId ? await tx.get(db.collection("matches").doc(it.matchId)) : null;
       if (!still?.exists || still.data().closed) { tx.delete(room); return { error: "not-found" }; }
-      // The minute nobody counted. A table is closed by whoever is still
-      // sitting at it, so a table both of them walked away from has nobody to
-      // close it: it would stand until it was swept, and the first of them
-      // back would sit down at a game the other gave up on long ago. The count
-      // is done here instead, at the door — if a chair has been empty longer
-      // than the minute, that minute is over.
-      const emptied = Object.values(still.data().awaySince ?? {})
-        .map(at => at?.toDate?.()?.getTime() ?? Infinity);
-      const oldest = emptied.length ? Math.min(...emptied) : Infinity;
-      if (Number.isFinite(oldest) && (Date.now() - oldest) / 1000 > HELD_SECONDS) {
+      // Who is at the door, before anything is done to the table behind it. Only
+      // a player of this match may be let back in, and only a player of it may
+      // trip the cleanup below: the code sits on the screen for the whole game,
+      // so somebody who has merely read it off could type it in, and the
+      // abandoned-table cleanup used to run for whoever typed the code — closing
+      // a live game for both of them and telling the one who did it nothing but
+      // "no such room". A stranger is turned away here and touches nothing.
+      const other = it.hostColour === "black" ? "ivory" : "black";
+      const mine = it.host === uid ? it.hostColour
+                 : it.guest === uid ? other : null;
+      if (!mine) return { error: "not-found" };
+
+      // The minute nobody counted, counted at the door — but only against the
+      // OTHER chair. A table both of them walked away from has nobody to close
+      // it, and the first of them back should not sit down at a game the other
+      // gave up on long ago. Read from the opponent's mark alone: the player
+      // arriving is here now, so their own mark — however old, left by a blip
+      // minutes ago that nothing cleared — is no evidence of a present absence,
+      // and counting it let a player who left on their own losing turn come
+      // back through a second tab and wipe the match with no penalty at all.
+      // Attributed to the one actually gone, so it reads as a game they left
+      // rather than a table that simply vanished.
+      const theirs = Rules.other(mine);
+      const theirStamp = still.data().awaySince?.[theirs]?.toDate?.()?.getTime();
+      if (typeof theirStamp === "number" && (Date.now() - theirStamp) / 1000 > HELD_SECONDS) {
         tx.update(still.ref, {
-          closed: true, closedBy: null,
+          closed: true, closedBy: theirs,
           silinecek: SWEPT_SOON(), updatedAt: now(),
           seq: (still.data().seq ?? 0) + 1,
         });
         tx.delete(room);
         return { error: "not-found" };
       }
-      const other = it.hostColour === "black" ? "ivory" : "black";
-      if (it.host === uid) return { matchId: it.matchId, colour: it.hostColour };
-      if (it.guest === uid) return { matchId: it.matchId, colour: other };
-      return { error: "full" };
+      return { matchId: it.matchId, colour: mine };
     }
     if (it.host === uid) return { error: "own-room" };
     // A code claimed but not yet written against. There is a hair's breadth
@@ -603,6 +630,7 @@ export const zarAt = onCall(settings, async request => {
         openingAt: { ...(match.openingAt ?? {}), [mine]: match.seq + 1 },
         // Done by hand, so nothing here was done for them.
         idle: { ...(match.idle ?? {}), [mine]: 0 },
+        ...present(match, mine),
         updatedAt: now(), ...CLOCK(), seq: match.seq + 1,
       };
 
@@ -647,6 +675,7 @@ export const zarAt = onCall(settings, async request => {
       lastMoveSeq: 0,
       lastBy: null,
       idle: { ...(match.idle ?? {}), [mine]: 0 },
+      ...present(match, mine),
       updatedAt: now(),
       ...CLOCK(),
       seq: match.seq + 1,
@@ -710,6 +739,7 @@ export const turuOyna = onCall(settings, async request => {
       required: 0,
       played: 0,
       idle: { ...(match.idle ?? {}), [mine]: 0 },
+      ...present(match, mine),
       updatedAt: now(),
       ...CLOCK(),
       seq: match.seq + 1,
@@ -890,13 +920,14 @@ export const sure = onCall(settings, async request => {
 
     // Long enough to be real. Said out loud now, and counted.
     //
-    // Once is a tunnel, a flat battery, a router. Twice is a game the other
-    // player cannot play, and waiting out a second minute for somebody who has
-    // already been waited for is a game nobody is playing — the second time
-    // the chair empties, the table closes with it.
+    // Two are a tunnel, a flat battery, a router: the chair may empty twice and
+    // be come back to with the code both times. The third time is a game the
+    // other player cannot play, and waiting out another minute for somebody who
+    // has already been waited for twice is a game nobody is playing — on the
+    // third emptying the table closes with it.
     if (match.away !== theirs) {
       const gone = (match.drops?.[theirs] ?? 0) + 1;
-      if (gone > 1) {
+      if (gone > 2) {
         await closeTable(ref, match, theirs);
         return { acted: false, closed: true };
       }
@@ -1035,7 +1066,8 @@ export const yeniOyun = onCall(settings, async request => {
     const found = await tx.get(ref);
     if (!found.exists) throw new HttpsError("not-found", "Maç bulunamadı.");
     const match = found.data();
-    if (!colourOf(match, uid)) throw new HttpsError("permission-denied", "Bu maç senin değil.");
+    const mine = colourOf(match, uid);
+    if (!mine) throw new HttpsError("permission-denied", "Bu maç senin değil.");
     if (match.closed) throw new HttpsError("failed-precondition", "Masa kapandı.");
     if (!match.over) throw new HttpsError("failed-precondition", "Oyun daha bitmedi.");
     if (match.matchOver) throw new HttpsError("failed-precondition", "Maç bitti.");
@@ -1059,6 +1091,7 @@ export const yeniOyun = onCall(settings, async request => {
       lastBy: null,
       over: null,
       idle: { ivory: 0, black: 0 },
+      ...present(match, mine),
       updatedAt: now(),
       ...CLOCK(),
       seq: match.seq + 1,
