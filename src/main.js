@@ -5304,6 +5304,18 @@ function fitCamera() {
     const half = camera.position.distanceTo(aim) * Math.tan(camera.fov * Math.PI / 360);
     aim.y += off * half;
   }
+  // Two people round one tablet share the overhead, since a seat leaned from
+  // either side is the wrong way up for the other. From straight up the board
+  // reads small, so it is brought a tenth closer here — the checkers come up
+  // without the camera favouring a side. What is let go for it is the case
+  // edge, not the felt: the outer rail carries no play, so it can run past the
+  // frame while every point stays on the screen.
+  if (overhead()) {
+    camera.position.sub(aim).multiplyScalar(1 / 1.10).add(aim);
+    camera.lookAt(aim);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+  }
 }
 
 fitCamera();
