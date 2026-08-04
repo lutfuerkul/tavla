@@ -296,7 +296,14 @@ export function chainMoves(pos, colour, remaining) {
       left.splice(left.indexOf(move.die), 1);
       const path = taken.concat([move]);
       if (path.length > 1) {
-        const k = `${start}>${move.to}|${path.length}`;
+        // Keyed by the whole route, not just its endpoint and length: two
+        // ways to walk a checker to the same point by the same number of dice
+        // can pass through different points, and one may hit a lone opponent
+        // where the other steps past. Collapsing them by endpoint alone kept
+        // only one, chosen by the order the dice were in — so whether the blot
+        // was hit fell to the roll. Both are kept now; the board decides which
+        // to play by whether they end the same way.
+        const k = `${start}>${path.map(m => m.to).join(">")}`;
         if (!seen.has(k)) { seen.add(k); chains.push({ from: start, to: move.to, moves: path }); }
       }
       if (move.to !== "off") walk(after, left, move.to, path, start);

@@ -228,16 +228,30 @@ function present(match, colour) {
 // them was told its opponent had walked off when the opponent was itself. What
 // is left is swept within the hour.
 async function closeTable(ref, match, by) {
-  await ref.update({
-    closed: true,
-    closedBy: by ?? null,
-    away: null,
-    awaySince: {},
-    silinecek: SWEPT_SOON(),
-    updatedAt: now(),
-    seq: (match?.seq ?? 0) + 1,
+  // The sequence is bumped from the record as it is right now, inside a
+  // transaction, not from the copy the caller read some round-trips ago. All
+  // three callers read the match outside a transaction and then do other work —
+  // an isSeated round-trip, a rules check — before closing, and a plain update
+  // written from that stale copy could stamp a seq a live transaction had used
+  // in the meantime. Two writes sharing one number, and the closing then reads
+  // as no newer than the last: the board it was meant to reach turns it away.
+  const roomCode = await db.runTransaction(async tx => {
+    const found = await tx.get(ref);
+    if (!found.exists) return match?.code ?? null;
+    const it = found.data();
+    if (it.closed) return it.code ?? null;
+    tx.update(ref, {
+      closed: true,
+      closedBy: by ?? null,
+      away: null,
+      awaySince: {},
+      silinecek: SWEPT_SOON(),
+      updatedAt: now(),
+      seq: (it.seq ?? 0) + 1,
+    });
+    return it.code ?? null;
   });
-  if (match?.code) await db.collection("rooms").doc(match.code).delete().catch(() => {});
+  if (roomCode) await db.collection("rooms").doc(roomCode).delete().catch(() => {});
 }
 
 const colourOf = (match, uid) =>

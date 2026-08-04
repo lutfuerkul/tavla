@@ -115,24 +115,13 @@ const THICK = pieceType === "kalin";
 
 // Which cloth the table is dressed with, chosen at the door like the board.
 const CLOTH_KEY = "tavla.cuha";
-// One weave, three colours. The photographs it replaces were three separate
-// pictures of three separate cloths — three downloads, three textures in
-// memory, and three different threads under the same board. A grey cloth is a
-// white one as far as the tint is concerned: the colour multiplies through it,
-// so the same photograph serves green, blue and the grey it already is.
-// The tints are worked back from the cloths they replace: what the light has
-// to be multiplied by for the weave's own grey to land on the colour the old
-// photograph averaged.
-const CLOTHS = {
-  yesil: { file: "cuha-gri.jpg", tile: 8, tint: 0x54dd9d },
-  mavi:  { file: "cuha-gri.jpg", tile: 8, tint: 0x5a9beb },
-  gri:   { file: "cuha-gri.jpg", tile: 8, tint: 0xffffff },
-  // The velvet stays its own photograph: a pile is not a weave with the colour
-  // turned up, and tinting the one into the other would lose what it is.
-  kadife: { file: "cuha-kadife.jpg", tile: 9 },
-};
-const clothName = CLOTHS[localStorage.getItem(CLOTH_KEY)] ? localStorage.getItem(CLOTH_KEY) : "mavi";
-const CLOTH = CLOTHS[clothName];
+// The cloth the board stands on, in the hand. There was a choice of them once —
+// green, blue, grey, all one tinted weave — but the velvet was the one worth
+// keeping, so it is the only one now, and the door no longer asks. Its own
+// photograph rather than a tinted weave: a pile is not a colour turned up.
+const CLOTH = { file: "cuha-kadife.jpg", tile: 9 };
+// Kept only so a board saved under an old cloth name reads back as this one.
+const clothName = "kadife";
 
 const BOARD_KEY = "tavla.board";
 const boardName = BOARDS[localStorage.getItem(BOARD_KEY)] ? localStorage.getItem(BOARD_KEY) : "klasik";
@@ -186,14 +175,13 @@ let lastDrawn = 0;
 
 const VIEW_KEY = "tavla.kamera";
 let chosenView = localStorage.getItem(VIEW_KEY);
-// Where the camera starts, until somebody says otherwise. Two people round one
-// tablet are sitting opposite each other, so a view from either chair is the
-// wrong way up for one of them — it goes overhead. A phone or a tablet does
-// the same whoever is playing: held in the hand the board is being looked down
-// at anyway, and the low view spends most of the screen on the rail. On a
-// desktop, alone, the seat is still the nicer picture.
+// Where the camera starts, until somebody says otherwise. The seat — the FPS
+// view — is what the game opens on now, on a phone as much as a desktop: it is
+// the view the board was lit for. The one exception is two people round one
+// device, who sit opposite each other, so a view from either chair is the
+// wrong way up for the other — that still opens overhead.
 const overhead = () =>
-  (chosenView ?? (HANDHELD || mode === "hotseat" ? "tepe" : "koltuk")) === "tepe";
+  (chosenView ?? (mode === "hotseat" ? "tepe" : "koltuk")) === "tepe";
 
 function takeSeat() {
   wake();
@@ -427,9 +415,6 @@ const SETTINGS = [
   // In the hand only. On a desk the board fills the window and there is barely
   // any ground to see; the cloth was answering a darkness that only a phone has,
   // where the board is a third of the screen and the rest was soot.
-  { key: "cloth", label: "setting.cloth", hidden: !HANDHELD,
-    options: [["auto", "option.auto"], ["yesil", "cloth.green"], ["mavi", "cloth.blue"],
-              ["gri", "cloth.grey"], ["kadife", "cloth.velvet"]] },
   // Kept in the list even where it is not shown, because Otomatik is settled by
   // looking the key up here — a row that vanished would take its answer with it.
   { key: "piece", label: "setting.piece", hidden: HANDHELD,
@@ -439,7 +424,7 @@ const SETTINGS = [
 ];
 
 let pickedMode = null;
-const picked = { board: "auto", colour: "auto", side: "auto", piece: "auto", cloth: "auto" };
+const picked = { board: "auto", colour: "auto", side: "auto", piece: "auto" };
 const startButton = document.querySelector("#start");
 
 function markChosen(attribute, value) {
@@ -457,6 +442,13 @@ function refreshStart() {
 
 document.querySelectorAll("[data-mode]").forEach(button => {
   button.addEventListener("click", () => {
+    // Leaving the online mode leaves its lobby behind too. A search or an open
+    // room went on running in the background — the queue kept refreshing, the
+    // room listener stayed live — while the box that holds "Vazgeç" was hidden,
+    // so there was no way to stop it from the screen; a match found then sat the
+    // player down at a game they had walked away from and lost while not there.
+    if (looking) stopLooking();
+    if (openRoom) dropRoom();
     pickedMode = mode = button.dataset.mode;
     localStorage.setItem(MODE_KEY, mode);
     markChosen("mode", mode);
@@ -623,6 +615,20 @@ function applyStaticText() {
   showSettings();
   showOnline();
   showFullscreen();
+  // The find button carries a state this does not know about — a search under
+  // way — and rewriting every label by its data-i18n turned the "Aramayı bırak"
+  // on it back into "Rakip bul" while the search was still running. A change of
+  // language or a settings press left the button lying: pressing it then
+  // cancelled a search the player thought they were starting, or hid a running
+  // one behind a stopped-looking label. Read back from the button's own class,
+  // which the rewrite leaves alone — and by query rather than the module's own
+  // reference, since this also runs once before those are declared.
+  const find = document.querySelector("#find");
+  if (find?.classList.contains("looking")) {
+    find.textContent = t("lobby.stop");
+    document.querySelector("#host")?.setAttribute("disabled", "");
+    document.querySelector("#join")?.setAttribute("disabled", "");
+  }
 }
 
 // How many people are at a table right now, said quietly under the way in. It
@@ -745,7 +751,7 @@ function sitDownTo(id, colour) {
   localStorage.setItem(BOARD_KEY, settle("board"));
   localStorage.setItem(SIDE_KEY, settle("side"));
   localStorage.setItem(PIECE_KEY, settle("piece"));
-  localStorage.setItem(CLOTH_KEY, settle("cloth"));
+  localStorage.setItem(CLOTH_KEY, clothName);
   sessionStorage.setItem("tavla.sitOnLoad", "1");
   say("lobby.found");
   location.reload();
@@ -935,14 +941,14 @@ const sideName = SIDE === -1 ? "sag" : "sol";
 startButton?.addEventListener("click", () => {
   if (!pickedMode) return;
   const board = settle("board"), colour = settle("colour"), side = settle("side");
-  const piece = settle("piece"), cloth = settle("cloth");
+  const piece = settle("piece");
   if (board === boardName && colour === HUMAN && side === sideName
-      && piece === pieceType && cloth === clothName) return sitDown();
+      && piece === pieceType) return sitDown();
   localStorage.setItem(BOARD_KEY, board);
   localStorage.setItem(COLOUR_KEY, colour);
   localStorage.setItem(SIDE_KEY, side);
   localStorage.setItem(PIECE_KEY, piece);
-  localStorage.setItem(CLOTH_KEY, cloth);
+  localStorage.setItem(CLOTH_KEY, clothName);
   sessionStorage.setItem("tavla.sitOnLoad", "1");
   location.reload();
 });
@@ -2087,7 +2093,7 @@ const SOLVER_ITERATIONS = 8;
 function stepDicePhysics(frameDt) {
   physicsDebt = Math.min(physicsDebt + frameDt, .5);
   while (physicsDebt >= PHYSICS_STEP) {
-    for (const die of diceMeshes) integrateDie(die, PHYSICS_STEP);
+    for (const die of diceMeshes) if (!offTable(die)) integrateDie(die, PHYSICS_STEP);
     collectContacts();
     for (let i = 0; i < SOLVER_ITERATIONS; i++) {
       for (const c of contacts) solveContact(c);
@@ -2228,7 +2234,7 @@ function collectContacts() {
   contacts.length = 0;
   contactCount = 0;
   for (const die of diceMeshes) {
-    if (die.userData.die.mode === "held") continue;
+    if (die.userData.die.mode === "held" || offTable(die)) continue;
     boardContacts(die);
     barContacts(die);
     checkerContacts(die);
@@ -2251,7 +2257,7 @@ const PENETRATION_PASSES = 3;
 function resolvePenetration() {
   for (let pass = 0; pass < PENETRATION_PASSES; pass++) {
     for (const die of diceMeshes) {
-      if (die.userData.die.mode === "held") continue;
+      if (die.userData.die.mode === "held" || offTable(die)) continue;
       pushOffBar(die);
       pushOffCheckers(die);
     }
@@ -2261,10 +2267,20 @@ function resolvePenetration() {
       }
     }
     for (const die of diceMeshes) {
-      if (die.userData.die.mode !== "held") keepInsideField(die);
+      // The parked die is the one this most needed to leave alone: it sits
+      // outside the field on purpose, and keepInsideField would drag it back
+      // in — an invisible solid the thrown die could then strike.
+      if (die.userData.die.mode !== "held" && !offTable(die)) keepInsideField(die);
     }
   }
 }
+
+// The opening throws one die; the other is lifted off the table and hidden
+// until the game proper begins. It is parked outside the field on purpose, so
+// nothing physical must touch it — not gravity, not the walls that would push
+// it back in, not the other die, and not a pointer reaching for a die to grab.
+// Marked by being invisible, which is exactly what "not on the table" means.
+const offTable = die => !die.visible;
 
 function pushOffBar(die) {
   boxAxes(die, _axA);
@@ -2538,6 +2554,7 @@ function checkerContacts(die) {
 function diePairContacts(dieA, dieB) {
   const sa = dieA.userData.die, sb = dieB.userData.die;
   if (sa.mode === "held" || sb.mode === "held") return;
+  if (offTable(dieA) || offTable(dieB)) return;
   boxAxes(dieA, _axA);
   boxAxes(dieB, _axB);
   if (!boxesOverlap(dieA.position, dieSupport, _axA, DIE_HALVES,
@@ -2926,10 +2943,25 @@ function tryMove(fromPlace, toPlace) {
 
 function chainTo(fromPlace, toPlace) {
   if (!game.dice || game.over || !isHuman(game.turn) || game.thinking) return [];
-  const chain = Rules.chainMoves(game.pos, game.turn, game.remaining)
-    .filter(c => String(c.from) === String(fromPlace) && String(c.to) === String(toPlace))
-    .sort((a, b) => b.moves.length - a.moves.length)[0];
-  return chain ? chain.moves : [];
+  const routes = Rules.chainMoves(game.pos, game.turn, game.remaining)
+    .filter(c => String(c.from) === String(fromPlace) && String(c.to) === String(toPlace));
+  if (!routes.length) return [];
+  // Two ways to walk the same checker to the same point can land on different
+  // boards: an intermediate point may hold a lone opponent, hit on one route
+  // and stepped past on the other. Which one a single drag played used to fall
+  // out of the order the dice happened to be in — so whether the opponent was
+  // sent to the bar was decided by the roll, not the player. When the routes
+  // disagree the drag is refused, and the checker is moved a die at a time —
+  // each step a move the board offers on its own, so the player picks the point
+  // it passes through. When every route ends the same way, any of them will do.
+  const boardAfter = moves => {
+    let p = game.pos;
+    for (const m of moves) p = Rules.applyMove(p, game.turn, m);
+    return JSON.stringify(p);
+  };
+  const end = boardAfter(routes[0].moves);
+  if (routes.some(r => boardAfter(r.moves) !== end)) return [];
+  return routes.sort((a, b) => b.moves.length - a.moves.length)[0].moves;
 }
 
 function sameMove(move, fromPlace, toPlace) {
@@ -2988,27 +3020,46 @@ function onDiceSettled() {
     const got = rolled.map(d => d.userData.die.value).slice().sort();
     const asked = wanted.slice().sort();
     if (!got.every((face, i) => face === asked[i])) {
-      rolled.forEach((die, i) => { die.userData.die.value = wanted[i]; });
+      rolled.forEach((die, i) => {
+        die.userData.die.value = wanted[i];
+        // And turned so the face it shows is the face it counts as. Setting the
+        // value alone left the pips on the felt reading one thing while the
+        // turn was played on another — six and one lying there under a panel
+        // that said four and three. This only ever runs when the tumble did not
+        // land on the numbers the session named (a search that ran out of
+        // tries, or a replay that diverged), so a small snap to the right face
+        // is the honest end of it.
+        die.quaternion.setFromEuler(FACE_UP[wanted[i]]);
+      });
     }
   }
   wanted = null;
   if (rolled.some(d => d.userData.die.cocked)) {
-    game.cocked = true;
-    updateHud();
-    // Only the computer's re-throw is automatic — the people at the table pick
-    // the dice back up themselves — so it is always aimed from its chair.
-    if (isHuman(thrower() || game.turn)) return;
-    // Online this is not a throw at all but a replay of one the server has
-    // already named, so it goes again to the same numbers rather than asking
-    // for new ones. With nothing to replay there is nothing to re-throw.
+    // Online the numbers belong to the server, not to how the dice fell: the
+    // turn they are for is already decided, so a die that lands cocked is
+    // thrown again to the very same numbers rather than picked back up. This is
+    // true of our own throw as much as the opponent's replayed one — and it
+    // used to lock the turn for the one case it was not handled: our own dice,
+    // where the person was told to pick them up and throw again but canThrow
+    // refused because the numbers were already on the match. Nobody could roll,
+    // nobody could press Tamam, and the clock threw the turn away.
     if (mode === "online") {
       const again = game.phase === "opening"
         ? (shownOpening[replayingFor ?? game.waitingOn] == null
             ? [] : [shownOpening[replayingFor ?? game.waitingOn]])
         : (game.dice ?? []);
-      if (!again.length) { replayingFor = null; return; }
+      if (!again.length) { game.cocked = false; replayingFor = null; return; }
+      game.cocked = true;
+      updateHud();
       forcedRoll = again.slice();
+      setTimeout(() => throwDice(thrower() === HUMAN ? AWAY : -AWAY), 1400);
+      return;
     }
+    game.cocked = true;
+    updateHud();
+    // Off the network the people at the table pick the dice back up themselves;
+    // only the computer's re-throw is automatic, and it is aimed from its chair.
+    if (isHuman(thrower() || game.turn)) return;
     setTimeout(() => throwDice(-AWAY), 1400);
     return;
   }
@@ -3512,7 +3563,12 @@ function showOpening(state) {
 // dice on the felt. It gives up if the board moves on while it is waiting.
 function replayThrow(colour, values, stale, tries = 0) {
   if (stale()) { replayOwed = false; return; }
-  if (thrown || heldDice || pending) {
+  // A checker in the hand counts as the board being busy, the same as a die in
+  // the air. A throw that began while one was being dragged left the drag
+  // half-made — nothing finished it, and the next pointer-up on the board
+  // played it out as a move nobody meant to make. Waited out here instead: the
+  // drag ends, then the throw crosses the felt.
+  if (thrown || heldDice || pending || dragging) {
     if (tries > 40) {
       replayOwed = false;
       // Given up on: the die is never going to be thrown here, so the number
@@ -3676,7 +3732,17 @@ function holdTheOpening(done, waited = 0) {
 }
 
 function applyServerState(state) {
-  if (!game || state.seq <= remoteSeq) return;
+  if (!game) return;
+  // A closing is terminal and must never be missed, so it is read before the
+  // sequence guard rather than after it. A table is closed by a write made
+  // outside a transaction, and its seq can land equal to one a transaction
+  // wrote in the same moment — so the closing snapshot could arrive with a seq
+  // no higher than the last, be turned away by the guard below, and leave a
+  // board that the server has closed still looking playable: dice picked up
+  // come back "Masa kapandı", a turn sent is silently rewound, and nothing
+  // says why until the page is reloaded by hand.
+  if (state.closed) { tableClosed(state.closedBy ?? null); return; }
+  if (state.seq <= remoteSeq) return;
   const wasOpening = game.phase === "opening";
   const ours = !state.over && !handedOver
     && state.turn === HUMAN && game.history.length && state.phase === "play";
@@ -3732,10 +3798,9 @@ function applyServerState(state) {
   // keeps us marked away however plainly we are sitting here — so the mark
   // lifting is the handover itself, and it is worth saying, since until then
   // nothing we did to the board had any effect.
-  // A table that has been closed rather than one that has gone. The record is
-  // still there for an hour so that it can say who closed it, which a record
-  // that simply vanishes cannot.
-  if (state.closed) { tableClosed(state.closedBy ?? null); return; }
+  // A table that has been closed is handled at the very top now, before the
+  // sequence guard, so that a closing whose seq did not advance is never
+  // missed — see there.
   if (codePanel && state.code) {
     codePanel.querySelector("strong").textContent = state.code;
     codePanel.removeAttribute("hidden");
@@ -3778,6 +3843,15 @@ function applyServerState(state) {
   if (ours) { updateHud(); return; }
 
   const settle = () => {
+    // Only if this is still the last word. settle is held back behind an
+    // animation — the moves being played out, or the opening being read — and
+    // in that gap the server can speak again: the opponent throws, a newer
+    // snapshot arrives and is applied, and remoteSeq moves past this one. Run
+    // then, this stale settle wrote the old position, dice and clock back over
+    // the new — the panel read "—" through the opponent's whole turn and the
+    // clock counted a minute that had already restarted. The newer snapshot has
+    // already put the board right; this one has nothing left to say.
+    if (state.seq !== remoteSeq) return;
     // An ask is answered by the next word about it, whatever that word says.
     // The opening's answer carries no dice, so a mark left standing through it
     // survived into the first turn — and the dice the clock threw there looked
@@ -4765,7 +4839,7 @@ function withinReach(event, allowed) {
   let nearest = null, closest = reach;
   const seen = new THREE.Vector3();
   for (const die of diceMeshes) {
-    if (die.userData.die.mode !== "rest") continue;
+    if (die.userData.die.mode !== "rest" || offTable(die)) continue;
     seen.copy(die.position).project(camera);
     const away = Math.hypot(
       (seen.x + 1) / 2 * rect.width + rect.left - event.clientX,
