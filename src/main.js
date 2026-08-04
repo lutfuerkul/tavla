@@ -115,24 +115,13 @@ const THICK = pieceType === "kalin";
 
 // Which cloth the table is dressed with, chosen at the door like the board.
 const CLOTH_KEY = "tavla.cuha";
-// One weave, three colours. The photographs it replaces were three separate
-// pictures of three separate cloths — three downloads, three textures in
-// memory, and three different threads under the same board. A grey cloth is a
-// white one as far as the tint is concerned: the colour multiplies through it,
-// so the same photograph serves green, blue and the grey it already is.
-// The tints are worked back from the cloths they replace: what the light has
-// to be multiplied by for the weave's own grey to land on the colour the old
-// photograph averaged.
-const CLOTHS = {
-  yesil: { file: "cuha-gri.jpg", tile: 8, tint: 0x54dd9d },
-  mavi:  { file: "cuha-gri.jpg", tile: 8, tint: 0x5a9beb },
-  gri:   { file: "cuha-gri.jpg", tile: 8, tint: 0xffffff },
-  // The velvet stays its own photograph: a pile is not a weave with the colour
-  // turned up, and tinting the one into the other would lose what it is.
-  kadife: { file: "cuha-kadife.jpg", tile: 9 },
-};
-const clothName = CLOTHS[localStorage.getItem(CLOTH_KEY)] ? localStorage.getItem(CLOTH_KEY) : "mavi";
-const CLOTH = CLOTHS[clothName];
+// The cloth the board stands on, in the hand. There was a choice of them once —
+// green, blue, grey, all one tinted weave — but the velvet was the one worth
+// keeping, so it is the only one now, and the door no longer asks. Its own
+// photograph rather than a tinted weave: a pile is not a colour turned up.
+const CLOTH = { file: "cuha-kadife.jpg", tile: 9 };
+// Kept only so a board saved under an old cloth name reads back as this one.
+const clothName = "kadife";
 
 const BOARD_KEY = "tavla.board";
 const boardName = BOARDS[localStorage.getItem(BOARD_KEY)] ? localStorage.getItem(BOARD_KEY) : "klasik";
@@ -186,14 +175,13 @@ let lastDrawn = 0;
 
 const VIEW_KEY = "tavla.kamera";
 let chosenView = localStorage.getItem(VIEW_KEY);
-// Where the camera starts, until somebody says otherwise. Two people round one
-// tablet are sitting opposite each other, so a view from either chair is the
-// wrong way up for one of them — it goes overhead. A phone or a tablet does
-// the same whoever is playing: held in the hand the board is being looked down
-// at anyway, and the low view spends most of the screen on the rail. On a
-// desktop, alone, the seat is still the nicer picture.
+// Where the camera starts, until somebody says otherwise. The seat — the FPS
+// view — is what the game opens on now, on a phone as much as a desktop: it is
+// the view the board was lit for. The one exception is two people round one
+// device, who sit opposite each other, so a view from either chair is the
+// wrong way up for the other — that still opens overhead.
 const overhead = () =>
-  (chosenView ?? (HANDHELD || mode === "hotseat" ? "tepe" : "koltuk")) === "tepe";
+  (chosenView ?? (mode === "hotseat" ? "tepe" : "koltuk")) === "tepe";
 
 function takeSeat() {
   wake();
@@ -427,9 +415,6 @@ const SETTINGS = [
   // In the hand only. On a desk the board fills the window and there is barely
   // any ground to see; the cloth was answering a darkness that only a phone has,
   // where the board is a third of the screen and the rest was soot.
-  { key: "cloth", label: "setting.cloth", hidden: !HANDHELD,
-    options: [["auto", "option.auto"], ["yesil", "cloth.green"], ["mavi", "cloth.blue"],
-              ["gri", "cloth.grey"], ["kadife", "cloth.velvet"]] },
   // Kept in the list even where it is not shown, because Otomatik is settled by
   // looking the key up here — a row that vanished would take its answer with it.
   { key: "piece", label: "setting.piece", hidden: HANDHELD,
@@ -439,7 +424,7 @@ const SETTINGS = [
 ];
 
 let pickedMode = null;
-const picked = { board: "auto", colour: "auto", side: "auto", piece: "auto", cloth: "auto" };
+const picked = { board: "auto", colour: "auto", side: "auto", piece: "auto" };
 const startButton = document.querySelector("#start");
 
 function markChosen(attribute, value) {
@@ -766,7 +751,7 @@ function sitDownTo(id, colour) {
   localStorage.setItem(BOARD_KEY, settle("board"));
   localStorage.setItem(SIDE_KEY, settle("side"));
   localStorage.setItem(PIECE_KEY, settle("piece"));
-  localStorage.setItem(CLOTH_KEY, settle("cloth"));
+  localStorage.setItem(CLOTH_KEY, clothName);
   sessionStorage.setItem("tavla.sitOnLoad", "1");
   say("lobby.found");
   location.reload();
@@ -956,14 +941,14 @@ const sideName = SIDE === -1 ? "sag" : "sol";
 startButton?.addEventListener("click", () => {
   if (!pickedMode) return;
   const board = settle("board"), colour = settle("colour"), side = settle("side");
-  const piece = settle("piece"), cloth = settle("cloth");
+  const piece = settle("piece");
   if (board === boardName && colour === HUMAN && side === sideName
-      && piece === pieceType && cloth === clothName) return sitDown();
+      && piece === pieceType) return sitDown();
   localStorage.setItem(BOARD_KEY, board);
   localStorage.setItem(COLOUR_KEY, colour);
   localStorage.setItem(SIDE_KEY, side);
   localStorage.setItem(PIECE_KEY, piece);
-  localStorage.setItem(CLOTH_KEY, cloth);
+  localStorage.setItem(CLOTH_KEY, clothName);
   sessionStorage.setItem("tavla.sitOnLoad", "1");
   location.reload();
 });
