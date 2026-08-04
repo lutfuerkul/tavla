@@ -5310,7 +5310,13 @@ function fitCamera() {
   // without the camera favouring a side. What is let go for it is the case
   // edge, not the felt: the outer rail carries no play, so it can run past the
   // frame while every point stays on the screen.
-  if (overhead()) {
+  //
+  // Only turned sideways, though. Held upright the board is already fitted to
+  // the narrow width with room to spare above and below, and coming closer
+  // there eats into the very edges the fit was protecting rather than the
+  // spare height. So the tenth is taken only in landscape, where the width is
+  // what is left over and the case edge is what can be spent.
+  if (overhead() && innerWidth > innerHeight) {
     camera.position.sub(aim).multiplyScalar(1 / 1.10).add(aim);
     camera.lookAt(aim);
     camera.updateProjectionMatrix();
