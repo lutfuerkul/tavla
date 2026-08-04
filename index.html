@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tavla — 3B Masa</title>
     <link rel="stylesheet" href="./style.css" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="theme-color" content="#0d0a06" />
+    <link rel="icon" href="./icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Tavla" />
   </head>
   <body>
     <main id="app">
@@ -88,5 +96,15 @@
       <div id="crosshair" aria-hidden="true"></div>
     </main>
     <script type="module" src="./src/main.js"></script>
+    <script>
+      // Servis çalışanı sayfayı çevrimdışı açılabilir kılar. Yalnızca güvenli
+      // bağlamda (HTTPS ya da localhost) çalışır; olmadığında sessizce geçilir
+      // ve oyun eskisi gibi ağ üzerinden yüklenir.
+      if ("serviceWorker" in navigator) {
+        addEventListener("load", () => {
+          navigator.serviceWorker.register("./sw.js").catch(() => {});
+        });
+      }
+    </script>
   </body>
 </html>
