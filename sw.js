@@ -7,7 +7,7 @@
 // oradan verilir. Çevrimiçi mod için gereken Firebase'e dokunulmaz — o, ağ
 // yokken zaten sessizce geri çekilecek biçimde yazılmıştır.
 
-const CACHE = "tavla-v2";
+const CACHE = "tavla-v1";
 
 // Kabuk: ilk kurulumda peşinen alınır ki ağsız ilk açılış da mümkün olsun.
 const SHELL = [
@@ -20,7 +20,6 @@ const SHELL = [
   "./src/rules.js",
   "./src/i18n.js",
   "./src/firebase.js",
-  "./src/ses.js",
   "./src/assets/triangle.png",
   "./doku/cuha-kadife.jpg",
   "./vendor/three/three.module.min.js",

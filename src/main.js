@@ -6,15 +6,6 @@ import * as Rules from "./rules.js";
 import { LANGS, language, setLanguage, t, isIdeographic } from "./i18n.js";
 import { localSession, onlineSession } from "./session.js";
 import { attend, ask, connect, follow, sitAt } from "./firebase.js";
-import * as Ses from "./ses.js";
-
-// Tarayıcılar sesi ilk kullanıcı hareketine dek bloklar; ilk dokunuşta bağlam
-// açılır. Bir kez yeter, sonrası kendiliğinden çalar.
-addEventListener("pointerdown", () => Ses.unlock(), { once: true });
-// Arayüzün her düğmesine hafif bir tık. Oyunun kendi sesleri ayrıca konur.
-addEventListener("click", event => {
-  if (event.target.closest?.("button")) Ses.tap();
-}, true);
 
 // Where the turns come from. Everything the board cannot decide by itself goes
 // through here, so a game against a server can be a different session rather
@@ -430,17 +421,10 @@ const SETTINGS = [
     options: HANDHELD
       ? [["auto", "option.auto"], ["ince", "piece.thin"]]
       : [["auto", "option.auto"], ["ince", "piece.thin"], ["kalin", "piece.thick"]] },
-  // Sound is not a table to be laid out, so it is not settled or reloaded like
-  // the others: choosing it turns the sound off or on there and then. It rides
-  // in this list only to be drawn as one more row, in the panel that is already
-  // there, rather than needing a control of its own somewhere on the board.
-  { key: "ses", label: "setting.sound", live: true,
-    options: [["acik", "sound.on"], ["kapali", "sound.off"]] },
 ];
 
 let pickedMode = null;
-const picked = { board: "auto", colour: "auto", side: "auto", piece: "auto",
-  ses: Ses.isMuted() ? "kapali" : "acik" };
+const picked = { board: "auto", colour: "auto", side: "auto", piece: "auto" };
 const startButton = document.querySelector("#start");
 
 function markChosen(attribute, value) {
@@ -533,8 +517,6 @@ function buildSettings() {
       choice.setAttribute("role", "option");
       choice.addEventListener("click", () => {
         picked[setting.key] = value;
-        // A live setting takes effect on the spot rather than at the next start.
-        if (setting.live && setting.key === "ses") Ses.setMuted(value === "kapali");
         drawer.close();
         applyStaticText();
       });
@@ -2108,17 +2090,6 @@ let physicsDebt = 0;
 // happens if you take the loop below out.
 const SOLVER_ITERATIONS = 8;
 
-// The loudest impact seen while the dice are in flight, and whether it was one
-// die against another rather than against the board. Gathered across the
-// frame's substeps and spent once, so a tumble is a run of distinct clacks
-// rather than a buzz. A minimum gap keeps a die grinding along the felt from
-// firing on every step.
-let diceImpact = 0, diceImpactPair = false, lastClackAt = -1;
-const CLACK_GAP_MS = 45;
-// Above the rest threshold, so settled dice leaning on one another stay quiet
-// and only a die still in flight striking something is heard.
-const DICE_CLACK_MIN = 4;
-
 function stepDicePhysics(frameDt) {
   physicsDebt = Math.min(physicsDebt + frameDt, .5);
   while (physicsDebt >= PHYSICS_STEP) {
@@ -2130,15 +2101,6 @@ function stepDicePhysics(frameDt) {
     resolvePenetration();
     for (const die of diceMeshes) checkStopped(die, PHYSICS_STEP);
     physicsDebt -= PHYSICS_STEP;
-  }
-  if (diceImpact > 0) {
-    const now = performance.now();
-    if (now - lastClackAt >= CLACK_GAP_MS) {
-      // The felt speed a real throw lands at maps roughly onto zero-to-one.
-      Ses.dice(diceImpact / 6, diceImpactPair);
-      lastClackAt = now;
-    }
-    diceImpact = 0; diceImpactPair = false;
   }
 }
 
@@ -2231,12 +2193,6 @@ function addContact(a, b, r, rb, n, restitution, friction) {
   // recomputed each iteration — otherwise the iterations feed it energy.
   const approach = contactVelocity(c, _rel).dot(n);
   c.bias = -approach > REST_THRESHOLD ? -restitution * approach : 0;
-  // A real strike — dice thrown, not settled dice resting against each other —
-  // is worth a clack. The search that runs the physics invisibly is not heard.
-  if (!simulating && -approach > DICE_CLACK_MIN
-      && (a.mode === "throw" || b?.mode === "throw")) {
-    if (-approach > diceImpact) { diceImpact = -approach; diceImpactPair = !!b; }
-  }
   c.friction = friction;
   c.jn = c.j1 = c.j2 = 0;
   a.touching = true;
@@ -2960,14 +2916,6 @@ function dropUnsupportedDice() {
 // Play a move if the rules allow it. Everything is checked against what is
 // still playable this turn, not just against the board: a move that is legal
 // on its own but would strand a die is not one of the moves offered.
-// Does this move land on a single enemy checker — a blot sent to the bar? Read
-// off the board as it stands, before the move is applied.
-function moveHits(pos, colour, move) {
-  if (move.to === "off") return false;
-  const seat = pos.points[move.to];
-  return !!seat && seat.count === 1 && seat.colour !== colour;
-}
-
 function tryMove(fromPlace, toPlace) {
   const single = movesNow().find(m => sameMove(m, fromPlace, toPlace));
   // Dropping a checker eight points away on a 5-3 is one move to the player,
@@ -2982,14 +2930,11 @@ function tryMove(fromPlace, toPlace) {
   // board, and handing the turn over needs the moves.
   game.history.push({ pos: game.pos, remaining: game.remaining.slice(),
     played: game.played, moves });
-  let struck = false;
   for (const move of moves) {
-    if (moveHits(game.pos, game.turn, move)) struck = true;
     game.pos = Rules.applyMove(game.pos, game.turn, move);
     game.remaining.splice(game.remaining.indexOf(move.die), 1);
     game.played++;
   }
-  struck ? Ses.hit() : Ses.place();
   finishIfWon();
   renderPieces();
   updateHud();
@@ -3046,9 +2991,6 @@ function finishIfWon() {
   const value = Rules.gameValue(game.pos);
   game.over = { winner: won, value };
   match[won] += value;
-  // A fanfare as the last checker comes off, before the panel is asked for. In
-  // hotseat both sides are "you", so it is always the glad one.
-  Ses.win(value === 2, won === HUMAN || mode === "hotseat");
   // Long enough to watch the last checker come off before being asked what to
   // do next.
   setTimeout(showResult, 1100);
@@ -3292,7 +3234,6 @@ function playComputerTurn() {
     renderPieces();
     slideChecker(COMPUTER, from, to, () => {
       game.lifted = null;
-      moveHits(game.pos, COMPUTER, move) ? Ses.hit() : Ses.place();
       game.pos = Rules.applyMove(game.pos, COMPUTER, move);
       renderPieces();
       updateHud();
@@ -3543,7 +3484,6 @@ function playRemoteTurn(colour, moves, done) {
       renderPieces();
       slideChecker(colour, from, to, () => {
         game.lifted = null;
-        moveHits(game.pos, colour, move) ? Ses.hit() : Ses.place();
         try {
           game.pos = Rules.applyMove(game.pos, colour, move);
         } catch (reason) {
@@ -3971,14 +3911,8 @@ function applyServerState(state) {
     // whoever won the last one — there is no opening to watch, so the moment
     // the result goes is the moment the pair has to be back in the middle.
     const restarted = !!game.over && !state.over;
-    const wasOver = !!game.over;
     game.over = state.over ?? null;
-    if (game.over) {
-      // The result is the server's; the sound is heard once, as it arrives,
-      // not again each time a later snapshot repeats it.
-      if (!wasOver) Ses.win(game.over.value === 2, game.over.winner === HUMAN);
-      setTimeout(showResult, 1100);
-    }
+    if (game.over) setTimeout(showResult, 1100);
     // Only one of the two presses "another game"; the other finds out here,
     // and the box in front of them has to come down by itself. The dice go
     // back to where they sit before a throw for the same reason.
