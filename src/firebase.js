@@ -177,8 +177,25 @@ export async function seatTaken(matchId, uid) {
 // instruction left with it, so a closed tab, a dead battery or a tunnel are all
 // handled without the page having to notice.
 //
-// `watch` is called with the number of people at the table whenever it changes,
-// and never called at all if there is no connection.
+// But onDisconnect is not a promise that never breaks. A socket cut rather than
+// closed — a phone that lost signal, a process killed outright — is taken back
+// only when the server times the connection out, and if that instruction was
+// ever lost the record is left behind for good. Nothing sweeps them, so the
+// lobby count read straight off the child list drifts upward: ghosts of
+// sessions that never said goodbye, counted forever.
+//
+// So the record is stamped and kept fresh on a pulse, and only the ones still
+// being written are counted. A dead session stops pulsing the moment it dies
+// and ages out of the count within the fresh window, even though its record
+// lingers until something clears it.
+//
+// `watch` is called with the number of people online whenever it changes, and
+// never called at all if there is no connection.
+const PRESENCE_PULSE_MS = 25000;
+// A little over two pulses: a live session that misses one write is not
+// dropped, and a dead one is gone soon after.
+const PRESENCE_FRESH_MS = 90000;
+
 export async function attend(watch) {
   const live = await connect();
   if (!live) return () => {};
@@ -188,19 +205,44 @@ export async function attend(watch) {
   const mine = ref(db, `presence/${uid}`);
   const everyone = ref(db, "presence");
 
+  // The records carry server time, so they have to be judged against the
+  // server's clock rather than a phone's, which may be minutes out.
+  let skew = 0;
+  const stopOffset = onValue(ref(db, ".info/serverTimeOffset"),
+    snapshot => { skew = snapshot.val() || 0; });
+
   // The connection drops and comes back on its own; the claim has to be made
-  // again each time it does, and the standing instruction re-lodged with it.
+  // again each time it does, the standing instruction re-lodged with it, and
+  // the stamp refreshed on a pulse in between so a long sit stays recent.
+  const beat = () => set(mine, { at: serverTimestamp() });
   const stopConnected = onValue(ref(db, ".info/connected"), snapshot => {
     if (snapshot.val() !== true) return;
     onDisconnect(mine).remove();
-    set(mine, { at: serverTimestamp() });
+    beat();
   });
+  const pulse = setInterval(beat, PRESENCE_PULSE_MS);
 
-  const stopCount = onValue(everyone, snapshot => watch(snapshot.size));
+  // Count only the fresh. Recomputed on every change and on a timer as well, so
+  // the last stale record still drops when nothing else is writing to wake the
+  // listener.
+  let stamps = [];
+  const fresh = () => {
+    const now = Date.now() + skew;
+    watch(stamps.filter(at => typeof at === "number" && now - at < PRESENCE_FRESH_MS).length);
+  };
+  const stopCount = onValue(everyone, snapshot => {
+    stamps = [];
+    snapshot.forEach(child => { stamps.push(child.child("at").val()); });
+    fresh();
+  });
+  const sweep = setInterval(fresh, PRESENCE_PULSE_MS);
 
   return () => {
+    stopOffset();
     stopConnected();
     stopCount();
+    clearInterval(pulse);
+    clearInterval(sweep);
     remove(mine);
   };
 }
