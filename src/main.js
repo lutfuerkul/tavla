@@ -341,6 +341,11 @@ renderer.shadowMap.type = HANDHELD ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap
 renderer.shadowMap.autoUpdate = false;
 let shadowsDirty = true;
 let drawnFrames = 0;
+// What the loop met and survived. A board that has gone black with the page
+// still working has one question worth asking — did a frame throw, and which —
+// and these are the two halves of the answer.
+let drawnErrors = 0;
+let drawError = null;
 let lightCount = 0;
 // A phone can take the drawing surface away from a page — the driver gives up
 // under memory pressure, or the tab goes to the background long enough — and
@@ -5434,6 +5439,9 @@ function showDiag(drawn) {
     `çizim ${renderer.info.render.calls}  üçgen ${renderer.info.render.triangles}`,
     `program ${renderer.info.programs?.length ?? "?"}  hata ${glHata}`,
     `tamponun ortası ${bufferMean}`,
+    // The one line worth photographing when the board has gone black and the
+    // page has not: whether a frame threw on the way, and what it said.
+    `düşen kare ${drawnErrors}${drawError ? " · " + drawError.slice(0, 90) : ""}`,
   ].join("\n");
 }
 
@@ -5475,33 +5483,58 @@ const moving = () => !!pending || !!heldDice || !!sliding || !!dragging
 
 const clock = new THREE.Clock();
 function animate(now) {
-  const dt = Math.min(clock.getDelta(), .25);
-  // Before the shake, so what is drawn is the shake and not the last frame of
-  // whatever the search was trying.
-  stepSearch(dt);
-  releasePending();
-  stepHeldDice(dt);
-  stepSlide(dt);
-  stepDicePhysics(dt);
-  const at = now ?? performance.now();
-  const busy = moving();
-  const draw = !ON_DEMAND || busy || needsFrame || shadowsDirty
-    || at - lastDrawn > HEARTBEAT_MS;
-  if (draw) {
-    renderer.shadowMap.needsUpdate = shadowsDirty || busy;
-    shadowsDirty = false;
-    needsFrame = false;
-    lastDrawn = at;
-    drawnFrames++;
-    renderer.render(scene, camera);
-  }
-  // Counted over the frames that were actually drawn, and only while there is
-  // something to draw. Idling at two frames a second is the panel working, not
-  // the machine failing, and a readout that said "2 fps" over a still board
-  // would be read as the second thing.
-  showFps(at);
-  showDiag(drawnFrames);
+  // The next frame is asked for before anything that could go wrong, and this
+  // is the whole point of the line being here rather than at the bottom. A
+  // frame that throws — a driver that gives up in the middle of a draw, a step
+  // that meets a state nobody wrote it for — used to take the loop down with
+  // it, once and for the rest of the session. What that leaves is exactly the
+  // thing a phone gets reported for: the page still works, the panel still
+  // says whose turn it is, the buttons still press — and the board is a black
+  // rectangle, because nothing is drawing it any more and the compositor
+  // cleared what was left. Caught here, the same fault costs one frame.
   requestAnimationFrame(animate);
+  try {
+    const dt = Math.min(clock.getDelta(), .25);
+    // Before the shake, so what is drawn is the shake and not the last frame of
+    // whatever the search was trying.
+    stepSearch(dt);
+    releasePending();
+    stepHeldDice(dt);
+    stepSlide(dt);
+    stepDicePhysics(dt);
+    const at = now ?? performance.now();
+    const busy = moving();
+    const draw = !ON_DEMAND || busy || needsFrame || shadowsDirty
+      || at - lastDrawn > HEARTBEAT_MS;
+    // Not onto a surface that has been taken away. Drawing into a lost context
+    // is at best thrown away and at worst throws, and the frame is owed to us
+    // again anyway: what is asked for now is asked for again the moment there
+    // is something to draw on.
+    if (draw && !contextLost) {
+      renderer.shadowMap.needsUpdate = shadowsDirty || busy;
+      shadowsDirty = false;
+      needsFrame = false;
+      lastDrawn = at;
+      drawnFrames++;
+      renderer.render(scene, camera);
+    }
+    // Counted over the frames that were actually drawn, and only while there is
+    // something to draw. Idling at two frames a second is the panel working, not
+    // the machine failing, and a readout that said "2 fps" over a still board
+    // would be read as the second thing.
+    showFps(at);
+    showDiag(drawnFrames);
+  } catch (reason) {
+    // Kept rather than counted: the first one is the one that explains the
+    // rest, and sixty a second of the same line is not a diagnosis. It goes on
+    // the readout too, because the machine this happens on is a phone that
+    // cannot be plugged into anything — the fault has to be photographable.
+    drawnErrors++;
+    if (!drawError) {
+      drawError = reason?.message ?? String(reason);
+      console.error("tavla: çizim karesi düştü —", reason);
+    }
+  }
 }
 animate();
 
