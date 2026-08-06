@@ -195,6 +195,23 @@ const PRESENCE_PULSE_MS = 25000;
 // A little over two pulses: a live session that misses one write is not
 // dropped, and a dead one is gone soon after.
 const PRESENCE_FRESH_MS = 90000;
+// Being uncounted and being swept away are different questions, so they are
+// asked at different distances. A record stops counting the moment it stops
+// being written; deleting one is something done to somebody else, and it must
+// not happen to a session that has merely gone quiet for a minute — a phone in
+// a tunnel, a laptop asleep with the tab still open. Ten minutes is longer than
+// any of those and shorter than forever.
+//
+// The same number is written into the database rules, and those are what
+// actually decide: a browser may delete a record this old and no other. Change
+// one and the other has to change with it — firebase/database.rules.json,
+// presence/$uid, where a JSON file has nowhere to say why.
+const PRESENCE_DEAD_MS = 10 * 60 * 1000;
+// How many are cleared in one pass. Sweeping is a courtesy done on the way past
+// rather than the point of the visit, so it takes a few and leaves the rest to
+// the next pass instead of firing a hundred writes at a door somebody is trying
+// to walk through.
+const SWEEP_AT_ONCE = 5;
 
 export async function attend(watch) {
   const live = await connect();
@@ -207,9 +224,9 @@ export async function attend(watch) {
 
   // The records carry server time, so they have to be judged against the
   // server's clock rather than a phone's, which may be minutes out.
-  let skew = 0;
+  let skew = 0, clockKnown = false;
   const stopOffset = onValue(ref(db, ".info/serverTimeOffset"),
-    snapshot => { skew = snapshot.val() || 0; });
+    snapshot => { skew = snapshot.val() || 0; clockKnown = true; });
 
   // The connection drops and comes back on its own; the claim has to be made
   // again each time it does, the standing instruction re-lodged with it, and
@@ -222,17 +239,36 @@ export async function attend(watch) {
   });
   const pulse = setInterval(beat, PRESENCE_PULSE_MS);
 
-  // Count only the fresh. Recomputed on every change and on a timer as well, so
-  // the last stale record still drops when nothing else is writing to wake the
-  // listener.
-  let stamps = [];
+  // Count only the fresh, and clear away the long dead. Recomputed on every
+  // change and on a timer as well, so the last stale record still drops when
+  // nothing else is writing to wake the listener.
+  //
+  // The sweeping is done from the page rather than by anything standing over
+  // the database, because a record nobody is left to delete is already in the
+  // hands of every visitor who reads the count. What keeps it honest is the
+  // rules: the clock they judge the age by is the database's own, so a browser
+  // whose clock is hours out cannot talk itself into deleting somebody who is
+  // still sitting there — it can only be refused.
+  let records = [];
   const fresh = () => {
     const now = Date.now() + skew;
-    watch(stamps.filter(at => typeof at === "number" && now - at < PRESENCE_FRESH_MS).length);
+    watch(records.filter(r => typeof r.at === "number"
+      && now - r.at < PRESENCE_FRESH_MS).length);
+    // Not until the database has said what the time is. Until then the only
+    // clock here is the device's, and a wrong one would spend the whole
+    // allowance on records the rules are going to refuse anyway.
+    if (!clockKnown) return;
+    records
+      .filter(r => r.key !== uid && typeof r.at === "number"
+        && now - r.at > PRESENCE_DEAD_MS)
+      .slice(0, SWEEP_AT_ONCE)
+      // Refused is an ordinary answer rather than a fault: two browsers sweeping
+      // the same ghost means the second one finds it already gone.
+      .forEach(r => remove(ref(db, `presence/${r.key}`)).catch(() => {}));
   };
   const stopCount = onValue(everyone, snapshot => {
-    stamps = [];
-    snapshot.forEach(child => { stamps.push(child.child("at").val()); });
+    records = [];
+    snapshot.forEach(child => { records.push({ key: child.key, at: child.child("at").val() }); });
     fresh();
   });
   const sweep = setInterval(fresh, PRESENCE_PULSE_MS);
