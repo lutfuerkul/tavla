@@ -690,6 +690,46 @@ document.addEventListener("fullscreenchange", showFullscreen);
 document.addEventListener("webkitfullscreenchange", showFullscreen);
 showFullscreen();
 
+// An iPhone in Safari cannot go fullscreen at all, so the button above is never
+// drawn there. What it can do instead is be added to the home screen and run
+// from there without the browser's bars — fullscreen in all but name, which is
+// what the manifest is for. The way to it is not obvious, so it is pointed at:
+// once, quietly under the door, and only where it applies — an iPhone, in the
+// browser rather than already added, and not after it has been waved away. iPad
+// is left out; it has the button.
+const IOS_TIP_KEY = "tavla.iosIpucu";
+const onIphone = /iphone|ipod/i.test(navigator.userAgent);
+const addedToHome = navigator.standalone === true
+  || matchMedia("(display-mode: standalone)").matches;
+const introEl = document.querySelector("#intro");
+if (onIphone && !addedToHome && localStorage.getItem(IOS_TIP_KEY) !== "kapali" && introEl) {
+  const tip = document.createElement("div");
+  tip.id = "ios-tip";
+  const line = document.createElement("p");
+  // The share glyph iOS prints on the button the words point at, so the eye can
+  // jump straight from the instruction to the control it means.
+  const icon = document.createElement("span");
+  icon.className = "ios-share";
+  icon.setAttribute("aria-hidden", "true");
+  icon.innerHTML = `<svg viewBox="0 0 24 24" width="15" height="15"><path fill="none" `
+    + `stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" `
+    + `d="M12 3v11M8.5 6.5 12 3l3.5 3.5M6 11v8a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 18 19v-8"/></svg>`;
+  const words = document.createElement("span");
+  words.dataset.i18n = "ios.tip";
+  line.append(icon, words);
+  const dismiss = document.createElement("button");
+  dismiss.type = "button";
+  dismiss.className = "ios-tip-x";
+  dismiss.setAttribute("aria-label", "×");
+  dismiss.textContent = "×";
+  dismiss.addEventListener("click", () => {
+    localStorage.setItem(IOS_TIP_KEY, "kapali");
+    tip.remove();
+  });
+  tip.append(line, dismiss);
+  introEl.append(tip);
+}
+
 applyStaticText();
 attend(here => { onlineCount = here; showOnline(); });
 

@@ -317,6 +317,19 @@ body.ideographic #hud span, body.ideographic #hud strong {
 
 #start:not(:disabled):hover { background: #f0bd68; }
 
+/* The iPhone home-screen hint, under the door. Quiet: a thin gold outline and a
+   dimmed line, the share glyph picked out so the eye lands on the control the
+   words name. Only ever built on an iPhone that has not been added yet. */
+#ios-tip { display: flex; align-items: center; gap: .5rem; margin: .9rem auto 0;
+  max-width: 22rem; padding: .5rem .7rem; border: 1px solid rgba(231,182,102,.38);
+  border-radius: .4rem; background: rgba(36,26,16,.5); color: #d3bd93;
+  font: 500 .66rem/1.35 "DM Mono", monospace; }
+#ios-tip p { margin: 0; display: flex; align-items: center; gap: .4rem; }
+#ios-tip .ios-share { color: #e5ad54; display: inline-flex; flex: none; }
+#ios-tip .ios-tip-x { margin-left: auto; flex: none; padding: 0 .25rem; background: none;
+  border: 0; color: #ad9470; font-size: 1.05rem; line-height: 1; cursor: pointer; }
+#ios-tip .ios-tip-x:hover { color: #f6ecd6; }
+
 /* On a phone the door is five rows tall and the window is narrow enough that
    the tables wrap onto their own lines, so hanging it off the middle of the
    screen pushes "Oyuna başla" past the bottom — it did even before the side
