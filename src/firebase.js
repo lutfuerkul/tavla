@@ -42,6 +42,25 @@ const SETTINGS = EMULATED
   ? { ...CONFIG, databaseURL: `https://${CONFIG.projectId}.firebaseio.com` }
   : CONFIG;
 
+// App Check says the request came from this game rather than from something
+// that read the address off the page and started calling on its own. It has
+// nothing to do with cheating — a stranger calling the functions by hand still
+// cannot throw their own dice or make an illegal move, because the server
+// decides both. What it answers is the other thing: somebody looping the room
+// call for an afternoon, running up a bill for tables nobody sits at.
+//
+// The key below is public, the way the ones above it are: it names the site to
+// reCAPTCHA and is meant to be read by the browser. Until one is put here this
+// whole thing is inert — no script is fetched, nothing is initialised, and the
+// game behaves exactly as it did before. That is deliberate. Turning App Check
+// on has two halves, and they are not done at the same moment: this half asks
+// the browser to prove itself, and the other half — enforcement, in the console
+// — decides whether an unproven request is refused. Enforced before anybody has
+// checked the numbers, it is a way of locking real players out of a game that
+// was working perfectly well, so enforcement is left switched off until the
+// reports say what is actually arriving.
+const APP_CHECK_KEY = "";
+
 // Nothing is fetched until something asks for it, and it is only fetched once.
 let opening = null;
 
@@ -54,6 +73,22 @@ async function open() {
     import(`${SDK}/firebase-functions.js`),
   ]);
   const started = app.initializeApp(SETTINGS);
+
+  // Before anything else is asked of the project, and never against the
+  // emulator, which has no reCAPTCHA to answer to. It is not awaited: fetching
+  // the token is the browser's own errand, and a game must not sit at a black
+  // screen because a script on somebody else's server is slow. If it fails
+  // outright — blocked, offline, a key that has been withdrawn — the tokens
+  // simply do not arrive, and requests go on being served exactly as they are
+  // now. That is what makes this safe to ship before the console knows about it.
+  if (APP_CHECK_KEY && !EMULATED) {
+    import(`${SDK}/firebase-app-check.js`)
+      .then(check => check.initializeAppCheck(started, {
+        provider: new check.ReCaptchaV3Provider(APP_CHECK_KEY),
+        isTokenAutoRefreshEnabled: true,
+      }))
+      .catch(reason => console.info("tavla: App Check kurulamadı —", reason?.message ?? reason));
+  }
 
   const signIn = auth.getAuth(started);
   const db = database.getDatabase(started);
