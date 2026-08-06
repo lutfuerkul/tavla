@@ -1061,8 +1061,12 @@ function woodPanelTexture(w, h, base, grain, eyes, figure = 1) {
       const scale2 = fbm(xBias * 2.5, yBias * 1.8, 6, 100);
       const scale3 = fbm(xBias * 4, yBias * 3.2, 4, 200);
 
-      // Waviness pattern - simulates wood fiber variation
-      const wave = Math.sin(y / 35) * 0.3 + Math.cos(x / 45) * 0.2;
+      // Waviness pattern - simulates wood fiber variation.
+      // Bu iki dalga düzenli aralıklı olduğu için, yüksek genlikte damar değil
+      // tarak izi üretiyorlardı: tahtanın boş orta alanında eşit aralıklı enine
+      // bantlar. Genlik üçte bire indirildi — elyaf değişimi kalıyor, düzenlilik
+      // gözle seçilmiyor.
+      const wave = Math.sin(y / 35) * 0.12 + Math.cos(x / 45) * 0.09;
 
       // Combine scales with aggressive weights
       const grain1 = scale1 * 0.55;
@@ -1088,10 +1092,13 @@ function woodPanelTexture(w, h, base, grain, eyes, figure = 1) {
 
   ctx.putImageData(imageData, 0, 0);
 
-  // Add extremely prominent wood grain streaks - dramatic visual impact
+  // Dokunun bir ucundan öbürüne uzanan damarlar. Sayısı aynı — ahşabın
+  // alacasını veren bunlar. Koyuluğu indirildi: üstteki dalgayla birleşince
+  // damar olmaktan çıkıp çizgiye dönüyorlardı, ve bir tavla tahtasının ortası
+  // uzun uzun bakılan bir yerdir.
   for (let i = 0; i < 95; i++) {
     const y = Math.random() * h;
-    const intensity = 0.15 + Math.random() * 0.28;
+    const intensity = 0.10 + Math.random() * 0.18;
     const gradient = ctx.createLinearGradient(0, y - 6, 0, y + 6);
     gradient.addColorStop(0, `rgba(${grainRGB.r}, ${grainRGB.g}, ${grainRGB.b}, 0)`);
     gradient.addColorStop(0.5, `rgba(${grainRGB.r}, ${grainRGB.g}, ${grainRGB.b}, ${intensity})`);
