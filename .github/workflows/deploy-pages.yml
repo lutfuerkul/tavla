@@ -10,8 +10,18 @@ permissions:
   pages: write
   id-token: write
 
+# Dağıtımlar sıraya girsin diye, birbirinin üstüne binmesinler. Adın kendisinin
+# bir anlamı yok; önemli olan bütün dağıtımların aynı adı paylaşması.
+#
+# Ad bir kez değiştirildi ve sebebi şu: bir çalışma "waiting" durumunda takılı
+# kaldı — runner hiç atanmadı, iptal isteği saatlerce 500 ve 502 döndü, GitHub
+# sağlığına kavuştuktan sonra bile. Takılı çalışma grubu elinde tuttuğu için
+# ondan sonraki her dağıtım arkasında "pending" olarak sıraya giriyor ve hiç
+# başlamıyordu. Grubun adını değiştirmek, o kilidi devralmadan yeni bir sıra
+# açar. Takılı olan bir gün çözülürse kendi başına koşar; yayınlayacağı şey de
+# zaten ana dalın aynı hâlidir.
 concurrency:
-  group: "pages"
+  group: "pages-deploy"
   cancel-in-progress: false
 
 jobs:
