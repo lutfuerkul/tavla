@@ -32,3 +32,11 @@ jobs:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+        # Bu adım hiçbir iş yapmaz: paketi yükledikten sonra Pages'in dağıtımı
+        # sıradan almasını bekler. Sıra normalde saniyeler sürüyor, ama uzadığı
+        # günler oluyor — ve varsayılan sınır tam on dakika, yani beklemenin
+        # uzadığı gün deploy hata veriyor. Yükleme çoktan bitmiş, kuyruk hâlâ
+        # ilerliyor: bekleyip almak, çarpı görüp elle yeniden tetiklemekten
+        # iyidir. Yarım saat, işin kendisi için değil, sıra için.
+        with:
+          timeout: 1800000
