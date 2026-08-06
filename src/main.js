@@ -1038,7 +1038,14 @@ function fbm(x, y, octaves = 6, seed = 0) {
 
 // Professional rosewood grain using advanced procedural generation
 // Matches reference board with organic, realistic wood appearance
-function woodPanelTexture(w, h, base, grain, eyes, figure = 1) {
+// `scale` is how much of its full size this texture is being drawn at. Every
+// measurement below is in pixels of the canvas, and the canvas is halved in the
+// hand — so without this the same pattern is stretched over the same board at
+// twice the size: a grain that was fine on a desk comes out on a phone as
+// coarse banding, which is exactly what it was doing. What the eye should see
+// is the same wood at both sizes, drawn with fewer pixels on one of them, so
+// every length here is multiplied by it and the count of the streaks with it.
+function woodPanelTexture(w, h, base, grain, eyes, figure = 1, scale = 1) {
   const c = document.createElement("canvas");
   c.width = w; c.height = h;
   const ctx = c.getContext("2d");
@@ -1053,8 +1060,8 @@ function woodPanelTexture(w, h, base, grain, eyes, figure = 1) {
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       // Directional bias towards vertical grain (like real wood)
-      const xBias = x / 180;
-      const yBias = y / 120;
+      const xBias = x / (180 * scale);
+      const yBias = y / (120 * scale);
 
       // Multi-scale noise - aggressive for dramatic grain
       const scale1 = fbm(xBias, yBias, 5, 0);
@@ -1066,7 +1073,7 @@ function woodPanelTexture(w, h, base, grain, eyes, figure = 1) {
       // tarak izi üretiyorlardı: tahtanın boş orta alanında eşit aralıklı enine
       // bantlar. Genlik üçte bire indirildi — elyaf değişimi kalıyor, düzenlilik
       // gözle seçilmiyor.
-      const wave = Math.sin(y / 35) * 0.12 + Math.cos(x / 45) * 0.09;
+      const wave = Math.sin(y / (35 * scale)) * 0.12 + Math.cos(x / (45 * scale)) * 0.09;
 
       // Combine scales with aggressive weights
       const grain1 = scale1 * 0.55;
@@ -1092,26 +1099,31 @@ function woodPanelTexture(w, h, base, grain, eyes, figure = 1) {
 
   ctx.putImageData(imageData, 0, 0);
 
-  // Dokunun bir ucundan öbürüne uzanan damarlar. Sayısı aynı — ahşabın
-  // alacasını veren bunlar. Koyuluğu indirildi: üstteki dalgayla birleşince
-  // damar olmaktan çıkıp çizgiye dönüyorlardı, ve bir tavla tahtasının ortası
-  // uzun uzun bakılan bir yerdir.
-  for (let i = 0; i < 95; i++) {
+  // Dokunun bir ucundan öbürüne uzanan damarlar. Ahşabın alacasını veren
+  // bunlar. Koyuluğu indirildi: üstteki dalgayla birleşince damar olmaktan
+  // çıkıp çizgiye dönüyorlardı, ve bir tavla tahtasının ortası uzun uzun
+  // bakılan bir yerdir.
+  //
+  // Sayıları da ölçekle iner. Aynı tahtaya yarı boyda bir dokuyla aynı sayıda
+  // damar çizmek, damarları birbirine iki kat yaklaştırmak demek — kalınlıkları
+  // düzeltilse bile sıklıkları bant üretmeye devam ederdi.
+  for (let i = 0; i < Math.round(95 * scale); i++) {
     const y = Math.random() * h;
     const intensity = 0.10 + Math.random() * 0.18;
-    const gradient = ctx.createLinearGradient(0, y - 6, 0, y + 6);
+    const yumusama = 6 * scale;
+    const gradient = ctx.createLinearGradient(0, y - yumusama, 0, y + yumusama);
     gradient.addColorStop(0, `rgba(${grainRGB.r}, ${grainRGB.g}, ${grainRGB.b}, 0)`);
     gradient.addColorStop(0.5, `rgba(${grainRGB.r}, ${grainRGB.g}, ${grainRGB.b}, ${intensity})`);
     gradient.addColorStop(1, `rgba(${grainRGB.r}, ${grainRGB.g}, ${grainRGB.b}, 0)`);
 
     ctx.strokeStyle = gradient;
-    ctx.lineWidth = 2 + Math.random() * 4.5;
+    ctx.lineWidth = (2 + Math.random() * 4.5) * scale;
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.bezierCurveTo(
-      w * 0.18, y + (Math.random() - 0.5) * 40,
-      w * 0.82, y + (Math.random() - 0.5) * 40,
-      w, y + (Math.random() - 0.5) * 22
+      w * 0.18, y + (Math.random() - 0.5) * 40 * scale,
+      w * 0.82, y + (Math.random() - 0.5) * 40 * scale,
+      w, y + (Math.random() - 0.5) * 22 * scale
     );
     ctx.stroke();
   }
@@ -1122,7 +1134,7 @@ function woodPanelTexture(w, h, base, grain, eyes, figure = 1) {
       const alpha = (0.12 + (12 - ring) * 0.012) * (1 - ring / 14) * figure;
       ctx.strokeStyle = grain;
       ctx.globalAlpha = alpha;
-      ctx.lineWidth = (1.6 + Math.random() * 1.1) * (0.5 + figure * 0.5);
+      ctx.lineWidth = (1.6 + Math.random() * 1.1) * (0.5 + figure * 0.5) * scale;
       ctx.beginPath();
       ctx.ellipse(ex, ey, (r * ring) / 14, (r * ring) / 14 * 0.55, Math.random() * 0.22, 0, Math.PI * 2);
       ctx.stroke();
@@ -1277,9 +1289,11 @@ const shell = new THREE.MeshPhysicalMaterial({
 // goes visibly chunky. Measured both ways — with the inlay halved as well the
 // wait came out the same, so it was a loss bought for nothing.
 const PANEL = HANDHELD ? .5 : 1;
+// Gözün yeri zaten ölçekle veriliyordu; yarıçapı verilmiyordu, o yüzden elde
+// aynı halka iki kat büyük çiziliyordu. O da ölçeğe bağlandı.
 const veneerTexture = woodPanelTexture(768 * PANEL, 900 * PANEL,
   BOARD.veneer.base, BOARD.veneer.grain,
-  [[384 * PANEL, 450 * PANEL, BOARD.veneer.eye]], BOARD.veneer.figure);
+  [[384 * PANEL, 450 * PANEL, BOARD.veneer.eye * PANEL]], BOARD.veneer.figure, PANEL);
 const veneerL = new THREE.MeshPhysicalMaterial({
   map: veneerTexture,
   metalness: .03,
