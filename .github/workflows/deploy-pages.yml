@@ -18,7 +18,7 @@ jobs:
   deploy:
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment_retry.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -29,14 +29,21 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: .
+      # Bu adım paketi yükledikten sonra iş yapmaz: Pages'in dağıtımı sıraya
+      # alıp bitirmesini bekler. Sıra normalde saniyeler sürüyor, ama uzadığı
+      # günler oluyor ve adım tam on dakikada vazgeçiyor. O sınır yükseltilemez:
+      # aksiyonun içinde on dakika bir tavandır ve verilen değer ona kırpılır —
+      # yarım saat yazmak da on dakika demektir.
+      #
+      # Yapılabilecek olan, vazgeçtiğinde bir daha denemek. Vazgeçen adım kendi
+      # dağıtımını iptal ediyor, ikinci deneme temiz bir tane açıyor; sıranın
+      # uzun sürdüğü üç seferin ikisinde ikinci deneme saniyeler içinde bitti.
+      # Elle yeniden tetiklemenin yaptığı işi iş akışının kendisi yapsın.
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
-        # Bu adım hiçbir iş yapmaz: paketi yükledikten sonra Pages'in dağıtımı
-        # sıradan almasını bekler. Sıra normalde saniyeler sürüyor, ama uzadığı
-        # günler oluyor — ve varsayılan sınır tam on dakika, yani beklemenin
-        # uzadığı gün deploy hata veriyor. Yükleme çoktan bitmiş, kuyruk hâlâ
-        # ilerliyor: bekleyip almak, çarpı görüp elle yeniden tetiklemekten
-        # iyidir. Yarım saat, işin kendisi için değil, sıra için.
-        with:
-          timeout: 1800000
+        continue-on-error: true
+      - name: Deploy (ikinci deneme)
+        id: deployment_retry
+        if: steps.deployment.outcome == 'failure'
+        uses: actions/deploy-pages@v4
