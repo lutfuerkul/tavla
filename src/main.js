@@ -5548,3 +5548,35 @@ addEventListener("resize", () => {
   applySampleRatio();
 });
 
+// The moments a phone hands the page a different drawing surface: going into
+// fullscreen or coming out of it, being turned over, being come back to. What
+// is left after one of those is a canvas drawing onto something the screen is
+// no longer showing — the board goes black, or a frame arrives half old and
+// half new and tears across.
+//
+// The cure was already written for the one place it had been noticed: taking a
+// new surface by resizing the buffer a pixel and back, which is what
+// nudgeCanvas does. But it was only ever wired to the camera button, which is
+// where the fault happened to be found — not to any of the events that
+// actually change the surface. So the board was mended on the one press nobody
+// makes when it goes wrong, and left alone on the three that cause it.
+//
+// Twice, because the window has not finished changing shape at the instant the
+// event arrives: once now for the common case, once after it has settled.
+const RESURFACE_MS = 350;
+let resurfacing = 0;
+function resurface() {
+  nudgeCanvas();
+  clearTimeout(resurfacing);
+  resurfacing = setTimeout(() => { fitCamera(); nudgeCanvas(); }, RESURFACE_MS);
+}
+document.addEventListener("fullscreenchange", resurface);
+document.addEventListener("webkitfullscreenchange", resurface);
+addEventListener("orientationchange", resurface);
+screen.orientation?.addEventListener?.("change", resurface);
+// A tab come back to may have had its surface taken while it was away, and
+// bfcache hands the page back whole — including a canvas bound to a surface
+// that is gone.
+document.addEventListener("visibilitychange", () => { if (!document.hidden) resurface(); });
+addEventListener("pageshow", resurface);
+
