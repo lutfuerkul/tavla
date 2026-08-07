@@ -5435,6 +5435,48 @@ function readBuffer() {
   }
   bufferMean = +(sum / (bufferPixels.length / 4)).toFixed(1);
 }
+// A frame that was drawn and came back black. Everything the page can see says
+// the board is there: the camera is where it should be, eighty-seven draw calls
+// went out with fifty-seven thousand triangles behind them, the context is
+// healthy, no shader failed and no frame threw. Read back on a phone that shows
+// it, the middle of that frame is nought; read back with the same numbers on
+// another machine, it is lit. What is between the two is a driver handing back
+// a surface it never painted, and the page has no argument to make with it.
+//
+// What the page can do is stop using that surface. Resizing the buffer takes a
+// new one, which is the one thing that has been seen to bring the picture back
+// — the same move the camera button makes.
+//
+// Read rarely and only off a frame that was actually drawn: asking for pixels
+// back stalls until the GPU has caught up, and a frame that was skipped may
+// have been cleared behind us, which would read black and mean nothing. Twice
+// in a row before acting, and a handful of tries in a session — a board that
+// stays black after that is not one more surface away from working.
+const WATCH_MS = 2500;
+const WATCH_DARK = 1.5;
+const WATCH_STRIKES = 2;
+const WATCH_TRIES = 5;
+let watchAt = 0, watchStrikes = 0, watchTries = 0;
+function watchForBlack(now, drew) {
+  if (!HANDHELD || !drew || contextLost) return;
+  // A few frames in, so the first ones — drawn while the textures are still
+  // being built — are not judged. Kept small: a still board is drawn twice a
+  // second on purpose, so a large count here would be minutes of black before
+  // anything was tried.
+  if (watchTries >= WATCH_TRIES || drawnFrames < 8) return;
+  if (now - watchAt < WATCH_MS) return;
+  watchAt = now;
+  readBuffer();
+  // Not an answer: the buffer could not be read at all.
+  if (bufferMean < 0) return;
+  if (bufferMean > WATCH_DARK) { watchStrikes = 0; return; }
+  if (++watchStrikes < WATCH_STRIKES) return;
+  watchStrikes = 0;
+  watchTries++;
+  console.info("tavla: kare siyah geldi — yüzey yenileniyor");
+  nudgeCanvas();
+}
+
 function showDiag(drawn) {
   if (!diagBox) return;
   const now = performance.now();
@@ -5545,6 +5587,7 @@ function animate(now) {
     // would be read as the second thing.
     showFps(at);
     showDiag(drawnFrames);
+    watchForBlack(at, draw && !contextLost);
   } catch (reason) {
     // Kept rather than counted: the first one is the one that explains the
     // rest, and sixty a second of the same line is not a diagnosis. It goes on
