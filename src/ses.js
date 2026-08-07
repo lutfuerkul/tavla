@@ -48,8 +48,28 @@ export function sesiCevir() {
 let ac = null;
 let ana = null;
 const tamponlar = new Map();
+const baslangiclar = new Map();
 const sonCalan = new Map();
 let yukleniyor = null;
+
+// Sesin gerçekten başladığı an. Dosyalar kırpılmış olarak üretiliyor ama mp3
+// kodlayıcısı kendi gecikmesini başa ekliyor: kaynakta 162 milisaniye olan bir
+// taş sesi çözüldüğünde 209 milisaniye çıkıyor, aradaki fark baştaki
+// sessizlik. Otuz milisaniye tek başına duyulmaz, ama taşın konduğu kareyle
+// sesi arasına giren gecikme tam da kırpma zahmetinin kaldırmak istediği şey.
+// Çözülen tamponda ölçülüp çalarken atlanıyor, böylece hangi kodlayıcı ne
+// eklerse eklesin ses ilk örneğinden başlıyor.
+function sesinBasi(tampon) {
+  const d = tampon.getChannelData(0);
+  let tepe = 0;
+  for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > tepe) tepe = v; }
+  const esik = tepe * 0.005;
+  for (let i = 0; i < d.length; i++) if (Math.abs(d[i]) > esik) {
+    // Bir milisaniye geri: sesin ilk tırmanışı kesilmesin.
+    return Math.max(0, (i - tampon.sampleRate / 1000) / tampon.sampleRate);
+  }
+  return 0;
+}
 
 // Bir kez, ilk dokunuşta. Ses aygıtı ancak kullanıcı sayfaya dokunduktan sonra
 // açılıyor ve bir yeniden yükleme sayfayı yeniden dokunulmamış hâle getiriyor
@@ -118,6 +138,7 @@ function yukle() {
         if (sonuc?.then) sonuc.then(tamam, olmadi);
       });
       tamponlar.set(ad, tampon);
+      baslangiclar.set(ad, sesinBasi(tampon));
     } catch (sebep) {
       // Bir ses gelmediyse oyun o kadarıyla sessiz oynanır; durmasına değecek
       // bir şey değil, ama bir daha denenecek.
@@ -173,7 +194,7 @@ export function cal(tur, { gecikme = 0, seviye = 1 } = {}) {
     ses.gain.value = Math.max(0, taban * (1 + (Math.random() * 2 - 1) * SES_OYNAMA));
     kaynak.connect(ses);
     ses.connect(ana);
-    kaynak.start(ac.currentTime + Math.max(0, gecikme));
+    kaynak.start(ac.currentTime + Math.max(0, gecikme), baslangiclar.get(ad) ?? 0);
   } catch (sebep) {
     console.info("tavla: ses çalınamadı —", sebep?.message ?? sebep);
   }
