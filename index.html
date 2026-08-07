@@ -18,7 +18,6 @@
     <main id="app">
       <canvas id="scene"></canvas>
       <section id="intro" aria-label="Oyun başlangıcı">
-        <nav id="langs" aria-label="Dil"></nav>
         <p class="eyebrow" data-i18n="eyebrow">3B TAVLA</p>
         <span id="online" hidden></span>
         <h1 data-i18n="door.title">Ayarlar</h1>
@@ -43,6 +42,7 @@
         </div>
         <div id="settings"></div>
         <button id="start" data-i18n="start" disabled>Oyuna başla</button>
+        <nav id="langs" aria-label="Dil"></nav>
       </section>
       <aside id="hud" aria-live="polite">
         <div><span data-i18n="hud.turn">SIRA</span><strong>KEMİK</strong><small id="sayac-hamle"></small></div>
@@ -54,9 +54,19 @@
         <span data-i18n="code.label">ODA KODU</span><strong></strong>
       </aside>
       <button id="end-table" data-i18n="away.end" hidden>Masayı sonlandır</button>
-      <button id="menu" data-i18n="menu">Menü</button>
-      <button id="fullscreen" hidden>Tam ekran</button>
-      <button id="sound">Ses açık</button>
+      <div id="rail">
+        <div id="player">
+          <div class="player-keys">
+            <button id="prev" type="button" aria-label="Önceki">‹‹</button>
+            <button id="play" type="button" aria-label="Çal">▶</button>
+            <button id="next" type="button" aria-label="Sonraki">››</button>
+          </div>
+          <span id="track"></span>
+        </div>
+        <button id="menu" data-i18n="menu">Menü</button>
+        <button id="fullscreen" hidden>Tam ekran</button>
+        <button id="sound">Ses açık</button>
+      </div>
       <div id="confirm" hidden>
         <div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
           <p id="confirm-title" data-i18n="confirm.title">Oyundan çıkmak istediğine emin misin?</p>
