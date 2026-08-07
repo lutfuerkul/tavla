@@ -517,9 +517,24 @@ body.ideographic #hud span, body.ideographic #hud strong {
    board — it is wider than it is deep — and what made it unusable was the
    address bar and the tab strip eating the height, not the orientation. With
    those gone the board is bigger than it ever is upright, so the warning has
-   nothing left to warn about. */
+   nothing left to warn about.
+
+   There are two ways for them to be gone and this knew only one of them.
+   Fullscreen is the other; the first is being run from the home screen, which
+   is the whole point of the manifest and the only way an iPhone gets there at
+   all — that machine grants fullscreen to video and to nothing else. So an
+   iPhone added to the home screen, turned sideways, met a warning it could not
+   dismiss: the button inside it is drawn only where fullscreen exists, and
+   there it does not. A black screen and nothing to press, in the mode the game
+   itself had asked to be installed into.
+
+   `evde` is set on the root by the page when it finds itself launched from the
+   home screen. A class rather than `@media (display-mode: standalone)` because
+   it is read from `navigator.standalone` as well, which is the answer older
+   iPhones give. */
 html:fullscreen #rotate,
-html:-webkit-full-screen #rotate { display: none; }
+html:-webkit-full-screen #rotate,
+html.evde #rotate { display: none; }
 /* The way out of the warning, inside the warning: it covers the screen, so a
    button anywhere else cannot be reached from here. */
 #rotate button { padding: .7rem 1.5rem; font: 500 .74rem/1 "DM Mono", monospace;
@@ -531,18 +546,21 @@ html:-webkit-full-screen #rotate { display: none; }
    of them sit above and below because a phone held that way has height to
    spare and no width; turned over, it is the other way round exactly. */
 @media (orientation: landscape) and (pointer: coarse) {
-  html:fullscreen #hud, html:-webkit-full-screen #hud {
+  html:fullscreen #hud, html:-webkit-full-screen #hud, html.evde #hud {
     top: 50%; left: .5rem; transform: translateY(-50%);
     flex-direction: column; gap: .35rem; }
-  html:fullscreen #hud div, html:-webkit-full-screen #hud div {
+  html:fullscreen #hud div, html:-webkit-full-screen #hud div, html.evde #hud div {
     min-width: 6.6rem; padding: .5rem .7rem; }
-  html:fullscreen #controls, html:-webkit-full-screen #controls {
+  html:fullscreen #controls, html:-webkit-full-screen #controls, html.evde #controls {
     top: 50%; bottom: auto; left: auto; right: .5rem;
     width: auto; padding: 0; flex-wrap: nowrap;
     transform: translateY(-50%); flex-direction: column; gap: .35rem; }
-  html:fullscreen #controls button, html:-webkit-full-screen #controls button {
+  html:fullscreen #controls button, html:-webkit-full-screen #controls button,
+  html.evde #controls button {
     width: 100%; }
-  html:fullscreen #table-code, html:-webkit-full-screen #table-code {
+  html:fullscreen #table-code, html:-webkit-full-screen #table-code,
+  html.evde #table-code {
     top: .5rem; right: .5rem; }
-  html:fullscreen #menu, html:-webkit-full-screen #menu { top: .5rem; right: .5rem; }
+  html:fullscreen #menu, html:-webkit-full-screen #menu, html.evde #menu {
+    top: .5rem; right: .5rem; }
 }

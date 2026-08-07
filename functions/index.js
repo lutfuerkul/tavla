@@ -798,9 +798,20 @@ async function isSeated(matchId, uid) {
   // connection — and a connection that is cut rather than closed is not
   // noticed for a minute or more. So the time on the mark is read too, and a
   // mark nobody has touched in twenty seconds is an empty chair whatever it
-  // says. A board too old to be writing the time is taken at its word.
+  // says.
+  //
+  // A mark without a readable time on it is an empty chair as well, and this
+  // used to say the opposite: a record too old to carry a time was taken at
+  // its word and the seat called full. Nothing writes such a record — every
+  // board this has ever served writes the stamp — but anybody could: the seat
+  // is under the player's own uid and theirs to write. One line of `{at:"x"}`
+  // from a console and the chair stayed full for ever, which is every warning
+  // to the opponent, the minute they get to come back inside, and the tally
+  // that closes a table after the third disappearance, all switched off at
+  // once. So the benefit of the doubt goes the other way, and the rules refuse
+  // the record besides — the stamp has to be the database's own clock.
   const at = seat.val()?.at;
-  if (typeof at !== "number") return true;
+  if (typeof at !== "number") return false;
   return Date.now() - at < SEAT_FRESH_MS;
 }
 

@@ -16,7 +16,26 @@ Ne diyor:
 - Her oyuncu yalnızca **kendi** kaydını yazabilir ya da silebilir
   (`auth.uid === $uid`). Kimse başkasını çevrimiçi ya da çevrimdışı
   gösteremez.
+- `masalar/$mac/$uid` koltuklar: aynı biçimde, sahibinden başkası yazamaz.
+- Bir kayıtta **yalnızca `at` alanı** olabilir (`$other` reddedilir) ve o alan
+  **veritabanının kendi saati** olmak zorunda (`newData.val() === now`).
+  İkisi de ilk yazılışta yoktu ve ikisinin de bir bedeli vardı:
+  - Damganın sayı olduğu doğrulanmıyordu. Koltuğuna konsoldan `{at:"x"}`
+    yazan biri, sunucudaki koltuk okumasını süresiz "dolu" bırakabiliyordu —
+    rakibe giden "masadan kalktı" haberi, geri dönmek için verilen dakika ve
+    üçüncü kopmada masayı kapatan sayaç, hepsi birden susuyordu. Yalnızca
+    "sayı olsun" demek de yetmezdi: `at`'e milyon yıl sonrası yazılır ve aynı
+    kapı açık kalırdı. Bu yüzden damga sunucunun saatine eşitlenmiş durumda.
+  - Kaydın şekli serbestti, `presence` ise girmiş herkese canlı yayınlanıyor.
+    Kendi kaydına megabaytlarca veri yazan bir tarayıcı onu bütün oyunculara
+    yayınlatabilirdi. Artık `at` dışında hiçbir alan geçmiyor.
 - Başka her yol kapalı.
+
+Kurallar `@firebase/rules-unit-testing` ile emülatöre yüklenip sınandı: gerçek
+istemcinin yazdığı `{ at: serverTimestamp() }` geçiyor; string damga, uydurma
+gelecek damga, damgasız kayıt, fazladan alan, düz dev değer ve başkasının
+kaydına yazma reddediliyor. On dakikadan eski bir kaydın başkasınca
+süpürülmesi geçmeye devam ediyor.
 
 Kaydın silinmesini sunucu yapıyor: tarayıcı bağlanınca `onDisconnect` ile
 "bağlantım koparsa bu kaydı sil" talimatını bırakıyor. Kapatılan sekme, biten
