@@ -96,8 +96,15 @@ html.tepe #hud div { min-width: 7.6rem; padding: .55rem .75rem; }
    from, and a column of eight names is a list to be worked through — a single
    line along the bottom is a thing you glance at and leave alone, which is
    what a language picker is for everybody who is already in their own. */
-#langs { position: absolute; z-index: 1; left: 50%; bottom: 1.3rem;
-  transform: translateX(-50%);
+/* Stretched across and centred inside, rather than pinned at the middle and
+   pulled back by half its own width. The second is the shorter rule and it
+   quietly costs half the screen: an absolutely positioned box that starts at
+   the 50% mark can only grow to the edge, so its widest possible line is half
+   the window however far left the transform then drags it. Eight languages fit
+   on one line in 1920 and wrapped to two in everything narrower — not because
+   the names were too wide, but because they were being measured against 640
+   points instead of 1280. */
+#langs { position: absolute; z-index: 1; left: 0; right: 0; bottom: 1.3rem;
   display: flex; flex-direction: row; flex-wrap: wrap;
   justify-content: center; gap: .3rem; }
 .lang-pick { display: flex; align-items: center; gap: .55rem;

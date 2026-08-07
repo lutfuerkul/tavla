@@ -77,7 +77,23 @@ let hata = 0;
 
 function yukle(calsinMi) {
   const a = kur();
+  // Durdurulup öyle değiştiriliyor. Çalan bir öğeye yeni bir kaynak vermek
+  // bekleyen play()'i iptal ediyor ve tarayıcı bunu AbortError diye geri
+  // veriyor — bir hata değil, "o çalma isteğinin yerini yenisi aldı" demek.
+  // Duraklatmak o sözü baştan doğurmuyor.
+  a.pause();
+  // Ve indirmesine izin veriliyor. Eleman preload="none" ile kuruluyor, çünkü
+  // hiçbir şey basılmadan önce beş megabaytın inmeye başlaması istenmiyor —
+  // ama o ayar açık kaldığında kaynak seçimi bir kez askıya alınıp orada
+  // kalıyor: kaynak veriliyor, play() çağrılıyor, eleman duraklamamış
+  // görünüyor, ve hiç yüklenmiyor. Tarayıcıya niyet artık belli: yükle.
+  //
+  // load() ise açıkça çağrılıyor, çünkü kaynak atandığında seçim algoritması
+  // bu satırda değil bir sonraki turda koşuyor — play() ondan önce varıyor ve
+  // henüz kaynağı olmayan bir elemana sesleniyor.
+  a.preload = "auto";
   a.src = KOK + PARCALAR[sira].dosya;
+  a.load();
   localStorage.setItem(PARCA_ANAHTARI, String(sira));
   if (calsinMi) oynat();
   bildir();
@@ -87,9 +103,18 @@ function oynat() {
   const a = kur();
   a.volume = SEVIYE;
   const sozu = a.play();
-  // Tarayıcı dokunuş görmediyse reddediyor. Bu bir hata değil, bir cevap:
-  // çalar kapalı görünür ve kullanıcı yeniden basar.
   sozu?.catch(sebep => {
+    // İki ayrı cevap, ve ayırt edilmeleri şart.
+    //
+    // AbortError, bu çalma isteğinin yerini bir yenisinin aldığı anlamına
+    // geliyor — ileri ya da geri basıldığında olan tam olarak budur, ve o an
+    // müzik çalmaya devam ediyordur. Bunu "çalamadı" sayan ilk hâli, her parça
+    // değişiminde çaları sessizce kapalıya düşürüyordu: düğme çalıyor
+    // görünüyor, durdura basınca duracağına baştan başlıyordu.
+    //
+    // NotAllowedError ise gerçek cevap: tarayıcı dokunuş görmedi. Çalar kapalı
+    // görünür ve kullanıcı yeniden basar.
+    if (sebep?.name === "AbortError") return;
     caliyor = false;
     bildir();
     console.info("tavla: müzik başlatılamadı —", sebep?.message ?? sebep);
