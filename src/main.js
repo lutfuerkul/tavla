@@ -45,12 +45,38 @@ const BOARDS = {
     room: { env: .22, fill: .16, hemi: .42, ambient: .1 },
   },
 };
+// Otomatik'in yazı-turası, ve nerede atıldığı.
+//
+// Masa, renk ve taraf "Otomatik"te bırakılabiliyor ve o zaman bir yazı-turayla
+// belirleniyor. Tura "Oyuna başla"ya basıldığı anda atılıyordu, ve attığı şey
+// neredeyse her zaman o anki sahneden farklı çıkıyordu — iki seçenekten birini
+// tutturma şansı yarı yarıya, üç ayarın üçünü birden tutturmak sekizde bir. O
+// yüzden kapıdan oyuna geçiş neredeyse her seferinde sayfayı baştan yüklüyordu,
+// ve sayfa gidince çalan müzik de gidiyordu.
+//
+// Tura artık burada atılıyor: sayfa kurulurken, sahne çizilmeden önce. Sahne
+// çıkan sonuca göre kuruluyor, ve basıldığında Otomatik'in cevabı zaten
+// ekranda duran şey oluyor — yani yeniden yükleme gerekmiyor, yani müzik
+// kesilmiyor. Çeşitlilik de duruyor: her sayfa açılışı yeni bir tura.
+//
+// Elle seçilmiş olan hariç. Star tahtasını isteyen biri onu bir kez söylüyor
+// ve bir daha sorulmuyor; işaret ayrı tutuluyor, çünkü depodaki değerin
+// kendisi turayla seçilmişi de elle seçilmişi de aynı görünüyor.
+const SECILDI_SONU = ".secildi";
+const eldeSecilmis = anahtar => localStorage.getItem(anahtar + SECILDI_SONU) === "1";
+
+function turaAt(anahtar, secenekler) {
+  if (eldeSecilmis(anahtar)) return;
+  localStorage.setItem(anahtar, secenekler[Math.floor(Math.random() * secenekler.length)]);
+}
+
 // Which checkers are yours is chosen at the door and settled here, before
 // anything is built, because the seat follows it: black comes home to 19-24
 // on the near row and ivory to 1-6 on the far one, so whoever you play, the
 // camera has to sit on that side of the table or you bear off away from
 // yourself across the board.
 const COLOUR_KEY = "tavla.colour";
+turaAt(COLOUR_KEY, ["black", "ivory"]);
 const HUMAN = localStorage.getItem(COLOUR_KEY) === "ivory" ? "ivory" : "black";
 const COMPUTER = HUMAN === "ivory" ? "black" : "ivory";
 // Looked up rather than stored, so a line written after the language changes
@@ -63,6 +89,7 @@ const AWAY = HUMAN === "black" ? -1 : 1;
 // Which hand you gather your checkers with, also chosen at the door. Left is
 // where most people want them, so it is what an unanswered door means.
 const SIDE_KEY = "tavla.side";
+turaAt(SIDE_KEY, ["sol", "sag"]);
 const SIDE = localStorage.getItem(SIDE_KEY) === "sag" ? -1 : 1;
 
 // Your home board is on your chosen side of the screen whichever colour you
@@ -121,6 +148,7 @@ const CLOTH = { file: "cuha-kadife.jpg", tile: 9 };
 const clothName = "kadife";
 
 const BOARD_KEY = "tavla.board";
+turaAt(BOARD_KEY, Object.keys(BOARDS));
 const boardName = BOARDS[localStorage.getItem(BOARD_KEY)] ? localStorage.getItem(BOARD_KEY) : "klasik";
 const BOARD = BOARDS[boardName];
 
@@ -570,10 +598,12 @@ function showSettings() {
 // Otomatik, decided. A coin rather than a preference: the game has no opinion
 // about which board is nicer or which colour wins more, and there is nothing
 // to gain by leaning one way, so each is drawn evenly.
-const anyOf = list => list[Math.floor(Math.random() * list.length)];
-const settle = key => picked[key] === "auto"
-  ? anyOf(SETTINGS.find(s => s.key === key).options.slice(1).map(([v]) => v))
-  : picked[key];
+// Otomatik'in cevabı, sayfa kurulurken atılan turanın sonucu — yani ekranda
+// zaten duran şey. Burada yeniden atılsaydı sekiz basıştan yedisinde farklı
+// bir şey çıkar ve sayfa yeniden yüklenirdi; turanın yeri artık yukarısı,
+// turaAt'ın yanı.
+const KURULAN = { board: () => boardName, colour: () => HUMAN, side: () => sideName };
+const settle = key => picked[key] === "auto" ? KURULAN[key]() : picked[key];
 
 // The languages. Every line the game says is looked up at the moment it is
 // written, so choosing one here rewrites the door and the board on the spot —
@@ -856,6 +886,11 @@ function showLobby() {
 function sitDownTo(id, colour) {
   localStorage.setItem(MATCH_KEY, id);
   localStorage.setItem(COLOUR_KEY, colour);
+  // Ve elle seçilmiş sayılıyor. Rengi burada oda söylüyor, bir yazı-tura
+  // değil — işaret konmasaydı sayfa yeniden yüklenirken tura atılır ve
+  // odanın verdiği renk üzerine yazılırdı: iki oyuncu aynı taşları oynardı.
+  // İşaret kapıya dönüp Otomatik'le başlandığında kalkıyor.
+  localStorage.setItem(COLOUR_KEY + SECILDI_SONU, "1");
   localStorage.setItem(MODE_KEY, "online");
   // The table and the side are still the player's own: two people across a
   // network need not be looking at the same walnut, and each gathers on the
@@ -1056,7 +1091,19 @@ startButton?.addEventListener("click", () => {
   // gesture every game starts with. Asked for here so the first checker down
   // has its sound ready rather than being the throwaway that wakes the device.
   sesiUyandir();
+  // Elle seçilenler işaretleniyor, Otomatik'te bırakılanların işareti
+  // kaldırılıyor. Bir sonraki açılışta yazı-turayı kimin için atacağını bu
+  // söylüyor: Star tahtasını isteyen onu bir kez söyler ve bir daha sorulmaz,
+  // Otomatik'te bırakan her açılışta yeni bir tura alır.
+  for (const [anahtar, key] of [[BOARD_KEY, "board"], [COLOUR_KEY, "colour"], [SIDE_KEY, "side"]]) {
+    if (picked[key] === "auto") localStorage.removeItem(anahtar + SECILDI_SONU);
+    else localStorage.setItem(anahtar + SECILDI_SONU, "1");
+  }
   const board = settle("board"), colour = settle("colour"), side = settle("side");
+  // Hiçbiri değişmediyse sayfa yeniden yüklenmiyor — ve Otomatik'te bırakılan
+  // her ayar için bu artık kural: turası sayfa kurulurken atıldı, cevabı zaten
+  // ekranda duran şey. Yeniden yükleme yalnızca elle başka bir şey seçildiğinde
+  // oluyor, ki o da nadir ve bilerek yapılan bir şey.
   if (board === boardName && colour === HUMAN && side === sideName) return sitDown();
   localStorage.setItem(BOARD_KEY, board);
   localStorage.setItem(COLOUR_KEY, colour);
