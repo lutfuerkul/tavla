@@ -41,16 +41,17 @@ button:hover { background: #edbb69; }
    up there is no perspective and no black — the board fills the window top to
    bottom, and the readings were landing on the far rail.
 
-   There is nowhere to go upwards: the panel already sits 24px from the top. So
-   it turns on its side, the same shape a phone on its side has used since #152,
-   and stands beside the board rather than over it.
+   There is nowhere to go upwards along the top: the panel already sits 24px
+   from it. So it turns on its side, the same shape a phone on its side has
+   used since #152, and stands beside the board rather than over it.
 
-   At the foot of that side rather than the middle of it. The rail comes down
-   from the top of the same edge and is player-plus-four-buttons deep; a panel
-   centred on the window met it on any screen shorter than about eight hundred
-   points. Measured from the bottom, the two grow away from each other instead
-   of towards each other, and there is no height at which they argue. */
-html.tepe #hud { top: auto; bottom: 1.1rem; left: .9rem; right: auto;
+   High on that side, not at its foot. It sat at the foot first and that was
+   the safe answer rather than the right one — the rail comes down the same
+   edge and measuring from the bottom kept them apart without having to think
+   about how tall either is. But the readings belong up where the eye already
+   is, next to the top of the board, and the two can share the edge: the rail
+   is a fixed stack whose height is known, so the panel simply starts under it. */
+html.tepe #hud { top: 13.6rem; bottom: auto; left: .9rem; right: auto;
   transform: none; flex-direction: column; gap: .4rem; }
 html.tepe #hud div { min-width: 7.6rem; padding: .55rem .75rem; }
 
@@ -503,20 +504,21 @@ body.ideographic #hud span, body.ideographic #hud strong {
   display: flex; flex-direction: column; align-items: stretch; gap: .45rem; }
 #rail > * { align-self: stretch; }
 
-/* The music, at the top of the rail. Three keys and the name of what is
-   playing — back, play or stop, forward. There is no separate on and off for
-   it: stopping it is what turning it off means, which is one control instead
-   of two for the same thing.
+/* The music, at the top of the rail. Two rows of three: back, play or stop,
+   forward — and under them quieter, how loud, louder. There is no separate on
+   and off: stopping it is what turning it off means, which is one control
+   instead of two for the same thing.
 
-   The name sits under the keys rather than beside them, because the pieces are
-   named after the people who played them and those names run long. It is
-   clipped rather than wrapped: a rail that changes width as the track changes
-   drags the whole column about. */
-#player { display: flex; flex-direction: column; gap: .3rem;
+   The name of what is playing was on the second row and has gone. Fourteen
+   names, all long, all of them answering a question nobody was asking — what
+   is wanted from a player on the edge of a game is how loud it is, and that is
+   what the row says now. The music's loudness is its own: the board's sounds
+   have their own levels in ses.js and these keys do not touch them. */
+#player { display: flex; flex-direction: column; gap: .28rem;
   padding: .4rem .5rem; width: 9.4rem;
   background: rgba(12,9,6,.55); border: 1px solid rgba(229,173,84,.2);
   border-radius: .4rem; }
-.player-keys { display: flex; gap: .25rem; }
+.player-keys { display: flex; gap: .25rem; align-items: stretch; }
 #player button { flex: 1; padding: .3rem 0; border-radius: .3rem;
   font: 500 .72rem/1 "DM Mono", monospace; letter-spacing: 0;
   color: #ad9470; background: rgba(20,15,10,.6);
@@ -525,10 +527,13 @@ body.ideographic #hud span, body.ideographic #hud strong {
 #player button:hover { color: #f6ecd6; border-color: rgba(229,173,84,.6); }
 #player button#play { flex: 1.3; color: #e5ad54; }
 #player.caliyor button#play { color: #0d0a06; background: #e5ad54; border-color: #e5ad54; }
-#track { display: block; overflow: hidden; white-space: nowrap;
-  text-overflow: ellipsis; color: #8d7d64;
-  font: 400 .56rem/1.3 "DM Mono", monospace; letter-spacing: .04em; }
-#player.caliyor #track { color: #b3a791; }
+/* The reading between the two keys, sized like them so the row does not shift
+   as it goes from one digit to three. */
+#level { flex: 1.3; display: grid; place-items: center;
+  font: 500 .66rem/1 "DM Mono", monospace; color: #8d7d64;
+  font-variant-numeric: tabular-nums; }
+#player.caliyor #level { color: #e5ad54; }
+#player.sessiz #level { color: #6f6252; }
 
 /* Back to the door, by way of a question — a game in progress is not
    something to lose to a stray click. */

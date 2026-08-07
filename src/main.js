@@ -717,19 +717,27 @@ soundButton?.addEventListener("click", () => {
 // The music, and its three keys. Stopping it is what turning it off means, so
 // there is no fourth control for that — the play key is the switch.
 const playerBox = document.querySelector("#player");
-const trackName = document.querySelector("#track");
+const levelBox = document.querySelector("#level");
 document.querySelector("#play")?.addEventListener("click", () => Muzik.cevir());
 document.querySelector("#next")?.addEventListener("click", () => Muzik.sonraki());
 document.querySelector("#prev")?.addEventListener("click", () => Muzik.onceki());
+document.querySelector("#louder")?.addEventListener("click", () => Muzik.ac());
+document.querySelector("#quieter")?.addEventListener("click", () => Muzik.kis());
 
-Muzik.izle(({ caliyor, parca }) => {
+Muzik.izle(({ caliyor, seviye }) => {
   playerBox?.classList.toggle("caliyor", caliyor);
+  playerBox?.classList.toggle("sessiz", seviye <= 0);
   const key = document.querySelector("#play");
   if (key) {
     key.textContent = caliyor ? "\u25a0" : "\u25b6";
     key.setAttribute("aria-label", t(caliyor ? "music.stop" : "music.play"));
   }
-  if (trackName) trackName.textContent = parca?.ad ?? "";
+  // Yüzde, çünkü ölçülebilir bir şey: kaç kere basıldığını saymak yerine nerede
+  // olduğu okunuyor. Parça adı buradaydı ve kalktı — on dört ad, hepsi uzun ve
+  // hepsi çalanı değil çalacağı söylüyordu, oysa sorulan şey sesin yüksekliği.
+  if (levelBox) levelBox.textContent = Math.round(seviye * 100);
+  document.querySelector("#quieter")?.setAttribute("aria-label", t("music.quieter"));
+  document.querySelector("#louder")?.setAttribute("aria-label", t("music.louder"));
 });
 Muzik.hazirla();
 

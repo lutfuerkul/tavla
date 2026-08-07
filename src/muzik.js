@@ -34,7 +34,28 @@ export const PARCALAR = [
   { dosya: "14.mp3", ad: "The Mountain · Oud" },
 ];
 
-const SEVIYE = 0.85;
+// Müziğin sesi, ve oyunun sesinden bağımsız oluşu. Tahtanın kendi sesleri
+// ses.js'te ve kendi seviyeleri var; buradaki düğmeler onlara dokunmuyor.
+// Müziği kısıp zarı duymak, ya da tersi, ayrı iki karar.
+const SEVIYE_ANAHTARI = "tavla.muzikSes";
+const ADIM = 0.1;
+const VARSAYILAN = 0.85;
+
+let seviye = (() => {
+  const n = Number(localStorage.getItem(SEVIYE_ANAHTARI));
+  return Number.isFinite(n) && n >= 0 && n <= 1 ? n : VARSAYILAN;
+})();
+
+export const seviyesi = () => seviye;
+
+function seviyeyiYaz() {
+  localStorage.setItem(SEVIYE_ANAHTARI, String(seviye));
+  if (ses) ses.volume = seviye;
+  bildir();
+}
+
+export function ac() { seviye = Math.min(1, Math.round((seviye + ADIM) * 100) / 100); seviyeyiYaz(); }
+export function kis() { seviye = Math.max(0, Math.round((seviye - ADIM) * 100) / 100); seviyeyiYaz(); }
 // Bir parçadan diğerine geçerken kısa bir kısılma. Sert kesme, ud tellerinin
 // ortasında bıçak gibi duyuluyor.
 const SONUS_MS = 450;
@@ -80,13 +101,13 @@ export const suanki = () => PARCALAR[sira];
 
 // Çalar durumu her değiştiğinde arayüz haber alsın.
 export function izle(geriCagir) { izleyen = geriCagir; bildir(); }
-const bildir = () => izleyen?.({ caliyor, parca: PARCALAR[sira], sira });
+const bildir = () => izleyen?.({ caliyor, parca: PARCALAR[sira], sira, seviye });
 
 function kur() {
   if (ses) return ses;
   ses = new Audio();
   ses.preload = "none";
-  ses.volume = SEVIYE;
+  ses.volume = seviye;
   // Tek parça bitince sıradaki. Liste bitince başa — müzik sürekli çalacak.
   ses.addEventListener("ended", () => { ilerle(1); });
   // Bir dosya gelmezse durup kalmasın, sıradakine geçsin. Ondördü birden
@@ -147,7 +168,7 @@ let basla_an = 0;
 
 function oynat() {
   const a = kur();
-  a.volume = SEVIYE;
+  a.volume = seviye;
   const sozu = a.play();
   sozu?.catch(sebep => {
     // İki ayrı cevap, ve ayırt edilmeleri şart.
@@ -197,7 +218,7 @@ export function durdur() {
     ses.volume = Math.max(0, baslangic * (1 - k));
     if (k < 1) return void requestAnimationFrame(kis);
     ses.pause();
-    ses.volume = SEVIYE;
+    ses.volume = seviye;
   };
   requestAnimationFrame(kis);
   bildir();
