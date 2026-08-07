@@ -42,7 +42,13 @@ const ADIM = 0.1;
 const VARSAYILAN = 0.85;
 
 let seviye = (() => {
-  const n = Number(localStorage.getItem(SEVIYE_ANAHTARI));
+  // Yazılı bir şey var mı diye önce ona bakılıyor. Doğrudan Number()'a
+  // vermek sessizce sıfır veriyor — hiç yazılmamışsa getItem null döner,
+  // Number(null) sıfırdır, ve sıfır geçerli bir ses seviyesi olduğu için
+  // varsayılan hiç devreye girmiyordu: müzik ilk açılışta sessiz çalıyordu.
+  const yazili = localStorage.getItem(SEVIYE_ANAHTARI);
+  if (yazili === null || yazili === "") return VARSAYILAN;
+  const n = Number(yazili);
   return Number.isFinite(n) && n >= 0 && n <= 1 ? n : VARSAYILAN;
 })();
 

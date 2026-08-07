@@ -46,12 +46,17 @@ button:hover { background: #edbb69; }
    used since #152, and stands beside the board rather than over it.
 
    High on that side, not at its foot. It sat at the foot first and that was
-   the safe answer rather than the right one — the rail comes down the same
-   edge and measuring from the bottom kept them apart without having to think
-   about how tall either is. But the readings belong up where the eye already
-   is, next to the top of the board, and the two can share the edge: the rail
-   is a fixed stack whose height is known, so the panel simply starts under it. */
-html.tepe #hud { top: 13.6rem; bottom: auto; left: .9rem; right: auto;
+   the safe answer rather than the right one — the readings belong up where the
+   eye already is, next to the top of the board.
+
+   Under the rail, which comes down the same edge. How far under is measured
+   rather than guessed: --ray-alti is written by the page from the rail's own
+   box. It was a number here first, twice, and both times the rail grew — a
+   button, then a second row of keys — and the panel climbed into it. A stack
+   whose height depends on how many controls are in it is not a number to keep
+   in a stylesheet. */
+html.tepe #hud { top: calc(var(--ray-alti, 16rem) + .8rem); bottom: auto;
+  left: .9rem; right: auto;
   transform: none; flex-direction: column; gap: .4rem; }
 html.tepe #hud div { min-width: 7.6rem; padding: .55rem .75rem; }
 

@@ -738,6 +738,7 @@ Muzik.izle(({ caliyor, seviye }) => {
   if (levelBox) levelBox.textContent = Math.round(seviye * 100);
   document.querySelector("#quieter")?.setAttribute("aria-label", t("music.quieter"));
   document.querySelector("#louder")?.setAttribute("aria-label", t("music.louder"));
+  measureRail();
 });
 Muzik.hazirla();
 
@@ -4434,8 +4435,32 @@ function placeButtons() {
   }
 }
 
+// Rayın nerede bittiği, sayfanın kendi ölçtüğü hâliyle. Tepe kamerasındaki
+// panel bunun altından başlıyor ve arayı stil dosyasındaki bir sayıyla tutmak
+// iki kez tutmadı: raya bir düğme eklendi, sonra çalara ikinci bir tuş sırası,
+// ve her seferinde panel rayın içine tırmandı. Kaç denetim olduğuna bağlı bir
+// yükseklik, bir stil dosyasında saklanacak bir sayı değil.
+// Eleman burada soruluyor, yukarıdaki rail değişkeninden okunmuyor: bu işlev
+// çalar ilk durumunu bildirdiğinde de çağrılıyor ve o an modül daha o satıra
+// gelmemiş oluyor — bir const'a tanımlanmadan önce dokunmak hata fırlatır ve
+// modülün geri kalanı hiç çalışmazdı.
+function measureRail() {
+  const kutu = document.querySelector("#rail");
+  if (!kutu) return;
+  const alt = kutu.getBoundingClientRect().bottom;
+  if (alt > 0) document.documentElement.style.setProperty("--ray-alti", `${Math.round(alt)}px`);
+}
+
+// Ve bir kez ölçmek yetmiyor. Ray, yazı tipi yüklendikçe ve düğmeler yerine
+// oturdukça büyüyor; modül kurulurken alınan ölçü rayın yarısını gösteriyordu
+// ve panel yine içine tırmanıyordu. İzlenirse ne zaman değiştiğini sormak
+// gerekmiyor — büyüdüğü an haber geliyor, dar ekranda düğmeler alttaki sıraya
+// indiğinde de.
+new ResizeObserver(measureRail).observe(document.querySelector("#rail") ?? document.body);
+
 placeButtons();
-addEventListener("resize", placeButtons);
+measureRail();
+addEventListener("resize", () => { placeButtons(); measureRail(); });
 
 viewButton?.addEventListener("click", () => {
   chosenView = overhead() ? "koltuk" : "tepe";
