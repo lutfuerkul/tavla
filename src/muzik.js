@@ -166,10 +166,30 @@ export function onceki() {
   ilerle(-1);
 }
 
-// Sayfa yeniden yüklendiğinde çalar kaldığı yerden görünsün — ama kendiliğinden
-// çalmasın. Müzik parça başına beş megabayt ve tarayıcı zaten dokunuşsuz
-// çalmıyor; kaldığı parçayı göstermek ve kullanıcının basmasını beklemek hem
-// dürüst hem de kimsenin verisini habersiz harcamıyor.
+// Sayfaya girilir girilmez çalsın.
+//
+// "Hemen" edilebilecek en erken an, sayfaya dokunulan ilk andır. Tarayıcı sesi
+// dokunuştan önce vermiyor ve bu bir ayar değil, hepsinde geçerli bir kural —
+// dokunuşsuz çağrılan play() reddediliyor. Ama kapıda bir kip seçmek ya da
+// oyuna başlamak zaten birer dokunuş, yani pratikte arada bir saniye var.
+//
+// Dosya da o ana kadar istenmiyor. Eğer buradan yükleseydik, sayfayı açıp
+// bakıp kapatan herkes beş megabaytı boşuna indirmiş olurdu — ve telefonda o
+// beş megabayt kullanıcının kendi verisi.
+//
+// Bilerek durdurmuş olan hariç. Durdur düğmesine basmak bir tercihtir ve
+// sayfayı yenilemek onu geri almaz; yoksa müziği istemeyen biri her açılışta
+// yeniden kapatmak zorunda kalır.
 export function hazirla() {
   bildir();
+  if (localStorage.getItem(CALIYOR_ANAHTARI) === "0") return;
+  // click de dinleniyor: bir düğmeye fareyle basmak zaten pointerdown
+  // üretiyor, ama klavyeyle ya da erişilebilirlik araçlarıyla tetiklenen
+  // basışlarda ilk gelen click oluyor ve o yol dışarıda kalıyordu.
+  const olaylar = ["pointerdown", "touchstart", "keydown", "click"];
+  const basla = () => {
+    for (const olay of olaylar) removeEventListener(olay, basla, { capture: true });
+    if (!caliyor) baslat();
+  };
+  for (const olay of olaylar) addEventListener(olay, basla, { capture: true, passive: true });
 }
