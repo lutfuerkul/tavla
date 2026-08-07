@@ -4,7 +4,9 @@
       ".read": "auth != null",
       "$uid": {
         ".write": "auth != null && (auth.uid === $uid || (!newData.exists() && data.child('at').val() < now - 600000))",
-        ".validate": "!newData.exists() || newData.hasChildren(['at'])"
+        ".validate": "!newData.exists() || newData.hasChildren(['at'])",
+        "at": { ".validate": "newData.val() === now" },
+        "$other": { ".validate": false }
       }
     },
 
@@ -13,7 +15,9 @@
         ".read": "auth != null",
         "$uid": {
           ".write": "auth != null && auth.uid === $uid",
-          ".validate": "!newData.exists() || newData.hasChildren(['at'])"
+          ".validate": "!newData.exists() || newData.hasChildren(['at'])",
+          "at": { ".validate": "newData.val() === now" },
+          "$other": { ".validate": false }
         }
       }
     },

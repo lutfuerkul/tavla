@@ -706,6 +706,15 @@ const IOS_TIP_KEY = "tavla.iosIpucu";
 const onIphone = /iphone|ipod/i.test(navigator.userAgent);
 const addedToHome = navigator.standalone === true
   || matchMedia("(display-mode: standalone)").matches;
+
+// Said out loud on the root element, because the stylesheet needs it too. The
+// sideways warning and the sideways layout are both drawn for the browser's
+// bars, and both knew only one way for those to be gone — fullscreen. Run from
+// the home screen there are no bars either, and on an iPhone that is the only
+// way there is: the warning covered a board it had nothing left to warn about,
+// with no button on it to leave by.
+document.documentElement.classList.toggle("evde", addedToHome);
+
 const introEl = document.querySelector("#intro");
 if (onIphone && !addedToHome && localStorage.getItem(IOS_TIP_KEY) !== "kapali" && introEl) {
   const tip = document.createElement("div");
