@@ -7,6 +7,7 @@ import { LANGS, language, setLanguage, t, isIdeographic } from "./i18n.js";
 import { localSession, onlineSession } from "./session.js";
 import { attend, ask, connect, follow, sitAt } from "./firebase.js";
 import { cal as calSes, hamleSesi, sesAcikMi, sesiCevir, uyandir as sesiUyandir } from "./ses.js";
+import * as Muzik from "./muzik.js";
 
 // Where the turns come from. Everything the board cannot decide by itself goes
 // through here, so a game against a server can be a different session rather
@@ -98,21 +99,16 @@ const isHuman = colour => mode === "hotseat" || colour === HUMAN;
 // it — so the phone keeps everything it had.
 const HANDHELD = matchMedia?.("(pointer: coarse)").matches ?? false;
 
-// Two sets of pieces to play with. The thin ones are the game's own — a
-// dished face with a rim round it — and the thick ones are cut from the
-// photographs of a real set: a plain cylinder, a millimetre of radius on each
-// corner, and one shallow saucer in the middle of the top. Which is on the
-// table is a setting at the door, like the board and the colour.
+// There was a choice of two mouldings here once, thin and thick, and it is
+// gone: there is one set of checkers and no setting. The difference between
+// them was a millimetre of rim and a shallower dish — on a phone that is
+// nothing anybody can see, and even on a desk it was a row at the door for a
+// difference nobody was choosing between. The thin one is the one that stays.
 //
-// In the hand there is one set and no setting. A checker there is a centimetre
-// across; the difference between the two mouldings is a millimetre of rim and
-// a shallower dish, which is not a choice anybody can see on a phone — and the
-// row it costs at the door is a row on a page that already has to fit.
-const PIECE_KEY = "tavla.tas";
-const PIECES = ["ince", "kalin"];
-const stored = localStorage.getItem(PIECE_KEY);
-const pieceType = HANDHELD ? "ince" : (PIECES.includes(stored) ? stored : "ince");
-const THICK = pieceType === "kalin";
+// The old answer is cleared out rather than left lying: somebody who chose the
+// thick set once has it written down, and a preference that no longer has a
+// question attached to it is only there to confuse whoever reads the storage.
+localStorage.removeItem("tavla.tas");
 
 // Which cloth the table is dressed with, chosen at the door like the board.
 const CLOTH_KEY = "tavla.cuha";
@@ -422,22 +418,10 @@ const SETTINGS = [
     options: [["auto", "option.auto"], ["black", "colour.black"], ["ivory", "colour.ivory"]] },
   { key: "side", label: "setting.side",
     options: [["auto", "option.auto"], ["sol", "side.left"], ["sag", "side.right"]] },
-  // What the board is standing on. Until now it stood on almost nothing: a
-  // plane the colour of soot, which on a phone is half the screen and reads as
-  // the board being darker than it is.
-  // In the hand only. On a desk the board fills the window and there is barely
-  // any ground to see; the cloth was answering a darkness that only a phone has,
-  // where the board is a third of the screen and the rest was soot.
-  // Kept in the list even where it is not shown, because Otomatik is settled by
-  // looking the key up here — a row that vanished would take its answer with it.
-  { key: "piece", label: "setting.piece", hidden: HANDHELD,
-    options: HANDHELD
-      ? [["auto", "option.auto"], ["ince", "piece.thin"]]
-      : [["auto", "option.auto"], ["ince", "piece.thin"], ["kalin", "piece.thick"]] },
 ];
 
 let pickedMode = null;
-const picked = { board: "auto", colour: "auto", side: "auto", piece: "auto" };
+const picked = { board: "auto", colour: "auto", side: "auto" };
 const startButton = document.querySelector("#start");
 
 function markChosen(attribute, value) {
@@ -700,6 +684,25 @@ soundButton?.addEventListener("click", () => {
   showSound();
 });
 
+// The music, and its three keys. Stopping it is what turning it off means, so
+// there is no fourth control for that — the play key is the switch.
+const playerBox = document.querySelector("#player");
+const trackName = document.querySelector("#track");
+document.querySelector("#play")?.addEventListener("click", () => Muzik.cevir());
+document.querySelector("#next")?.addEventListener("click", () => Muzik.sonraki());
+document.querySelector("#prev")?.addEventListener("click", () => Muzik.onceki());
+
+Muzik.izle(({ caliyor, parca }) => {
+  playerBox?.classList.toggle("caliyor", caliyor);
+  const key = document.querySelector("#play");
+  if (key) {
+    key.textContent = caliyor ? "\u25a0" : "\u25b6";
+    key.setAttribute("aria-label", t(caliyor ? "music.stop" : "music.play"));
+  }
+  if (trackName) trackName.textContent = parca?.ad ?? "";
+});
+Muzik.hazirla();
+
 // The same button again, inside the sideways warning: the warning covers the
 // screen, so without one there the way out of it cannot be reached from it.
 const rotateFull = document.querySelector("#rotate-full");
@@ -714,6 +717,33 @@ const toggleFullscreen = () => {
   const ask = root.requestFullscreen ?? root.webkitRequestFullscreen;
   try { ask?.call(root)?.catch?.(() => {}); } catch { /* not here, then */ }
 };
+
+// Fullscreen does not survive the page being loaded again, and the door loads
+// the page again: changing the table, the colour or the side saves the answer
+// and reloads to build the board round it. So somebody who went fullscreen at
+// the door and then pressed Oyuna başla arrived at a game in a window, having
+// pressed a button that appeared to have done nothing.
+//
+// It cannot simply be asked for again on the way back — the browser grants it
+// to a gesture and a page that has just loaded has had none. So the wish is
+// written down before the reload and spent on the first thing the player
+// touches afterwards, which in a game that opens with a throw is a moment
+// away. Once, and then forgotten: somebody who leaves fullscreen on purpose
+// must not be put back into it by their next click.
+const FULL_WISH = "tavla.tamEkranDilegi";
+
+function rememberFullscreen() {
+  if (inFullscreen()) sessionStorage.setItem(FULL_WISH, "1");
+}
+
+if (sessionStorage.getItem(FULL_WISH)) {
+  sessionStorage.removeItem(FULL_WISH);
+  const geriAl = () => {
+    if (!inFullscreen()) toggleFullscreen();
+  };
+  addEventListener("pointerdown", geriAl, { once: true, capture: true });
+  addEventListener("keydown", geriAl, { once: true, capture: true });
+}
 
 fullButton?.addEventListener("click", toggleFullscreen);
 rotateFull?.addEventListener("click", toggleFullscreen);
@@ -832,9 +862,9 @@ function sitDownTo(id, colour) {
   // side they gather on. Only the colour comes from the room.
   localStorage.setItem(BOARD_KEY, settle("board"));
   localStorage.setItem(SIDE_KEY, settle("side"));
-  localStorage.setItem(PIECE_KEY, settle("piece"));
   localStorage.setItem(CLOTH_KEY, clothName);
   sessionStorage.setItem("tavla.sitOnLoad", "1");
+  rememberFullscreen();
   say("lobby.found");
   location.reload();
 }
@@ -1027,15 +1057,13 @@ startButton?.addEventListener("click", () => {
   // has its sound ready rather than being the throwaway that wakes the device.
   sesiUyandir();
   const board = settle("board"), colour = settle("colour"), side = settle("side");
-  const piece = settle("piece");
-  if (board === boardName && colour === HUMAN && side === sideName
-      && piece === pieceType) return sitDown();
+  if (board === boardName && colour === HUMAN && side === sideName) return sitDown();
   localStorage.setItem(BOARD_KEY, board);
   localStorage.setItem(COLOUR_KEY, colour);
   localStorage.setItem(SIDE_KEY, side);
-  localStorage.setItem(PIECE_KEY, piece);
   localStorage.setItem(CLOTH_KEY, clothName);
   sessionStorage.setItem("tavla.sitOnLoad", "1");
+  rememberFullscreen();
   location.reload();
 });
 
@@ -1374,20 +1402,9 @@ const pearl = new THREE.MeshStandardMaterial({ color: 0xe8e2d6, roughness: .4, m
 // Bone-coloured pieces are matte moulded plastic, not lacquer. The gloss was
 // blowing the whole face to one flat highlight and burying the relief.
 // One material over the whole piece and no map on any of it: the top face, the
-// bottom and the wall are the same moulding and take the same light. The thick
-// pieces are polished — moulded plastic, the cream one waxy and the dark one a
-// shade harder. The thin ones keep the satin they always had.
-// The room turned up, on the thick pieces and on nothing else. A flat face
-// pointing at the ceiling reflects the ceiling, and the ceiling of the room the
-// board is lit by is dim — so the only thing on these pieces that caught a
-// highlight was the bowl, which curves round to face the light, and the flat
-// top and the wall either side of it read as matte. Which is backwards: the
-// flats are the polished part of a moulding.
-const POLISH = 2.6;
-const ivory = new THREE.MeshPhysicalMaterial(THICK ? {
-  color: 0xd8bc82, roughness: .3, metalness: 0, clearcoat: .45, clearcoatRoughness: .12,
-  envMapIntensity: POLISH,
-} : {
+// bottom and the wall are the same moulding and take the same light, and they
+// keep the satin they always had.
+const ivory = new THREE.MeshPhysicalMaterial({
   color: 0xd4b471, roughness: .62, metalness: 0, clearcoat: .1, clearcoatRoughness: .45,
 });
 // The dark one is not a mirror. Its bowl curves round to face the light, so a
@@ -1395,10 +1412,7 @@ const ivory = new THREE.MeshPhysicalMaterial(THICK ? {
 // hole in a matte face, which is the wrong way round on a moulding. Rougher,
 // and with far less coat on it, so the shine spreads over the whole of it
 // instead of collecting in the one place that happens to be aimed right.
-const black = new THREE.MeshPhysicalMaterial(THICK ? {
-  color: 0x16171b, roughness: .38, metalness: .02, clearcoat: .25, clearcoatRoughness: .3,
-  envMapIntensity: 1.8,
-} : {
+const black = new THREE.MeshPhysicalMaterial({
   color: 0x141518, roughness: .16, metalness: .04, clearcoat: .7, clearcoatRoughness: .06,
 });
 
@@ -1660,7 +1674,7 @@ function addHinges() {
 const MM = 1 / 36;
 const mm = (r, h) => new THREE.Vector2(r, h * MM);
 const CHECKER_R = CHECKER_D / 2;
-const CHECKER_H = (THICK ? 9 : 8) * MM;
+const CHECKER_H = 8 * MM;
 
 // The profile runs bottom-centre outwards and up. Listing it in this order is
 // what makes the revolved normals face outwards — reversed, the discs render
@@ -1688,42 +1702,12 @@ const THIN_PROFILE = [
   mm(0, 8.01),          // dome crown, level with the rim
 ];
 
-// The thick set, read off the photographed pieces: a disc 36mm across and 10mm
-// thick, and a cylinder — the top face meets the wall at a corner rather than
-// a roll, with a millimetre of radius on it and nothing else standing proud of
-// the face or cut into it. The only thing on the whole piece is one shallow
-// saucer in the middle of the top.
-const THICK_PROFILE = [
-  mm(0, 0),
-  mm(.467, 0),          // flat bottom, out to the corner
-  mm(.478, .06),        // a millimetre of radius on the corner, and no more
-  mm(.4913, .28),
-  mm(.4988, .65),
-  mm(.5, 1.2),
-  mm(.5, 7.8),          // straight side wall between the two corners
-  mm(.4988, 8.35),
-  mm(.4913, 8.72),      // the top corner, the same round
-  mm(.478, 8.94),
-  mm(.467, 9),
-  mm(.42, 9),           // flat top
-  mm(.2361, 9),
-  // And the bowl in the middle of it: 17mm across on a 36mm piece and 3mm
-  // deep, a third of the thickness. A spherical cap, so the curve is one
-  // smooth sweep from its edge to the middle rather than a lens with a seam
-  // round it.
-  mm(0.2, 8.153),
-  mm(0.16, 7.378),
-  mm(0.115, 6.712),
-  mm(0.06, 6.194),
-  mm(0, 6.000),
-];
 
 // Ninety-six segments turn a checker that is an inch across on a desktop. In
 // the hand it is a centimetre and forty-eight are past telling apart, so half
 // the triangles on the board go away for nothing. Phones were turning all
 // ninety-six, thirty times over, for a checker smaller than a tablet's.
-const checkerGeometry = new THREE.LatheGeometry(
-  THICK ? THICK_PROFILE : THIN_PROFILE, HANDHELD ? 48 : 96);
+const checkerGeometry = new THREE.LatheGeometry(THIN_PROFILE, HANDHELD ? 48 : 96);
 
 // --- Dice ------------------------------------------------------------
 // A real die: every face carries its own pips, opposite faces sum to 7,
@@ -4365,6 +4349,7 @@ const viewButton = document.querySelector("#view");
 // of them land on top of the score. So they come down and join the row that is
 // already there, either side of Geri al and Tamam.
 const controls = document.querySelector("#controls");
+const rail = document.querySelector("#rail");
 const app = document.querySelector("#app");
 let stacked = null;
 
@@ -4375,18 +4360,22 @@ function placeButtons() {
   if (narrow === stacked) return;
   stacked = narrow;
   if (narrow) {
+    // On a phone there is no edge to stand a column against: the buttons come
+    // down into the row along the bottom, beside Geri al and Tamam.
     controls?.prepend(viewButton);
     controls?.append(menuButton);
-    // On a phone there is no corner to stand in: the buttons come down into
-    // the row along the bottom, and this one goes with them rather than
-    // sitting on top of the score.
     if (fullButton) controls?.append(fullButton);
     if (soundButton) controls?.append(soundButton);
   } else {
-    hud?.append(viewButton);
-    app?.append(menuButton);
-    if (fullButton) app?.append(fullButton);
-    if (soundButton) app?.append(soundButton);
+    // The rail down the left, in the order they are reached for: the way out,
+    // the screen, the sound, and the camera last — it is the one that belongs
+    // to the game rather than to the room, and it used to sit in the panel
+    // beside the score for exactly that reason. It comes over here so that
+    // everything pressable is in one place and the panel is only read.
+    rail?.append(menuButton);
+    if (fullButton) rail?.append(fullButton);
+    if (soundButton) rail?.append(soundButton);
+    rail?.append(viewButton);
   }
 }
 
@@ -4436,6 +4425,14 @@ function updateHud() {
   // are written before any of the branches below get a chance to return.
   if (score) score.textContent = scoreLine();
   if (viewButton) viewButton.textContent = t(overhead() ? "view.seat" : "view.top");
+  // Said on the root so the stylesheet can answer it. Overhead the board is
+  // taller on the screen than it is from the chair — it fills the window top to
+  // bottom — and the panel across the top was landing on the far rail. It goes
+  // down the left there instead, the same shape a phone on its side has used
+  // since #152. Set from here because this is the one function every path to a
+  // changed view already goes through: the camera button, a change of mode, a
+  // game being laid out.
+  document.documentElement.classList.toggle("tepe", overhead());
   if (side) {
     const mars = game.over && game.over.value === 2 ? t("mars") : "";
     if (!game.over && game.cocked) {

@@ -67,6 +67,16 @@ self.addEventListener("fetch", event => {
   const sameOrigin = url.origin === self.location.origin;
   const fonts = url.host === "fonts.googleapis.com" || url.host === "fonts.gstatic.com";
   if (!sameOrigin && !fonts) return;
+  // Müziğe hiç dokunulmuyor, ağa olduğu gibi bırakılıyor. İki sebep var ve
+  // ikisi de tek başına yeterli.
+  //
+  // Biri boyut: on dört parça yetmiş megabayt, kabuğun tamamının bin katı.
+  // Öbürü daha ince: bir ses etiketi dosyayı parça parça istiyor (Range), ve
+  // sunucu buna 206 ile cevap veriyor. Bir 206 önbelleğe konamaz — cache.put
+  // hata fırlatır — ve önbellekten dönen tam bir cevap da ilerleme çubuğunu
+  // ve ileri sarmayı bozar. Doğru olan, akan sesi akıtan katmana bırakmak.
+  if (sameOrigin && url.pathname.includes("/muzik/")) return;
+  if (req.headers.has("range")) return;
   event.respondWith(freshenFromCache(req));
 });
 

@@ -28,7 +28,12 @@ const DOSYALAR = {
 // konmasından öteye geçmemeli.
 const TON_OYNAMA = 0.06;
 const SES_OYNAMA = 0.18;
-const SES_SEVIYESI = { tas: 0.55, kirma: 0.8, zarCift: 0.7, zarTek: 0.7 };
+// Tahtanın sesi müziğin altında. Bir oyun genelde tersini yapar — müzik döşeme,
+// olaylar öne çıkar — ama burada istenen bu: müzik dinlenecek, tahta ona eşlik
+// edecek. Seviyeler müziğin 0.85'ine göre seçildi (bkz. muzik.js), yani zar ve
+// taş onun üçte biri kadar. Kırma biraz yüksek kalıyor: duyulması gereken tek
+// olay o, çünkü oyunda bir şeyin başına gelen tek şey odur.
+const SES_SEVIYESI = { tas: 0.22, kirma: 0.34, zarCift: 0.3, zarTek: 0.3 };
 
 const ANAHTAR = "tavla.ses";
 
