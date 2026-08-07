@@ -4412,22 +4412,36 @@ let stacked = null;
 function placeButtons() {
   // The short side, not the width: a phone on its side is nearly nine hundred
   // points wide and still has no corner to spare.
-  const narrow = Math.min(innerWidth, innerHeight) <= 600;
+  //
+  // And a touched screen gets more room than a pointed one. Six hundred was
+  // measured against a phone; a small tablet held sideways is 962 by 601 —
+  // just past it — and took the rail, which then stood on the title at the
+  // door and on the readings in the game. Under a finger the same shortness
+  // costs more, so the line is drawn further out there.
+  const kisa = Math.min(innerWidth, innerHeight);
+  const narrow = kisa <= 600 || (HANDHELD && kisa <= 720);
   if (narrow === stacked) return;
   stacked = narrow;
   if (narrow) {
     // On a phone there is no edge to stand a column against: the buttons come
     // down into the row along the bottom, beside Geri al and Tamam.
+    //
+    // The player comes with them. It stayed up on the rail at first and that
+    // rail is over the board on a phone — it landed on the title and the mode
+    // buttons at the door, and on the readings once a game had started. There
+    // is one place for things to be pressed here and this is it.
     controls?.prepend(viewButton);
     controls?.append(menuButton);
     if (fullButton) controls?.append(fullButton);
     if (soundButton) controls?.append(soundButton);
+    if (playerBox) controls?.append(playerBox);
   } else {
     // The rail down the left, in the order they are reached for: the way out,
     // the screen, the sound, and the camera last — it is the one that belongs
     // to the game rather than to the room, and it used to sit in the panel
     // beside the score for exactly that reason. It comes over here so that
     // everything pressable is in one place and the panel is only read.
+    if (playerBox) rail?.prepend(playerBox);
     rail?.append(menuButton);
     if (fullButton) rail?.append(fullButton);
     if (soundButton) rail?.append(soundButton);
