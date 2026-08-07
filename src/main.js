@@ -6,6 +6,7 @@ import * as Rules from "./rules.js";
 import { LANGS, language, setLanguage, t, isIdeographic } from "./i18n.js";
 import { localSession, onlineSession } from "./session.js";
 import { attend, ask, connect, follow, sitAt } from "./firebase.js";
+import { cal as calSes, hamleSesi, sesAcikMi, sesiCevir, uyandir as sesiUyandir } from "./ses.js";
 
 // Where the turns come from. Everything the board cannot decide by itself goes
 // through here, so a game against a server can be a different session rather
@@ -390,6 +391,13 @@ scene.environmentIntensity = BOARD.room.env;
 function sitDown() {
   intro.classList.add("hidden");
   hud.classList.add("visible");
+  // Asked for here rather than only from the button, because the button is not
+  // always the way in: changing any of the table settings saves them and loads
+  // the page again, and the game sits down by itself on the way back. Asked
+  // only from the press, that ordinary path left the board silent for the whole
+  // game — the press that would have opened the audio device belonged to a page
+  // that no longer exists.
+  sesiUyandir();
   guardBack();
   // Sitting at an online table is where the session changes hands: from here
   // the dice and the turns come from the server, and the match is watched.
@@ -620,6 +628,7 @@ function applyStaticText() {
   showSettings();
   showOnline();
   showFullscreen();
+  showSound();
   // The find button carries a state this does not know about — a search under
   // way — and rewriting every label by its data-i18n turned the "Aramayı bırak"
   // on it back into "Rakip bul" while the search was still running. A change of
@@ -673,6 +682,24 @@ function showFullscreen() {
   rotateFull?.toggleAttribute("hidden", !canFullscreen);
 }
 
+// The sound, on and off. The label says what is true rather than what pressing
+// it does — it is a state and not an action, and "sound off" on a button that
+// turns the sound off is the one wording nobody can read twice the same way.
+const soundButton = document.querySelector("#sound");
+
+function showSound() {
+  if (!soundButton) return;
+  const on = sesAcikMi();
+  soundButton.textContent = t(on ? "sound.on" : "sound.off");
+  soundButton.classList.toggle("kapali", !on);
+  soundButton.setAttribute("aria-pressed", String(on));
+}
+
+soundButton?.addEventListener("click", () => {
+  sesiCevir();
+  showSound();
+});
+
 // The same button again, inside the sideways warning: the warning covers the
 // screen, so without one there the way out of it cannot be reached from it.
 const rotateFull = document.querySelector("#rotate-full");
@@ -694,6 +721,7 @@ rotateFull?.addEventListener("click", toggleFullscreen);
 document.addEventListener("fullscreenchange", showFullscreen);
 document.addEventListener("webkitfullscreenchange", showFullscreen);
 showFullscreen();
+showSound();
 
 // An iPhone in Safari cannot go fullscreen at all, so the button above is never
 // drawn there. What it can do instead is be added to the home screen and run
@@ -994,6 +1022,10 @@ showLobby();
 const sideName = SIDE === -1 ? "sag" : "sol";
 startButton?.addEventListener("click", () => {
   if (!pickedMode) return;
+  // A browser only opens the audio device for a gesture, and this is the
+  // gesture every game starts with. Asked for here so the first checker down
+  // has its sound ready rather than being the throwaway that wakes the device.
+  sesiUyandir();
   const board = settle("board"), colour = settle("colour"), side = settle("side");
   const piece = settle("piece");
   if (board === boardName && colour === HUMAN && side === sideName
@@ -3005,11 +3037,18 @@ function tryMove(fromPlace, toPlace) {
   // board, and handing the turn over needs the moves.
   game.history.push({ pos: game.pos, remaining: game.remaining.slice(),
     played: game.played, moves });
-  for (const move of moves) {
+  // Sounded before the move is applied, because what a move sounds like is
+  // read off the board it is played on: a lone checker of theirs standing on
+  // the point is the difference between a checker set down and one knocked
+  // off. Dragged eight points on a 5-3 is two checkers down rather than one,
+  // so it is two sounds, spaced by a hand's width of time.
+  moves.forEach((move, sira) => {
+    const ses = hamleSesi(game.pos, game.turn, move);
+    if (ses) calSes(ses, { gecikme: sira * .09 });
     game.pos = Rules.applyMove(game.pos, game.turn, move);
     game.remaining.splice(game.remaining.indexOf(move.die), 1);
     game.played++;
-  }
+  });
   finishIfWon();
   renderPieces();
   updateHud();
@@ -3309,6 +3348,8 @@ function playComputerTurn() {
     renderPieces();
     slideChecker(COMPUTER, from, to, () => {
       game.lifted = null;
+      const ses = hamleSesi(game.pos, COMPUTER, move);
+      if (ses) calSes(ses);
       game.pos = Rules.applyMove(game.pos, COMPUTER, move);
       renderPieces();
       updateHud();
@@ -3560,6 +3601,8 @@ function playRemoteTurn(colour, moves, done) {
       slideChecker(colour, from, to, () => {
         game.lifted = null;
         try {
+          const ses = hamleSesi(game.pos, colour, move);
+          if (ses) calSes(ses);
           game.pos = Rules.applyMove(game.pos, colour, move);
         } catch (reason) {
           console.info("tavla: hamle oynatılamadı —", reason?.message ?? reason);
@@ -4338,10 +4381,12 @@ function placeButtons() {
     // the row along the bottom, and this one goes with them rather than
     // sitting on top of the score.
     if (fullButton) controls?.append(fullButton);
+    if (soundButton) controls?.append(soundButton);
   } else {
     hud?.append(viewButton);
     app?.append(menuButton);
     if (fullButton) app?.append(fullButton);
+    if (soundButton) app?.append(soundButton);
   }
 }
 
@@ -4735,6 +4780,18 @@ function armLaunch(dice, aim, seed) {
   }
 }
 
+// The sound of a throw, at the moment the dice actually leave the hand. The
+// recording carries the throw and the landing both, so nothing is waited for,
+// and whether it is one die or two is read from what actually left — the
+// opening is a single die each and sounds like one.
+//
+// Called from the two places a hand really opens, and deliberately not from
+// armLaunch, which would look like the one place to put it: the search that
+// finds a tumble matching the named numbers launches the dice hundreds of
+// times with nothing drawn and nothing thrown, and a sound down there would
+// play the whole search out loud.
+const zarSesi = dice => calSes(dice.length > 1 ? "zarCift" : "zarTek");
+
 // One throw played out with nothing drawn, to see where it lands.
 function outcomeOf(dice, aim, seed) {
   const debt = physicsDebt;
@@ -4833,6 +4890,7 @@ function launchDice() {
   // is for the numbers to come from the one place both of them are reading.
   if (!session.online && !forcedRoll) {
     thrownDice = dice;
+    zarSesi(dice);
     armLaunch(dice, aim, (Math.random() * 0xffffffff) | 0);
     wanted = null;
     heldDice = null;
@@ -4886,6 +4944,7 @@ function releasePending() {
   // a single opening die comes to rest after the server has already ended the
   // opening, because by then the board says both dice are in play.
   thrownDice = dice;
+  zarSesi(dice);
   restoreDice(pending.from);
   armLaunch(dice, aim, seed ?? Math.imul(pending.tried, 2654435761));
   wanted = want;
