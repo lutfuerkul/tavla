@@ -41,6 +41,33 @@ const SONUS_MS = 450;
 
 const PARCA_ANAHTARI = "tavla.muzikParca";
 const CALIYOR_ANAHTARI = "tavla.muzikCaliyor";
+const AN_ANAHTARI = "tavla.muzikAn";
+
+// Kapı sayfayı yeniden yüklüyor. Masa, renk ya da taraf "Otomatik"te olduğunda
+// her basışta yazı-tura atılıyor, çıkan değer o anki sahneden farklı oluyor ve
+// oyuna geçiş sayfanın baştan yüklenmesiyle oluyor. Sayfa gidince ses öğesi de
+// gidiyor: müzik tam oyuna girerken kesiliyordu, ve döndüğünde parçanın başına
+// sarıyordu — aynı ezginin ilk on saniyesini her oyunda yeniden dinlemek.
+//
+// Kaldığı saniye yazılıyor, dönüşte oradan devam ediliyor. Yeniden yükleme bir
+// saniye sürüyor, o kadarlık boşluk kalıyor — sayfayı yeniden kurmadan bunu
+// sıfırlamanın yolu yok, çünkü çalan sesi bir sayfadan diğerine taşımak
+// mümkün değil.
+const AN_YAZMA_MS = 4000;
+let sonYazma = 0;
+
+function ani_yaz(zorla) {
+  if (!ses) return;
+  const simdi = performance.now();
+  if (!zorla && simdi - sonYazma < AN_YAZMA_MS) return;
+  sonYazma = simdi;
+  localStorage.setItem(AN_ANAHTARI, String(Math.max(0, ses.currentTime)));
+}
+
+const kaldigiAn = () => {
+  const n = Number(localStorage.getItem(AN_ANAHTARI));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
 
 let ses = null;
 let sira = Number(localStorage.getItem(PARCA_ANAHTARI));
@@ -70,6 +97,10 @@ function kur() {
     ilerle(1);
   });
   ses.addEventListener("playing", () => { hata = 0; });
+  // Nerede kalındığı arada bir yazılıyor, ve sayfa kapanırken kesinlikle:
+  // pagehide, sekme kapanışında da yeniden yüklemede de geliyor.
+  ses.addEventListener("timeupdate", () => ani_yaz(false));
+  addEventListener("pagehide", () => ani_yaz(true));
   return ses;
 }
 
@@ -95,9 +126,24 @@ function yukle(calsinMi) {
   a.src = KOK + PARCALAR[sira].dosya;
   a.load();
   localStorage.setItem(PARCA_ANAHTARI, String(sira));
+  // İstenen bir yerden başlıyorsa oraya sarılıyor — ama ancak dosya nereye
+  // sarılabileceğini bildiğinde, yani üstverisi geldiğinde.
+  if (basla_an > 0) {
+    const an = basla_an;
+    basla_an = 0;
+    const sar = () => {
+      a.removeEventListener("loadedmetadata", sar);
+      if (Number.isFinite(a.duration) && an < a.duration - 1) a.currentTime = an;
+    };
+    a.addEventListener("loadedmetadata", sar);
+  } else localStorage.setItem(AN_ANAHTARI, "0");
   if (calsinMi) oynat();
   bildir();
 }
+
+// Bir sonraki yüklemenin başlayacağı an. Yalnızca kaldığı yerden devam ederken
+// doluyor; ileri ya da geri basıldığında parça baştan çalar.
+let basla_an = 0;
 
 function oynat() {
   const a = kur();
@@ -183,6 +229,18 @@ export function onceki() {
 export function hazirla() {
   bildir();
   if (localStorage.getItem(CALIYOR_ANAHTARI) === "0") return;
+
+  // Kaldığı yerden. Kapıdan oyuna geçerken sayfa yeniden yükleniyor ve müzik
+  // orada kesiliyordu; dönüşte parçanın başına sarması, aynı ezginin ilk on
+  // saniyesini her oyunda yeniden dinlemek demekti.
+  basla_an = kaldigiAn();
+
+  // Zaten çalıyorduysa dokunuş beklenmeden denenir. Yeniden yükleme
+  // izinleri sıfırlıyor ve tarayıcı çoğu zaman reddedecek — ama her zaman
+  // değil: bu sitede müzik çalmış bir tarayıcı buna izin verebiliyor, ve
+  // izin verdiğinde araya hiç sessizlik girmiyor. Reddedilirse zararı yok,
+  // aşağıdaki ilk dokunuş yine yakalar.
+  if (localStorage.getItem(CALIYOR_ANAHTARI) === "1") baslat();
   // click de dinleniyor: bir düğmeye fareyle basmak zaten pointerdown
   // üretiyor, ama klavyeyle ya da erişilebilirlik araçlarıyla tetiklenen
   // basışlarda ilk gelen click oluyor ve o yol dışarıda kalıyordu.
