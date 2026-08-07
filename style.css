@@ -475,8 +475,24 @@ body.ideographic #hud span, body.ideographic #hud strong {
    with — see placeButtons. Placed by the row, not by the corner. */
 #controls #fullscreen { position: static; top: auto; right: auto; }
 
+/* The sound, in the same corner and the same shape as the button above it —
+   both are things about the room rather than about the game, and they belong
+   together. It sits under fullscreen where there is one, and takes that place
+   where there is not: an iPhone never draws the fullscreen button, and a gap
+   held open for a button that is never coming reads as something broken. */
+#sound { position: fixed; z-index: 3; top: 4.2rem; right: 1.4rem;
+  padding: .45rem 1rem; font: 500 .62rem/1 "DM Mono", monospace;
+  letter-spacing: .1em; text-transform: uppercase; color: #ad9470;
+  background: rgba(12,9,6,.55); border: 1px solid rgba(229,173,84,.2);
+  border-radius: .4rem; cursor: pointer;
+  transition: color .2s ease, border-color .2s ease; }
+#fullscreen:not([hidden]) ~ #sound { top: 7rem; }
+#sound:hover { border-color: rgba(229,173,84,.6); color: #f6ecd6; }
+#sound.kapali { color: #6f6252; border-color: rgba(229,173,84,.12); }
+#controls #sound { position: static; top: auto; right: auto; }
+
 #intro:not(.hidden) ~ #menu, #intro:not(.hidden) ~ #confirm,
-#intro:not(.hidden) ~ #fullscreen,
+#intro:not(.hidden) ~ #fullscreen, #intro:not(.hidden) ~ #sound,
 #intro:not(.hidden) ~ #result { display: none; }
 
 #confirm, #result { position: fixed; z-index: 6; inset: 0; display: grid; place-content: center;
