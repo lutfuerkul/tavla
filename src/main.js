@@ -4412,7 +4412,14 @@ let stacked = null;
 function placeButtons() {
   // The short side, not the width: a phone on its side is nearly nine hundred
   // points wide and still has no corner to spare.
-  const narrow = Math.min(innerWidth, innerHeight) <= 600;
+  //
+  // And a touched screen gets more room than a pointed one. Six hundred was
+  // measured against a phone; a small tablet held sideways is 962 by 601 —
+  // just past it — and took the rail, which then stood on the title at the
+  // door and on the readings in the game. Under a finger the same shortness
+  // costs more, so the line is drawn further out there.
+  const kisa = Math.min(innerWidth, innerHeight);
+  const narrow = kisa <= 600 || (HANDHELD && kisa <= 720);
   if (narrow === stacked) return;
   stacked = narrow;
   if (narrow) {

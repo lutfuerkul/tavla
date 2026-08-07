@@ -543,17 +543,24 @@ body.ideographic #hud span, body.ideographic #hud strong {
 /* Down in the row along the bottom on a phone — see placeButtons. Two stacked
    rows of three become one row of six: the bottom of a phone is wide and
    short, which is the opposite of the rail, and a player two rows deep pushes
-   Geri al and Tamam off the screen.
-
-   The keys grow at the same time. They were 23 points tall, which is fine
-   under a mouse and too small under a thumb; a finger wants a target it can
-   land on without aiming. */
+   Geri al and Tamam off the screen. */
 #controls #player { flex-direction: row; align-items: center;
   width: auto; gap: .25rem; padding: .25rem .35rem; }
 #controls #player .player-keys { gap: .25rem; }
-#controls #player button { min-width: 2.2rem; min-height: 2rem; padding: .35rem .2rem;
-  font-size: .8rem; }
 #controls #level { min-width: 2.2rem; font-size: .7rem; }
+
+/* The keys are sized by what is pressing them, not by where they are standing.
+   Twenty-three points is fine under a mouse and too small under a thumb — a
+   finger wants a target it can land on without aiming. Asked of the pointer
+   rather than of the screen, because the two do not agree: a tablet is wider
+   than a phone and still touched, and the first version grew only the keys
+   that had moved into the bottom row, which left every tablet with a player
+   nobody could hit. */
+@media (pointer: coarse) {
+  #player button { min-width: 2.2rem; min-height: 2rem; padding: .35rem .2rem;
+    font-size: .8rem; }
+  #player #level { min-height: 2rem; font-size: .72rem; }
+}
 
 /* Back to the door, by way of a question — a game in progress is not
    something to lose to a stray click. */
