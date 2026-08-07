@@ -89,7 +89,7 @@ function ilkDokunustaAc() {
   const ac_ = () => {
     if (ac?.state === "suspended") ac.resume().catch(() => {});
   };
-  for (const olay of ["pointerdown", "touchstart", "keydown"]) {
+  for (const olay of ["pointerdown", "touchstart", "keydown", "click"]) {
     addEventListener(olay, ac_, { capture: true, passive: true });
   }
 }
