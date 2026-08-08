@@ -21,32 +21,37 @@
         <p class="eyebrow" data-i18n="eyebrow">3B TAVLA</p>
         <span id="online" hidden></span>
         <h1 data-i18n="door.title">Ayarlar</h1>
-        <div id="modes">
-          <button class="mode-pick" data-mode="solo" data-i18n="mode.solo">Bilgisayara karşı</button>
-          <button class="mode-pick" data-mode="hotseat" data-i18n="mode.hotseat">İki kişi · aynı cihaz</button>
-          <button class="mode-pick" data-mode="online" data-i18n="mode.online">Çevrimiçi</button>
-        </div>
-        <div id="lobby" hidden>
-          <div class="lobby-row">
-            <button id="find" data-i18n="lobby.find">Rakip bul</button>
-            <button id="host" data-i18n="lobby.host">Oda kur</button>
-            <button id="join" data-i18n="lobby.join">Katıl</button>
-            <!-- Bir oda kodu, tarayıcının bildiği hiçbir şey değil: ne parola, ne
-                 kart, ne adres. Yine de Android'de klavyenin üstüne kendi öneri
-                 şeridini koyuyordu; autocomplete="off" tek başına dinlenmiyor.
-                 "one-time-code" ise tanıdığı bir şey ve doğru olan: beş harflik,
-                 bir kere kullanılan, saklanacak bir şey olmayan bir kod. Parola
-                 yöneticilerine de ayrıca atlaması söyleniyor. -->
-            <input id="code" inputmode="latin" autocapitalize="characters"
-                   autocomplete="one-time-code" data-1p-ignore data-lpignore="true"
-                   spellcheck="false" maxlength="5" placeholder="ABC12" hidden /> 
-            <span id="code-hint" data-i18n="lobby.type" hidden>Kodu giriniz</span>
+        <!-- Kapının gövdesi: kipler, lobi ve ayarlar tek bir kutuda.
+             Üç ayrı panel olarak dururken göz her birini ayrı ayrı okuyordu;
+             oysa hepsi aynı soruyu soruyor — bu oyun nasıl kurulacak. -->
+        <div id="kapi-govde">
+          <div id="modes">
+            <button class="mode-pick" data-mode="solo" data-i18n="mode.solo">Bilgisayara karşı</button>
+            <button class="mode-pick" data-mode="hotseat" data-i18n="mode.hotseat">İki kişi · aynı cihaz</button>
+            <button class="mode-pick" data-mode="online" data-i18n="mode.online">Çevrimiçi</button>
           </div>
-          <div class="lobby-row said-row">
-            <p id="lobby-said"></p>
+          <div id="lobby" hidden>
+            <div class="lobby-row">
+              <button id="find" data-i18n="lobby.find">Rakip bul</button>
+              <button id="host" data-i18n="lobby.host">Oda kur</button>
+              <button id="join" data-i18n="lobby.join">Katıl</button>
+              <!-- Bir oda kodu, tarayıcının bildiği hiçbir şey değil: ne parola, ne
+                   kart, ne adres. Yine de Android'de klavyenin üstüne kendi öneri
+                   şeridini koyuyordu; autocomplete="off" tek başına dinlenmiyor.
+                   "one-time-code" ise tanıdığı bir şey ve doğru olan: beş harflik,
+                   bir kere kullanılan, saklanacak bir şey olmayan bir kod. Parola
+                   yöneticilerine de ayrıca atlaması söyleniyor. -->
+              <input id="code" inputmode="latin" autocapitalize="characters"
+                     autocomplete="one-time-code" data-1p-ignore data-lpignore="true"
+                     spellcheck="false" maxlength="5" placeholder="ABC12" hidden /> 
+              <span id="code-hint" data-i18n="lobby.type" hidden>Kodu giriniz</span>
+            </div>
+            <div class="lobby-row said-row">
+              <p id="lobby-said"></p>
+            </div>
           </div>
+          <div id="settings"></div>
         </div>
-        <div id="settings"></div>
         <button id="start" data-i18n="start" disabled>Oyuna başla</button>
         <nav id="langs" aria-label="Dil"></nav>
       </section>

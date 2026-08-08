@@ -24,7 +24,7 @@ body { overscroll-behavior: none; }
    kurulan bir kod da seçilip kopyalanıyor. */
 #app { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 #code { user-select: text; -webkit-user-select: text; }
-#intro { position: fixed; z-index: 2; inset: 0; display: grid; place-content: start center; text-align: center; overflow: auto; padding: max(1.6rem, min(calc(50vh - 2.4rem - 15px), calc(100vh - 26.4rem))) 2rem 2rem; background: radial-gradient(circle at center, transparent 0 20%, rgba(4,3,2,.75) 90%); transition: opacity .55s ease, visibility .55s ease; }
+#intro { position: fixed; z-index: 2; inset: 0; display: grid; place-content: start center; text-align: center; overflow: auto; padding: max(1.6rem, min(calc(50vh - 2.4rem - 15px), calc(100vh - 26.4rem))) 2rem 2rem; background: radial-gradient(circle at center, transparent 0 20%, rgba(4,3,2,.6) 90%); transition: opacity .55s ease, visibility .55s ease; }
 #intro.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
 /* Up in the black above the board, where there is nothing else to read it
    against. In the middle of the door it landed on the felt with an ivory
@@ -183,13 +183,14 @@ body.ideographic #hud span, body.ideographic #hud strong {
    phone with the mode buttons above it and the way in below. So every row gives
    up a little: the gaps, the padding and the type all come in a notch, which is
    about one row's worth of height between them. */
+/* Kendi kutusu yoktu artık: gövdenin içinde duruyor, ve kutu içinde kutu
+   bölünme demek. Üstündeki çizgi kiplerden ayırıyor — ayrı bir panel değil,
+   aynı panelin başka bir bölümü. */
 #settings { display: grid; gap: .45rem; justify-content: center;
-  margin: .35rem auto .25rem; padding: .85rem 1.1rem;
-  /* Five rows now, and a laptop window is not always tall. */
-  background: rgba(9,7,5,.82); border: 1px solid rgba(229,173,84,.18);
-  border-radius: .7rem; box-shadow: 0 20px 50px rgba(0,0,0,.5); }
+  margin: 0; padding: .7rem .6rem .35rem;
+  border-top: 1px solid rgba(229,173,84,.14); }
 @media (min-width: 601px) and (max-height: 860px) {
-  #settings { gap: .32rem; margin: .2rem auto .2rem; padding: .6rem 1rem; }
+  #settings { gap: .32rem; margin: 0; padding: .5rem .6rem .3rem; }
   .setting-value { padding: .45rem 1.9rem .45rem .8rem; }
   #start { margin-top: .6rem; }
   /* The heading is sized off the width, which on a wide short window leaves it
@@ -280,9 +281,23 @@ body.ideographic #hud span, body.ideographic #hud strong {
    gibi duruyordu. Üçü de kendi satırında ve aynı enlerde. Zaten bir kip
    seçildiği anda öbür ikisi kalkıyor (bkz. kapiyiCiz), yani üç satır yalnızca
    ilk açılışta duruyor. */
-#modes { display: flex; flex-direction: column; align-items: center;
-  gap: .5rem; margin: 2.4rem 0 1.6rem; }
-#modes .mode-pick { width: 100%; max-width: 20rem; }
+/* Kapının gövdesi: kipler, lobi ve ayarlar tek kutuda. Üç ayrı panel olarak
+   dururken göz üçünü ayrı ayrı okuyordu — oysa hepsi aynı soruyu soruyor: bu
+   oyun nasıl kurulacak. Kutu bir tane, içindekiler onun satırları. */
+#kapi-govde { width: 100%; max-width: 22rem; margin: 1.8rem auto 0;
+  padding: .5rem; display: flex; flex-direction: column; gap: .5rem;
+  background: rgba(9,7,5,.62); border: 1px solid rgba(229,173,84,.16);
+  border-radius: .8rem; box-shadow: 0 20px 50px rgba(0,0,0,.42); }
+
+#modes { display: flex; flex-direction: column; align-items: stretch; gap: .3rem; }
+#modes .mode-pick { width: 100%; max-width: none; }
+/* Kipler artık kutunun içinde satır: kendi çerçeveleri yok, çünkü kutunun
+   içindeki her çerçeve kutuyu böler. Seçili olan doluyor — bir listede hangi
+   satırda olduğunu söyleyen şey çizgi değil renktir. */
+#modes .mode-pick { background: rgba(20,15,10,.5); border-color: transparent; }
+#modes .mode-pick:hover { background: rgba(36,26,16,.75);
+  border-color: rgba(229,173,84,.28); }
+#modes .mode-pick.chosen { background: #e5ad54; border-color: #e5ad54; }
 
 
 /* Said rather than shown: a broken roll, and anything else that needs words. */
@@ -318,7 +333,8 @@ body.ideographic #hud span, body.ideographic #hud strong {
 #online::before { content: ""; width: .42rem; height: .42rem; border-radius: 50%;
   background: #6fbf73; box-shadow: 0 0 .4rem rgba(111,191,115,.7); }
 
-#lobby { margin: 1.2rem 0 0; }
+#lobby { margin: 0; padding-top: .5rem;
+  border-top: 1px solid rgba(229,173,84,.14); }
 #lobby[hidden] { display: none; }
 .lobby-row { display: flex; gap: .6rem; align-items: center; justify-content: center;
   flex-wrap: wrap; }
