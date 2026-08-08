@@ -21,12 +21,14 @@ koyma (beş çeşit), taş kırma, çift zar ve tek zar. Toplam 64 kilobayt ve
 
 ## Müzik
 
-`muzik/` altındaki on dört parça telifsiz kaynaklardan. Çalar oyunun sol
+`muzik/` altındaki on üç parça telifsiz kaynaklardan. Çalar oyunun sol
 tarafında; kendiliğinden başlamaz, kullanıcı çalınca başlar. Dosyalar
-çevrimdışı kabuğa **dahil değil** — yetmiş megabayt, kabuğun tamamının bin
-katı — ve servis çalışanı bu isteklere hiç dokunmaz.
+çevrimdışı kabuğa **dahil değil** — altmış beş megabayt, kabuğun tamamının
+bin katı — ve servis çalışanı bu isteklere hiç dokunmaz.
 
-Çalan sanatçılar, çalma sırasına göre:
+Çalan sanatçılar, çalma sırasına göre. Numaralar dosya adları: on birinci
+parça listeden çıkarıldı ve geri kalanlar yeniden numaralanmadı, çünkü bu on
+üç dosyayı birden değiştirmek olurdu.
 
 | # | parça |
 |---|---|
@@ -40,13 +42,12 @@ katı — ve servis çalışanı bu isteklere hiç dokunmaz.
 | 8 | Djovan — Night in Marrakech |
 | 9 | Djovan — Sahara Sunset |
 | 10 | FASSounds — Arabic Ramadan Music |
-| 11 | Kaazoom — Cairo Midnight |
 | 12 | Kaazoom — Shattered Strings |
 | 13 | Sounds by Amelia — Ancient Egyptian Celebration |
 | 14 | The Mountain — Oud |
 
 Kaynağın lisansı atıf zorunlu kılmasa da sanatçılar burada yazılı: bir oyunun
-altında otuz yedi dakika çalan müziği kimin yaptığı, adı geçmeye değer bir
+altında otuz üç dakika çalan müziği kimin yaptığı, adı geçmeye değer bir
 şeydir.
 
 ## Sunucu tarafı
