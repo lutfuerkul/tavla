@@ -38,7 +38,7 @@ const SES_OYNAMA = 0.18;
 // edecek. Seviyeler müziğin 0.85'ine göre seçildi (bkz. muzik.js), yani zar ve
 // taş onun üçte biri kadar. Kırma biraz yüksek kalıyor: duyulması gereken tek
 // olay o, çünkü oyunda bir şeyin başına gelen tek şey odur.
-const SES_SEVIYESI = { tas: 0.22, kirma: 0.34, zarCift: 0.3, zarTek: 0.3, sallama: 0.5 };
+const SES_SEVIYESI = { tas: 0.22, kirma: 0.34, zarCift: 0.5, zarTek: 0.5, sallama: 0.6 };
 
 const ANAHTAR = "tavla.ses";
 
