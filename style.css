@@ -54,11 +54,22 @@ button:hover { background: #edbb69; }
    box. It was a number here first, twice, and both times the rail grew — a
    button, then a second row of keys — and the panel climbed into it. A stack
    whose height depends on how many controls are in it is not a number to keep
-   in a stylesheet. */
-html.tepe #hud { top: calc(var(--ray-alti, 16rem) + .8rem); bottom: auto;
+   in a stylesheet.
+
+   Ve yalnızca rayın olduğu yerde. Bu kural bir medya sorgusu olmadan yazıldı
+   ve masaüstü için düşünülmüş olduğu hâlde telefonu da kapsıyordu: özgülüğü
+   telefon bloğundaki `#hud` kuralından yüksek olduğu için onu eziyor, paneli
+   dikey sütuna çeviriyor, ve rayın altından başlatıyordu. Oysa telefonda ray
+   boş — düğmelerin hepsi aşağıdaki sıraya inmiş oluyor (bkz. placeButtons) —
+   yani dibi yirmi iki piksel, ve panel doğruca tahtanın üstüne oturuyordu:
+   ölçüldüğünde 390x664'te yüz otuz dokuza yetmiş yedi piksellik bir örtüşme,
+   yani SKOR kutusu tahtanın içinde.
+   Eşiği burada yeniden yazmak yerine ray düğmeleri nereye koyduysa onu
+   soruyor: `dar` sınıfını placeButtons'ın kendisi yazıyor. */
+html.tepe:not(.dar) #hud { top: calc(var(--ray-alti, 16rem) + .8rem); bottom: auto;
   left: .9rem; right: auto;
   transform: none; flex-direction: column; gap: .4rem; }
-html.tepe #hud div { min-width: 7.6rem; padding: .55rem .75rem; }
+html.tepe:not(.dar) #hud div { min-width: 7.6rem; padding: .55rem .75rem; }
 
 /* The second camera. Shaped like the panels rather than like the gold buttons,
    because it belongs to the readout and not to the game — it stood inside the
@@ -239,8 +250,14 @@ body.ideographic #hud span, body.ideographic #hud strong {
   border-radius: .4rem; opacity: 0; visibility: hidden; transition: opacity .25s ease; }
 #notice.visible { opacity: 1; visibility: visible; }
 
-/* Nothing to end and nothing to take back until somebody has sat down. */
-#intro:not(.hidden) ~ #controls, #intro:not(.hidden) ~ #notice { display: none; }
+/* Nothing to end and nothing to take back until somebody has sat down.
+   Ama sırayı tümden gizlemek, telefonda odaya ait olan her şeyi de gizliyordu.
+   Dar ekranda çalar, ses ve tam ekran bu sıraya iniyor (bkz. placeButtons) —
+   yani kapıda müzik çaları hiç yoktu, ses ve tam ekran düğmeleri de yoktu, ve
+   bu tam olarak rayın kapıda tutmak üzere yazılmış olduğu üçlü. Gizlenen şey
+   oyuna ait olanlar: geri al, tamam, menü, kamera. */
+#intro:not(.hidden) ~ #controls > :not(#player):not(#sound):not(#fullscreen) { display: none; }
+#intro:not(.hidden) ~ #notice { display: none; }
 
 /* Playing somebody who is not in the room: make a room and read the code out,
    or take one you have been given. */
@@ -357,9 +374,23 @@ body.ideographic #hud span, body.ideographic #hud strong {
 
 #start:not(:disabled):hover { background: #f0bd68; }
 
+/* Ana ekrana ekleme, "Oyuna başla"nın altında. Bilerek sessiz: ana iş kapıdan
+   geçmek, bu ise bir kere yapılıp bir daha görülmeyecek bir şey. Dolu altın
+   yerine ince bir çerçeve, ve bir tık küçük — aynı boyda iki düğme yan yana
+   durunca hangisinin asıl olduğu belirsizleşiyor. */
+#install { display: block; margin: .7rem auto 0; padding: .5rem 1.3rem;
+  font: 500 .68rem/1 "DM Mono", monospace; letter-spacing: .12em;
+  text-transform: uppercase; color: #d3bd93; background: transparent;
+  border: 1px solid rgba(231,182,102,.42); border-radius: .4rem;
+  cursor: pointer; transition: color .2s ease, border-color .2s ease, background .2s ease; }
+#install:hover { color: #f6ecd6; border-color: rgba(229,173,84,.8);
+  background: rgba(36,26,16,.7); }
+#install[hidden] { display: none; }
+
 /* The iPhone home-screen hint, under the door. Quiet: a thin gold outline and a
    dimmed line, the share glyph picked out so the eye lands on the control the
-   words name. Only ever built on an iPhone that has not been added yet. */
+   words name. iPhone'da düğmenin arkasında duruyor: kapıyı açılır açılmaz bir
+   cümleyle karşılamak yerine, isteyen basıp okuyor. */
 #ios-tip { display: flex; align-items: center; gap: .5rem; margin: .9rem auto 0;
   max-width: 22rem; padding: .5rem .7rem; border: 1px solid rgba(231,182,102,.38);
   border-radius: .4rem; background: rgba(36,26,16,.5); color: #d3bd93;
@@ -394,8 +425,14 @@ body.ideographic #hud span, body.ideographic #hud strong {
      most phones there is nothing to reach for. */
   #intro { place-content: start center; padding: .7rem 1rem 1.6rem; }
   /* No room up the side of a phone, so the languages become a row of their
-     own at the top of the door instead. */
-  #langs { position: static; flex-direction: row; flex-wrap: wrap;
+     own at the top of the door instead.
+     Üstünde, ve bunu söylemek gerekiyor: akışa geri döndükleri anda sıralarını
+     belgeden alıyorlar, ve nav orada "Oyuna başla"dan sonra duruyor — masaüstü
+     düzeni onu kapının dibine mutlak konumla yapıştırdığı için belgedeki yeri
+     hiç önemli olmamıştı. Telefonda oldu: diller düğmenin tam altına düştü.
+     Kapı bir ızgara olduğu için sıra tek bildirimle söyleniyor; masaüstü
+     etkilenmiyor, orada mutlak konumlanmış bir kutunun sırası okunmaz bile. */
+  #langs { position: static; order: -1; flex-direction: row; flex-wrap: wrap;
     justify-content: center; gap: .22rem; margin-bottom: .5rem; }
   /* No black band above the board on a phone — the languages are up there —
      so it goes back into the door where it came from. */
@@ -598,7 +635,17 @@ body.ideographic #hud span, body.ideographic #hud strong {
 #confirm[hidden], #result[hidden] { display: none; }
 /* The game is over and the choice has to be made, so this one has no way out
    but the two buttons — no backdrop click, no Escape. */
-#result-title { font: 600 1.15rem/1.4 "Playfair Display", serif; letter-spacing: .02em; }
+/* Rakamlar büyük harf hizasında. Playfair Display'in varsayılanı eski-biçim
+   rakam: fontun kendi ölçüleriyle '2' glifinin tepesi 529, 'H'ninki 708 — yani
+   rakam tam x-yüksekliğinde oturuyor. Bir gazetenin metin sütununda doğru olan
+   budur; ama bu satır "Kazandın · MARS (2 SAYI)" diye büyük harfle yazılmış bir
+   başlık, ve orada rakam yanındaki harflerden alçak ve küçük duruyor.
+   Yüklenen varyantın lnum özelliği var (two.lf tepesi 722), yani tek bildirim
+   yetiyor — ve kısayoldan SONRA gelmesi şart: `font:` kısayolu
+   font-variant-numeric'i normal'a sıfırlıyor, üstüne yazılmazsa düzeltme
+   sessizce ölür. */
+#result-title { font: 600 1.15rem/1.4 "Playfair Display", serif; letter-spacing: .02em;
+  font-variant-numeric: lining-nums; }
 #result-quit { color: #d8ccb4; background: transparent; border: 1px solid rgba(229,173,84,.4); }
 #result-quit:hover { border-color: #e5ad54; color: #f6ecd6; }
 #result-next { color: #0d0a06; background: #e5ad54; border: 0; }
@@ -687,8 +734,20 @@ html.evde #rotate { display: none; }
   html:fullscreen #hud, html:-webkit-full-screen #hud, html.evde #hud {
     top: 50%; left: .5rem; transform: translateY(-50%);
     flex-direction: column; gap: .35rem; }
+  /* Panel de aynı kadar daralıyor, ve aynı sebeple: karşı kenardaki sütun
+     tahtaya yer açmak için küçüldüyse bu kenar olduğu gibi kalamaz — tahta
+     ikisinin arasında ortalanıyor, yani geniş duran taraf onu öbür yana
+     itiyor. Yeri değişmiyor: solda, alt alta, yukarıda kararlaştırıldığı gibi.
+     Okunacak üç şey var ve üçü de kısa; asıl genişliği yaratan, üstlerindeki
+     harf aralıklı etiketlerdi. */
   html:fullscreen #hud div, html:-webkit-full-screen #hud div, html.evde #hud div {
-    min-width: 6.6rem; padding: .5rem .7rem; }
+    min-width: 4.8rem; max-width: 5.6rem; padding: .38rem .5rem; }
+  html:fullscreen #hud span, html:-webkit-full-screen #hud span, html.evde #hud span {
+    font-size: .48rem; letter-spacing: .1em; margin-bottom: .2rem; }
+  html:fullscreen #hud strong, html:-webkit-full-screen #hud strong, html.evde #hud strong {
+    font-size: .64rem; letter-spacing: .03em; }
+  html:fullscreen #hud small, html:-webkit-full-screen #hud small, html.evde #hud small {
+    font-size: .54rem; min-height: .8rem; margin-top: .2rem; }
   html:fullscreen #controls, html:-webkit-full-screen #controls, html.evde #controls {
     top: 50%; bottom: auto; left: auto; right: .5rem;
     width: auto; padding: 0; flex-wrap: nowrap;
@@ -696,6 +755,53 @@ html.evde #rotate { display: none; }
   html:fullscreen #controls button, html:-webkit-full-screen #controls button,
   html.evde #controls button {
     width: 100%; }
+  /* Ve sütunun eni. Genişliğini en geniş çocuğu belirliyor, o da çalardı: dik
+     tutulan bir telefonun alt şeridi geniş ve alçak olduğu için orada iki sıra
+     üç tuş tek sıra altı tuşa açılıyor, ve o kural bir medya sorgusu olmadan
+     yazıldığı için yan yatınca da geçerliydi. Altı tuş, parmak için konmuş
+     2,2rem'lik tabanla birlikte, sütunu iki yüz kırk dört piksele çıkarıyor —
+     844 piksellik bir ekranın yüzde yirmi dokuzu — ve tahtanın sağ kenarını
+     kırk üç piksel örtüyordu. Yatarken şerit dar ve uzun, yani rayın kendi
+     şekli: iki sıra üçe geri dönüyor ve sütun yüz yirmi yediye iniyor.
+
+     Tuşlar da bir tık küçülüyor. Yatay tam ekranda tahta ekranın tamamını
+     kaplıyor ve yanına kalan şerit dardır; parmakla basılabilir kalan en
+     küçük ölçü aranıyor, tahtadan çalınan piksel değil. */
+  html:fullscreen #controls #player, html:-webkit-full-screen #controls #player,
+  html.evde #controls #player {
+    flex-direction: column; width: auto; gap: .2rem; }
+  /* Aynısı rayın kendisi için. Yatarken ekran iki tür oluyor: telefon dar
+     sayılıp her şeyi alttaki sıraya indiriyor, tablet saymıyor ve düğmeler
+     solda sütunda kalıyor. İkincisinde tahtayı örten şey o sütun: dokuz buçuk
+     rem genişliğindeki çalar rayı yüz elli piksele çıkarıyor ve 1024x768 bir
+     iPad'de tahtanın soluna yüz piksel kalıyor — ölçüldüğünde yetmiş iki
+     piksellik bir örtüşme. Çalar daralınca ray da daralıyor. */
+  /* Ve kenara yaklaşıyor. Dik tutulan bir ekranda rayın çevresindeki boşluk
+     nefes; yatarken tahtadan çalınan yer. */
+  /* Dört piksel kenarda. Rayın eni buradan aşağı inmiyor — genişliğini artık
+     çaların kutusu değil, parmak için konmuş 1,9rem'lik tuş tabanı belirliyor,
+     ve onu küçültmek basılabilirlikten çalmak olurdu. Alınacak yer kenar
+     boşluğu: tam ekranda ya da ana ekrandan açılmışken orada tarayıcı çubuğu
+     yok, ve dik tutulan bir ekranda nefes olan boşluk yatarken tahtadan
+     çalınan yerdir. Karşı kenar da aynı kadar, simetri bozulmasın diye. */
+  html:fullscreen #rail, html:-webkit-full-screen #rail, html.evde #rail {
+    top: .5rem; left: .25rem; gap: .3rem; }
+  html:fullscreen #hud, html:-webkit-full-screen #hud, html.evde #hud {
+    left: .25rem; }
+  html:fullscreen #controls, html:-webkit-full-screen #controls, html.evde #controls {
+    right: .25rem; }
+  html:fullscreen #rail #player, html:-webkit-full-screen #rail #player,
+  html.evde #rail #player {
+    width: 5.4rem; gap: .2rem; padding: .3rem .35rem; }
+  html:fullscreen #player button, html:-webkit-full-screen #player button,
+  html.evde #player button,
+  html:fullscreen #level, html:-webkit-full-screen #level, html.evde #level {
+    min-width: 1.9rem; min-height: 1.7rem; font-size: .68rem; }
+  html:fullscreen #controls > button, html:-webkit-full-screen #controls > button,
+  html.evde #controls > button,
+  html:fullscreen #rail > button, html:-webkit-full-screen #rail > button,
+  html.evde #rail > button {
+    padding: .35rem .5rem; font-size: .58rem; letter-spacing: .06em; }
   html:fullscreen #table-code, html:-webkit-full-screen #table-code,
   html.evde #table-code {
     top: .5rem; right: .5rem; }
