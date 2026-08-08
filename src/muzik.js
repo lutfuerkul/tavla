@@ -101,6 +101,10 @@ let sira = Number(localStorage.getItem(PARCA_ANAHTARI));
 if (!Number.isInteger(sira) || sira < 0 || sira >= SAYI) sira = 0;
 let caliyor = false;
 let izleyen = null;
+// İlk dokunuşu bekleyen dinleyicileri bırakan işlev — hazirla() kurar, ses
+// gerçekten çıkınca ya da müzik bilerek durdurulunca çağrılır. Modül düzeyinde,
+// çünkü onu bırakması gerekenler hazirla()'nın dışında.
+let ilkDokunusuBirak = null;
 
 export const caliyorMu = () => caliyor;
 export const suanki = () => PARCALAR[sira];
@@ -123,7 +127,18 @@ function kur() {
     if (++hata >= SAYI) { caliyor = false; hata = 0; bildir(); return; }
     ilerle(1);
   });
-  ses.addEventListener("playing", () => { hata = 0; });
+  // Sesin gerçekten çıktığı an. Tek doğru haber budur: baslat() bir niyet
+  // bildiriyor, play() ise sözünü saniyeler sonra tutuyor ya da tutmuyor. Depo
+  // da arayüz de burada yazılıyor, orada değil — yoksa çalmayan bir müzik
+  // "çalıyor" görünüyor ve bir dahaki açılışta kaldığı yerden devam etmeye
+  // çalışıyor.
+  ses.addEventListener("playing", () => {
+    hata = 0;
+    localStorage.setItem(CALIYOR_ANAHTARI, "1");
+    // Beklenen oldu; artık her dokunuşu dinlemeye gerek yok.
+    ilkDokunusuBirak?.();
+    if (!caliyor) { caliyor = true; bildir(); }
+  });
   // Nerede kalındığı arada bir yazılıyor, ve sayfa kapanırken kesinlikle:
   // pagehide, sekme kapanışında da yeniden yüklemede de geliyor.
   ses.addEventListener("timeupdate", () => ani_yaz(false));
@@ -202,17 +217,27 @@ function ilerle(yon) {
 
 export function baslat() {
   caliyor = true;
-  localStorage.setItem(CALIYOR_ANAHTARI, "1");
-  const a = kur();
-  // Aynı parçaya geri dönüldüyse kaldığı yerden devam etsin; kaynağı yeniden
-  // atamak onu başa sarardı.
-  if (!a.src) yukle(true); else oynat();
+  // Depoya yazan yer burası değil, "playing" — bkz. kur(). Basılan tuş bir
+  // niyettir ve tarayıcı onu reddedebilir; reddedilen bir niyeti yazmak,
+  // sonraki açılışta hiç çalmamış bir parçanın ortasından devam etmeye
+  // çalışmak demekti.
+  calmayiDene();
   bildir();
+}
+
+// Kaynağı olan bir öğe kaldığı yerden devam eder; olmayana önce kaynak verilir.
+// Aynı parçaya geri dönüldüyse yeniden atamak onu başa sarardı.
+function calmayiDene() {
+  const a = kur();
+  if (!a.src) yukle(true); else oynat();
 }
 
 export function durdur() {
   caliyor = false;
   localStorage.setItem(CALIYOR_ANAHTARI, "0");
+  // Durdurmak bir tercihtir. Bekleyen "ilk dokunuşta çal" dinleyicisi kalırsa
+  // bir sonraki dokunuş onu geri açar.
+  ilkDokunusuBirak?.();
   if (!ses) { bildir(); return; }
   // Yumuşak kapanış: sert kesme, çalan bir udun ortasında bıçak gibi duyuluyor.
   const baslangic = ses.volume;
@@ -267,14 +292,46 @@ export function hazirla() {
   // değil: bu sitede müzik çalmış bir tarayıcı buna izin verebiliyor, ve
   // izin verdiğinde araya hiç sessizlik girmiyor. Reddedilirse zararı yok,
   // aşağıdaki ilk dokunuş yine yakalar.
-  if (localStorage.getItem(CALIYOR_ANAHTARI) === "1") baslat();
-  // click de dinleniyor: bir düğmeye fareyle basmak zaten pointerdown
-  // üretiyor, ama klavyeyle ya da erişilebilirlik araçlarıyla tetiklenen
-  // basışlarda ilk gelen click oluyor ve o yol dışarıda kalıyordu.
-  const olaylar = ["pointerdown", "touchstart", "keydown", "click"];
-  const basla = () => {
+  // Sessizce denenir: arayüze "çalıyor" dedirtmeden. Reddin gelmesi gerçek
+  // uygulamada bir buçuk saniye sürüyor — sahne kuruluyor ve ana iş parçacığı
+  // dolu — ve o bir buçuk saniye boyunca çalar durdur düğmesi gösteriyordu,
+  // altında hiç ses yokken. Çaldığını "playing" söyleyecek.
+  if (localStorage.getItem(CALIYOR_ANAHTARI) === "1") calmayiDene();
+
+  // Hangi olayların dinlendiği tek satırlık bir ayrıntı değil, telefonda
+  // müziğin hiç başlamamasının sebebiydi.
+  //
+  // Dokunmatik bir ekranda pointerdown ve touchstart kullanıcı etkinleşmesi
+  // TAŞIMAZ; etkinleşme parmak kalkınca, pointerup/touchend/click ile gelir.
+  // Farede pointerdown taşır — masaüstünde aynı kodun neden sorunsuz çalıştığı
+  // budur. Dinlenenler arasında ilk gelen pointerdown olduğu için müzik tam da
+  // izin verilmeyen anda isteniyor, reddediliyor, ve o tek şans harcanmış
+  // oluyordu.
+  //
+  // Kalanların dördü de etkinleşme taşıyor. Asıl değişiklik ise aşağıda:
+  // dinleyiciler, bir deneme yapıldı diye değil, ses gerçekten çıktığı için
+  // bırakılıyor. Eskiden ilk tetiklenen olay dördünü birden kaldırıyordu —
+  // yani işe yarayacak olan click, işe yaramayan pointerdown'ın içinde
+  // siliniyordu.
+  //
+  // keydown ve click ayrıca duruyor: klavyeyle ya da erişilebilirlik
+  // araçlarıyla basıldığında gelen ilk olay onlar oluyor.
+  const olaylar = ["pointerup", "touchend", "keydown", "click"];
+  const basla = olay => {
+    // Çaların kendi tuşlarına karışılmıyor. Bu dinleyici yakalama evresinde,
+    // yani düğmenin kendi işleyicisinden önce koşuyor; durdura basıldığında
+    // müziği önce başlatıp sonra durdurmuş olurdu.
+    if (olay.target?.closest?.("#player")) return;
+    // Koşulsuz denenir, ve bırakma kararı buraya ait değil. "Zaten çalıyor mu"
+    // diye elemana sormak yanlış cevabı veriyor: play() reddedilecek olsa bile
+    // paused'ı hemen false yapıyor, düzeltir düzeltmez ölçüldü — dokunuşun
+    // ikinci yarısı (pointerup) o yanlış cevaba bakıp dinleyiciyi bırakıyor ve
+    // hata olduğu gibi kalıyordu. Dinleyiciyi bırakan tek yer "playing".
+    baslat();
+  };
+  ilkDokunusuBirak = () => {
+    ilkDokunusuBirak = null;
     for (const olay of olaylar) removeEventListener(olay, basla, { capture: true });
-    if (!caliyor) baslat();
   };
   for (const olay of olaylar) addEventListener(olay, basla, { capture: true, passive: true });
 }
