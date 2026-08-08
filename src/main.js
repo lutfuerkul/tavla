@@ -4722,18 +4722,39 @@ function measureControls() {
   const yer = kutu.getBoundingClientRect();
   const alt = yer.height > 0 ? Math.max(0, innerHeight - yer.top) : 0;
   document.documentElement.style.setProperty("--sira-alti", `${Math.round(alt)}px`);
+  // Sütunun kendi boyu. Yatay tam ekranda sütun ortalanıyor ve bunu bir
+  // dönüşümle yapamıyor: dönüşümü olan bir kutu, içindeki `fixed` çocuklar için
+  // ekranın yerine geçiyor, ve çalar oraya bırakılıp panelin altına — ekrana
+  // göre — yerleştiriliyor. Ortalama kendi boyundan hesaplanınca dönüşüme gerek
+  // kalmıyor.
+  if (yer.height > 0)
+    document.documentElement.style.setProperty("--sira-boy", `${Math.round(yer.height)}px`);
 }
 
 new ResizeObserver(measureControls).observe(document.querySelector("#controls") ?? document.body);
 
+// Çaların boyu. Sütundan çıkıp panelin altına inince bıraktığı yer boş kalmalı:
+// yanındaki düğmelerin dikey yerleri onun gitmesiyle değişmesin diye. Ayrılan
+// pay sabit bir sayı olamaz — tuş ölçüsü ekrana ve yazı tipine bağlı — o yüzden
+// ölçülüyor, tıpkı rayın dibi ve alt sıranın boyu gibi.
+function measureCalar() {
+  const kutu = document.querySelector("#player");
+  if (!kutu) return;
+  const boy = kutu.getBoundingClientRect().height;
+  if (boy > 0) document.documentElement.style.setProperty("--calar-boy", `${Math.round(boy)}px`);
+}
+
+new ResizeObserver(measureCalar).observe(document.querySelector("#player") ?? document.body);
+
 placeButtons();
 measureRail();
 measureControls();
+measureCalar();
 // Düzen kararı verildi: düğmeler artık gösterilebilir. Bundan önce görünmez
 // duruyorlar, çünkü sayfa betikten önce boyanıyor ve o boyamada ray masaüstü
 // yerinde — telefonda yanlış yer.
 document.documentElement.classList.add("yerlesti");
-addEventListener("resize", () => { placeButtons(); measureRail(); measureControls(); });
+addEventListener("resize", () => { placeButtons(); measureRail(); measureControls(); measureCalar(); });
 
 viewButton?.addEventListener("click", () => {
   chosenView = overhead() ? "koltuk" : "tepe";
