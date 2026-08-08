@@ -82,8 +82,22 @@
         </div>
         <button id="menu" data-i18n="menu">Menü</button>
         <button id="fullscreen" hidden>Tam ekran</button>
-        <button id="sound">Ses açık</button>
+        <!-- Sohbet henüz yok; düğmesi yerinde ve kapalı duruyor. -->
+        <button id="chat" data-i18n="chat" disabled>Sohbeti aç</button>
       </div>
+      <!-- Sesin tamamı, tek dokunuşta. Rayda değil köşede: rayda duran her şey
+           bir ayar, bu ise bir anahtar — odaya biri girdiğinde aranan şey, ve
+           aranırken bakılan yer ekranın kenarıdır, bir listenin içi değil. -->
+      <button id="mute" type="button" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path class="hoparlor" d="M4 9.2h3.4L12 5.2v13.6L7.4 14.8H4z" />
+          <g class="dalgalar">
+            <path d="M15.3 9.4a3.6 3.6 0 0 1 0 5.2" />
+            <path d="M17.8 7.1a7 7 0 0 1 0 9.8" />
+          </g>
+          <line class="cizik" x1="4.6" y1="19.4" x2="19.4" y2="4.6" />
+        </svg>
+      </button>
       <div id="confirm" hidden>
         <div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
           <p id="confirm-title" data-i18n="confirm.title">Oyundan çıkmak istediğine emin misin?</p>

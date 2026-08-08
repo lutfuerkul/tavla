@@ -43,6 +43,18 @@ let acik = localStorage.getItem(ANAHTAR) !== "kapali";
 
 export const sesAcikMi = () => acik;
 
+// Ve bunun üstünde bir susturma. İkisi ayrı şeyler: "ses açık mı" bir tercih,
+// susturma ise bir an — odaya biri girdi, telefon masada çalıyor. O yüzden
+// tercihi silmiyor, üstünü örtüyor: açıldığında altında ne bırakıldıysa o
+// bulunuyor. Ana kazançta kesiliyor, yani çalmakta olan bir taş da susuyor;
+// yalnız cal()'ı geçmek, dokunuşla susturan biri için geç kalıyordu.
+let susturuldu = false;
+
+export function sustur(deger) {
+  susturuldu = !!deger;
+  if (ana) ana.gain.value = susturuldu ? 0 : 1;
+}
+
 export function sesiCevir() {
   acik = !acik;
   localStorage.setItem(ANAHTAR, acik ? "acik" : "kapali");
@@ -104,7 +116,7 @@ export function uyandir() {
     if (ac.state === "suspended") ac.resume().catch(() => {});
     if (!ana) {
       ana = ac.createGain();
-      ana.gain.value = 1;
+      ana.gain.value = susturuldu ? 0 : 1;
       ana.connect(ac.destination);
     }
     ilkDokunustaAc();
@@ -179,7 +191,7 @@ function sec(tur) {
 }
 
 export function cal(tur, { gecikme = 0, seviye = 1 } = {}) {
-  if (!acik) return;
+  if (!acik || susturuldu) return;
   if (!ac) uyandir();
   if (!ac || !ana) return;
   if (ac.state === "suspended") ac.resume().catch(() => {});

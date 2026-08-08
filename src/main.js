@@ -6,7 +6,7 @@ import * as Rules from "./rules.js";
 import { LANGS, language, setLanguage, t, isIdeographic } from "./i18n.js";
 import { localSession, onlineSession } from "./session.js";
 import { attend, ask, connect, follow, sitAt } from "./firebase.js";
-import { cal as calSes, hamleSesi, sesAcikMi, sesiCevir, uyandir as sesiUyandir } from "./ses.js";
+import { cal as calSes, hamleSesi, sustur as sesiSustur, uyandir as sesiUyandir } from "./ses.js";
 import * as Muzik from "./muzik.js";
 
 // Where the turns come from. Everything the board cannot decide by itself goes
@@ -804,21 +804,37 @@ function showFullscreen() {
   rotateFull?.toggleAttribute("hidden", !canFullscreen);
 }
 
-// The sound, on and off. The label says what is true rather than what pressing
-// it does — it is a state and not an action, and "sound off" on a button that
-// turns the sound off is the one wording nobody can read twice the same way.
-const soundButton = document.querySelector("#sound");
+// Sohbet henüz yok, düğmesi var ve kapalı duruyor. Gelecek bir şeyin yerini
+// şimdiden boş bırakmak, sonradan araya sıkıştırmaktan iyi: bir sıra bir kez
+// öğrenilince değişmemeli, ve bu düğme sesin açma kapamasının durduğu yerde
+// duruyor — o iş artık köşedeki anahtarın.
+const chatButton = document.querySelector("#chat");
+
+// Sesin tamamı, tek dokunuşta: tahtanınki de müziği de. Rayda duran her şey bir
+// ayar — hangi parça, ne kadar yüksek, ses açık mı — bu ise bir an: odaya biri
+// girdi, bir şey söylendi, telefon masada çalıyor. Ayarların hiçbirini silmiyor,
+// üstlerini örtüyor; açıldığında altında ne bırakıldıysa o bulunuyor.
+const SUSTUR_ANAHTARI = "tavla.sustur";
+const muteButton = document.querySelector("#mute");
+let susturuldu = localStorage.getItem(SUSTUR_ANAHTARI) === "1";
 
 function showSound() {
-  if (!soundButton) return;
-  const on = sesAcikMi();
-  soundButton.textContent = t(on ? "sound.on" : "sound.off");
-  soundButton.classList.toggle("kapali", !on);
-  soundButton.setAttribute("aria-pressed", String(on));
+  if (chatButton) chatButton.textContent = t("chat");
+  sesiSustur(susturuldu);
+  Muzik.sustur(susturuldu);
+  if (!muteButton) return;
+  muteButton.classList.toggle("sustu", susturuldu);
+  muteButton.setAttribute("aria-pressed", String(susturuldu));
+  // Düğmenin üstünde yazı yok, o yüzden ne yaptığını söyleyen tek yer burası —
+  // ve söylediği şey basılınca olacak olan, üstünde duran şey değil.
+  const soz = t(susturuldu ? "mute.off" : "mute.on");
+  muteButton.setAttribute("aria-label", soz);
+  muteButton.title = soz;
 }
 
-soundButton?.addEventListener("click", () => {
-  sesiCevir();
+muteButton?.addEventListener("click", () => {
+  susturuldu = !susturuldu;
+  localStorage.setItem(SUSTUR_ANAHTARI, susturuldu ? "1" : "0");
   showSound();
 });
 
@@ -4664,7 +4680,7 @@ function placeButtons() {
     controls?.prepend(viewButton);
     controls?.append(menuButton);
     if (fullButton) controls?.append(fullButton);
-    if (soundButton) controls?.append(soundButton);
+    if (chatButton) controls?.append(chatButton);
     if (playerBox) controls?.append(playerBox);
   } else {
     // The rail down the left, in the order they are reached for: the way out,
@@ -4675,7 +4691,7 @@ function placeButtons() {
     if (playerBox) rail?.prepend(playerBox);
     rail?.append(menuButton);
     if (fullButton) rail?.append(fullButton);
-    if (soundButton) rail?.append(soundButton);
+    if (chatButton) rail?.append(chatButton);
     rail?.append(viewButton);
   }
 }
