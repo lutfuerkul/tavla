@@ -1028,4 +1028,20 @@ html.evde #rotate { display: none; }
    üstünde kalıyor, ve o köşe zaten hiçbir şeyin durmadığı tek köşe. */
 @media (orientation: landscape) and (pointer: coarse) {
   #mute { top: .35rem; bottom: auto; right: .35rem; }
+  /* Ve sütun anahtarın altından biraz aşağı. İkisi aynı kenarda ve anahtar
+     üstte duruyor; aralarında nefes olmayınca sütunun ilk düğmesi anahtarın
+     devamı gibi okunuyordu. */
+  html:fullscreen #controls, html:-webkit-full-screen #controls, html.evde #controls {
+    top: calc(50% - var(--sira-boy, 0px) / 2 + .8rem); }
+}
+
+/* Dikeyde anahtar, sohbet düğmesinin satırında. Alt sıra üç satır: oynanacaklar,
+   odaya ait olanlar, çalar. Anahtar da odaya ait, ve ortadaki satır tam olarak
+   o satır — köşede tek başına dururken hangi satıra ait olduğu okunmuyordu.
+
+   Yeri sabit bir sayıyla değil, altında ne olduğuyla kuruluyor: çaların boyu
+   ölçülüyor, satır aralığı sıranın kendi aralığı. */
+@media (orientation: portrait) {
+  html.dar #mute {
+    bottom: calc(.45rem + var(--calar-boy, 2rem) + .45rem + (2rem - 2.1rem) / 2); }
 }
