@@ -286,7 +286,35 @@ export function onceki() {
 // Bilerek durdurmuş olan hariç. Durdur düğmesine basmak bir tercihtir ve
 // sayfayı yenilemek onu geri almaz; yoksa müziği istemeyen biri her açılışta
 // yeniden kapatmak zorunda kalır.
+// Sayfanın bu açılışı bizim kendi geçişimiz mi, yoksa baştan bir açılış mı.
+//
+// Oyun kendi kendine yeniden yüklüyor: bir masa ayarı değiştiğinde, çevrimiçi
+// bir masaya oturulduğunda, çizim bağlamı düştüğünde. O geçişlerde müziğin
+// kesilmemesi gerekiyor ve kaldığı yerden devam ediyor — bunun için #157'de
+// parça ve saniye depoya yazılmıştı.
+//
+// F5 ise başka bir şey: baştan başlamak. Aynısı yeni bir sekme için de geçerli.
+// İkisi tarayıcı açısından aynı görünüyor — location.reload() da "yenileme"
+// sayılıyor — o yüzden ayıran şey bir işaret: geçişten hemen önce konuyor,
+// açılışta okunup silinir. İşaret yoksa açılış baştandır.
+const GECIS_ANAHTARI = "tavla.muzikGecis";
+export function gecisiIsaretle() {
+  try { sessionStorage.setItem(GECIS_ANAHTARI, "1"); } catch { /* önemsiz */ }
+}
+
 export function hazirla() {
+  const bizden = sessionStorage.getItem(GECIS_ANAHTARI) === "1";
+  sessionStorage.removeItem(GECIS_ANAHTARI);
+  if (!bizden) {
+    // Baştan bir açılış: liste başa döner, ve durdurulmuşluk da silinir.
+    // Durdur'a bir kez basmanın ömür boyu sürmesi isteniyordu ve sürüyordu —
+    // ama bir sekmenin ömrü kadar sürmesi kastedilmişti; yeni bir açılışta
+    // müziğin hiç başlamaması, sebebi görünmeyen bir sessizlik oluyordu.
+    sira = 0;
+    localStorage.setItem(PARCA_ANAHTARI, "0");
+    localStorage.setItem(AN_ANAHTARI, "0");
+    localStorage.removeItem(CALIYOR_ANAHTARI);
+  }
   bildir();
   if (localStorage.getItem(CALIYOR_ANAHTARI) === "0") return;
 

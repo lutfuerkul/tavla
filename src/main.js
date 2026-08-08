@@ -392,7 +392,7 @@ canvas.addEventListener("webglcontextrestored", () => {
   notice("");
   // Everything the renderer had is gone with the old context; the simplest
   // way back to a board that draws is the one the board already knows.
-  location.reload();
+  (Muzik.gecisiIsaretle(), location.reload());
 });
 
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -433,7 +433,11 @@ function sitDown() {
   // Not before — at the door there is no board to put anything on.
   if (mode === "online" && matchId && !session.online) {
     session = onlineSession({ matchId, colour: HUMAN, ask, follow });
-    session.watch(applyServerState, tableClosed);
+    // Bırakma işlevi saklanıyor: follow onu ya doğrudan ya da bir söz içinde
+    // veriyor, ikisi de aynı yerde karşılanıyor.
+    Promise.resolve(session.watch(applyServerState, tableClosed))
+      .then(birak => { masaninDinleyicisi = typeof birak === "function" ? birak : null; })
+      .catch(() => {});
   }
 }
 
@@ -982,7 +986,7 @@ function sitDownTo(id, colour) {
   sessionStorage.setItem("tavla.sitOnLoad", "1");
   rememberFullscreen();
   say("lobby.found");
-  location.reload();
+  (Muzik.gecisiIsaretle(), location.reload());
 }
 
 // Being found a game rather than arranging one. Either somebody is already
@@ -1214,7 +1218,7 @@ startButton?.addEventListener("click", () => {
   localStorage.setItem(CLOTH_KEY, clothName);
   sessionStorage.setItem("tavla.sitOnLoad", "1");
   rememberFullscreen();
-  location.reload();
+  (Muzik.gecisiIsaretle(), location.reload());
 });
 
 if (sessionStorage.getItem("tavla.sitOnLoad")) {
@@ -4379,8 +4383,56 @@ function leaveTable() {
     : Promise.resolve();
   // Not for ever: a line that never answers must not strand somebody at a board
   // they have left. Ten seconds covers a server being woken from cold.
-  Promise.race([said, new Promise(done => setTimeout(done, 10000))])
-    .then(() => location.reload());
+  // Ve kapıya dönülüyor — sayfayı yeniden yüklemeden.
+  //
+  // Yeniden yüklemek en kolayıydı ve bir bedeli vardı: sayfa gidince ses öğesi
+  // de gidiyor, yani müzik oyundan her çıkışta kesiliyordu. #157'de kapı→oyun
+  // yönü aynı sebeple yeniden yüklemeden kurtarılmıştı; bu, öbür yön.
+  //
+  // Beklemek duruyor. Masadan kalkıldığı sunucuya söyleniyor ve cevabı
+  // bekleniyor; ama artık beklenen şey bir yeniden yükleme değil, yalnız
+  // isteğin tamamlanması. Tahta o beklemede zaten kapının arkasında.
+  kapiyaDon();
+  Promise.race([said, new Promise(done => setTimeout(done, 10000))]).catch(() => {});
+}
+
+// Oyunu yerinde söküp kapıyı geri getirmek.
+//
+// Yeniden yüklemenin bedavaya yaptığı şey buydu: her şeyi sıfırdan kurmak.
+// Elle yapınca listenin tamamı sayılmak zorunda — atlanan tek bir şey kapıya
+// bayat durum sızdırır, ve en sinsisi görünmeyenler: kapanmamış bir dinleyici,
+// tarihe konmuş fazla bir adım, elde kalmış bir taş.
+function kapiyaDon() {
+  // Görünmeyenler önce.
+  masaninDinleyicisi?.();
+  masaninDinleyicisi = null;
+  session = localSession();
+  matchId = null;
+  awayUntil = 0;
+  tableGone = false;
+  if (dragging) { scene.remove(dragging.mesh); dragging = null; }
+  canvas.style.cursor = "grab";
+
+  // Sonra oyunun kendisi. Maç da bitiyor: masadan kalkmak o maçı bırakmaktır,
+  // ve kapıdan girilecek olan yeni bir maçtır.
+  match = { ivory: 0, black: 0 };
+  resetState(null);
+  resetDice();
+  renderPieces();
+
+  // Sonra ekran.
+  resultBox?.setAttribute("hidden", "");
+  closeConfirm();
+  hud.classList.remove("visible");
+  intro.classList.remove("hidden");
+  kapiyiAc();
+  updateHud();
+  fitCamera();
+
+  // Ve en son tarihe konan fazla adım geri veriliyor — kapı açıldıktan sonra,
+  // çünkü popstate işleyicisi kapı açıkken kendini geri çekiyor ve soru
+  // sormuyor.
+  if (geriAdimi) { geriAdimi = false; history.back(); }
 }
 
 // Long enough to read before the board goes back to the door.
@@ -4414,7 +4466,7 @@ function tableClosed(by) {
   setTimeout(() => {
     sessionStorage.removeItem("tavla.sitOnLoad");
     localStorage.removeItem(MATCH_KEY);
-    location.reload();
+    (Muzik.gecisiIsaretle(), location.reload());
   }, CLOSED_SHOWN_MS);
 }
 
@@ -4441,10 +4493,21 @@ addEventListener("keydown", event => {
 // Only where there is a back button to press. A desktop's is a browser
 // control rather than a thumb's reflex, and quietly disarming it is not this
 // game's business.
+// Tarihe konan fazla adımı tutuyor muyuz. Kapıya dönerken onu geri vermek
+// gerekiyor; tutmadığımız bir adımı geri vermek ise kullanıcıyı sayfadan
+// çıkarır, o yüzden tahmin edilmiyor, biliniyor.
+let geriAdimi = false;
 function guardBack() {
   if (!HANDHELD) return;
   history.pushState({ tavla: "masa" }, "");
+  geriAdimi = true;
 }
+
+// Çevrimiçi masanın dinleyicisini bırakan işlev. Saklanmıyordu — kapıya
+// yeniden yükleyerek dönüldüğü sürece gerekmiyordu da, sayfa gidince dinleyici
+// de gidiyordu. Yerinde dönülünce gitmiyor: kapıda oturup bir sonraki oyunun
+// hamlelerini dinleyen bir bağlantı kalırdı.
+let masaninDinleyicisi = null;
 
 addEventListener("popstate", () => {
   if (!HANDHELD || !intro.classList.contains("hidden")) return;
@@ -5743,13 +5806,31 @@ function ekranda(nokta) {
   };
 }
 
+// Ekranın içinde tutulur. Tahta pencereye oynanan alanından sığdırılıyor, kasa
+// kenarı taşabiliyor; üstelik koltuktan bakınca yakın köşeler uzak köşelerden
+// daha açık düşüyor. Sonuç: alt köşe ekranın dışına çıkıyor ve ona yapışan yazı
+// kenarda kesiliyordu — ölçüldü, "Sen 0"ın yarısı görünüyordu.
+//
+// Yerleştirdikten sonra kutusu okunup, taşan kadar geri itiliyor. Bir okuma
+// düzen hesabı zorluyor, ama bu dört yazı için ve yalnız kamera değiştiğinde.
+const YAZI_PAYI = 6;
 function yerlestir(el, nokta, goster) {
   if (!el) return;
   if (!goster) { el.hidden = true; return; }
   const p = ekranda(nokta);
   el.hidden = !p.onde;
-  el.style.left = `${Math.round(p.x)}px`;
-  el.style.top = `${Math.round(p.y)}px`;
+  if (el.hidden) return;
+  let sol = Math.round(p.x), ust = Math.round(p.y);
+  el.style.left = `${sol}px`;
+  el.style.top = `${ust}px`;
+  const k = el.getBoundingClientRect();
+  if (k.width === 0) return;
+  const kaydir = (bas, son, sinir) =>
+    bas < YAZI_PAYI ? YAZI_PAYI - bas : son > sinir - YAZI_PAYI ? sinir - YAZI_PAYI - son : 0;
+  const dx = kaydir(k.left, k.right, innerWidth);
+  const dy = kaydir(k.top, k.bottom, innerHeight);
+  if (dx) el.style.left = `${sol + Math.round(dx)}px`;
+  if (dy) el.style.top = `${ust + Math.round(dy)}px`;
 }
 
 // Köşeler ekranda nerede duruyorsa orada. Hangi dünya köşesinin ekranın sağ
@@ -5757,18 +5838,35 @@ function yerlestir(el, nokta, goster) {
 // de yansıtıp yerlerinden seçmek, o üç şeyi ayrı ayrı bilmekten hem kısa hem
 // de her zaman doğru.
 //
-// Dik tutulurken kasanın dış köşeleri, yatarken içi: yatarken tahta ekranı
-// boydan boya kaplıyor ve dış köşe kenarın dibine düşüyor.
+// Kasanın DIŞINDA, örtünün üstünde. İçeride dururken taşların ve ahşabın
+// üstüne denk geliyordu: kutusu ve gölgesi olmayan bir yazı, arkasında fildişi
+// bir taş varken okunmuyor. Örtü düz bir renk, ve orada okunuyor.
+//
+// Ama dışarısı her yönde aynı miktarda değil, ve hangi yönde olduğu ekranın
+// hangi yöne durduğuna bağlı. Tahta pencereye kısa kenarından sığdırılıyor:
+// dik tutulurken genişliğine sığıyor ve boş örtü üstte ile altta kalıyor,
+// yatarken yüksekliğine sığıyor ve boşluk yanlara geçiyor. Dört köşeyi de
+// kasanın dışına almak, ilk denemede tam bunu gözden kaçırdı — dikeyde iki
+// yazının biri ekranın kenarında kesildi, öbürü hiç görünmedi.
+//
+// O yüzden dışarı çıkış yalnızca yer olan eksende: dikeyde raydan öteye,
+// yatarken yan duvardan öteye. Öbür eksende kasanın içinde kalıyor ki yazı
+// tahtanın sağ yarısında dursun.
+// Çapa kasanın kendi köşesi; dışarı çıkış yalnızca yer olan eksende ve az.
+// Dik tutulurken yazı köşenin solunda bitiyor, yatarken köşeden başlayıp
+// dışarı doğru uzuyor — hangisinin olduğunu sayfaya `yana` sınıfıyla söylüyor.
+const SKOR_PAYI = .3;
 function skorKoseleri() {
-  const yx = offToTheSide() ? FIELD_HALF_X : CASE_HALF_X;
-  const yz = offToTheSide() ? FIELD_HALF_Z : CASE_HALF_Z;
+  const yana = offToTheSide();
+  const yx = CASE_HALF_X + (yana ? SKOR_PAYI : 0);
+  const yz = CASE_HALF_Z + (yana ? 0 : SKOR_PAYI);
   const koseler = [];
   for (const x of [-yx, yx]) for (const z of [-yz, yz])
     koseler.push({ nokta: { x, y: FELT_Y, z }, e: ekranda({ x, y: FELT_Y, z }) });
   koseler.sort((a, b) => a.e.y - b.e.y);
   const ust = koseler.slice(0, 2).sort((a, b) => b.e.x - a.e.x)[0];
   const alt = koseler.slice(2).sort((a, b) => b.e.x - a.e.x)[0];
-  return { ust: ust.nokta, alt: alt.nokta };
+  return { ust: ust.nokta, alt: alt.nokta, yana };
 }
 
 function kendiAdi() { return mode === "hotseat" ? t("kose.bir") : t("kose.sen"); }
@@ -5784,7 +5882,12 @@ function tahtaYazilari() {
     for (const el of [skorBen, skorRakip, toplaBen, toplaRakip]) if (el) el.hidden = true;
     return;
   }
-  const { ust, alt } = skorKoseleri();
+  const { ust, alt, yana } = skorKoseleri();
+  document.querySelector("#tahta-yazi")?.classList.toggle("yana", yana);
+  // Adıyla. Bir aralık yalnız rakam denendi ve kaldırıldı: tahtanın üstünde ve
+  // altında duran iki tek başına sayı, ne olduklarını söylemiyorlardı — skor
+  // panelden de kalktığı için oyunu ilk açan biri onların skor olduğunu tahmin
+  // etmek zorunda kalıyordu.
   if (skorBen) skorBen.textContent = `${kendiAdi()} ${match[HUMAN]}`;
   if (skorRakip) skorRakip.textContent = `${oburAdi()} ${match[COMPUTER]}`;
   yerlestir(skorBen, alt, true);
