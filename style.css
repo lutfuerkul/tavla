@@ -97,6 +97,23 @@ html.tepe:not(.dar) #hud div { min-width: 7.6rem; padding: .55rem .75rem; }
   color: #ad9470; font-variant-numeric: tabular-nums; }
 #hud small.running { color: #e5ad54; }
 #hud small.nearly { color: #e08a5c; }
+/* Tahtaya yazılanlar: köşelerdeki skor ve toplananların sayısı.
+   Panel ekrana çakılı ve nereye baksan orada; bunlar tahtanın kendi
+   köşelerine ait, ve kamera döndüğünde onunla dönüyorlar — yerlerini sayfa
+   değil sahne söylüyor (bkz. tahtaYazilari).
+   Panelin yalnız parlak yazısı: aynı yazı tipi, aynı ölçü, aynı renk. Kutu
+   yok — çerçeve, zemin, soldaki altın çizgi, gölge, hiçbiri. Tahtanın üstünde
+   duran bir yazı, üstüne konmuş bir kutu değil.
+   Büyük harfe çevrilmiyor: "Sen 0", "Rakip 0". */
+#tahta-yazi > span { position: fixed; z-index: 1; pointer-events: none;
+  font: 500 .72rem/1 "DM Mono", monospace; letter-spacing: .06em;
+  color: #eee3ce; white-space: nowrap; }
+#tahta-yazi > span[hidden] { display: none; }
+/* Köşeye oturuyorlar, köşenin üstüne binmiyorlar: sağ köşedeki yazı sola
+   doğru uzuyor, alttaki yukarı, üstteki aşağı. */
+#skor-ben { transform: translate(-100%, -100%); margin: -.4rem 0 0 -.4rem; }
+#skor-rakip { transform: translate(-100%, 0); margin: .4rem 0 0 -.4rem; }
+#topla-ben, #topla-rakip { transform: translate(-50%, -50%); }
 #crosshair { position: fixed; z-index: 1; top: 50%; left: 50%; width: 8px; height: 8px; margin: -4px; border: 1px solid rgba(247,235,207,.8); border-radius: 50%; opacity: 0; transition: opacity .35s; }
 #crosshair.visible { opacity: .8; }
 @media (max-width: 600px) {

@@ -46,9 +46,17 @@
       <aside id="hud" aria-live="polite">
         <div><span data-i18n="hud.turn">SIRA</span><strong>KEMİK</strong><small id="sayac-hamle"></small></div>
         <div><span data-i18n="hud.dice">ZARLAR</span><strong>4 · 2</strong><small id="sayac-zar"></small></div>
-        <div><span data-i18n="hud.score">SKOR</span><strong>0 · 0</strong></div>
         <button id="view">Tepe kamerası</button>
       </aside>
+      <!-- Tahtanın kendi köşelerine ve toplama tepsilerine yazılanlar. Bunlar
+           ekranın bir yerinde durmuyor, tahtanın bir yerinde duruyorlar: yerleri
+           her kamera değişiminde sahnedeki noktalardan hesaplanıyor. -->
+      <div id="tahta-yazi" aria-hidden="true">
+        <span id="skor-ben"></span>
+        <span id="skor-rakip"></span>
+        <span id="topla-ben"></span>
+        <span id="topla-rakip"></span>
+      </div>
       <aside id="table-code" hidden>
         <span data-i18n="code.label">ODA KODU</span><strong></strong>
       </aside>
