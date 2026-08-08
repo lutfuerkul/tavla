@@ -165,6 +165,10 @@ function simge(tur) {
   const yol = document.createElementNS(NS, "path");
   if (tur === "sil") {
     yol.setAttribute("d", "M8.2 5h12v14h-12L2.6 12zM11 9.4l5.2 5.2M16.2 9.4L11 14.6");
+  } else if (tur === "gonder") {
+    // Klavyelerin dönüş oku: sağda yukarı çıkan kısa bir dirsek, soldan gelen
+    // bir ok. "→" düz bir sağ oktu ve gönderme değil ilerleme demekti.
+    yol.setAttribute("d", "M20 6.4v5.2a2.4 2.4 0 0 1-2.4 2.4H5.6M9.6 10.4 5 14.2l4.6 3.8");
   } else {
     yol.setAttribute("d", "M12 3.4 4.6 11h4v6.6h6.8V11h4z");
     if (tur === "kilit") {
@@ -194,9 +198,15 @@ function altSatir() {
     yap("emoji", sayfa === "emoji" ? "ABC" : "🙂", "klavye-islev"),
     yap(" ", "", "klavye-bosluk"),
     yap(".", "."),
-    yap("gonder", "→", "klavye-islev klavye-gonder"),
+    gonderTusu(yap),
   );
   return s;
+}
+
+function gonderTusu(yap) {
+  const d = yap("gonder", "", "klavye-islev klavye-gonder");
+  d.append(simge("gonder"));
+  return d;
 }
 
 // Basma ile tutma. İkisi de aynı dokunuşla başlıyor, ayrıldıkları yer süre:

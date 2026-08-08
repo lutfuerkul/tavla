@@ -764,7 +764,8 @@ html.klavyede #controls { display: none; }
    klavyesi açılırdı — kaçındığımız şeyin tam kendisi. Metni biz tutuyoruz,
    imleci de biz çiziyoruz. */
 .klavye-yazi { flex: 1; min-height: 2.1rem; padding: .45rem .6rem;
-  font: 500 .82rem/1.3 "DM Mono", monospace; color: #fdf8ee; word-break: break-word;
+  font: 400 .95rem/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #fdf8ee; word-break: break-word;
   background: rgba(20,15,10,.72); border: 1px solid rgba(229,173,84,.28);
   border-radius: .4rem; }
 .klavye-yazi.bos::after { content: "|"; color: #e5ad54;
@@ -782,27 +783,36 @@ html.klavyede #controls { display: none; }
    açıyor, ve bir klavyede yazılan şeyin tuşta yazandan başka görünmesi, o
    klavyenin yalan söylemesidir. Gölge de yok — kırk tuşun her birinin altında
    bir gölge, tuş değil kabartma oluyor. */
+/* Yazı tipi tahtanınki değil klavyenin kendisi. Oyunun her yerinde daralmış
+   bir daktilo yazısı var ve orada doğru: sayılar hizalanıyor, etiketler
+   birbirinin altına düşüyor. Ama bir klavyede harfin işi okunmak değil
+   tanınmak — parmak inerken göz harfi bir bakışta bulmalı, ve o iş için
+   telefonun kendi yazısı hepsinden iyi, çünkü kullanıcının bütün gün baktığı
+   klavye zaten onunla yazılmış. */
 .klavye-tus { flex: 1 1 0; min-width: 0; height: 2.5rem; padding: 0;
   position: relative; text-transform: none; letter-spacing: 0; box-shadow: none;
-  font: 500 1rem/1 "DM Mono", monospace; color: #f3ead7;
+  font: 400 1.2rem/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #f3ead7;
   background: rgba(34,25,16,.94); border: 1px solid rgba(229,173,84,.14);
   border-radius: .35rem; cursor: pointer;
   transition: background .08s ease, color .08s ease; }
 .klavye-tus:hover { background: rgba(48,36,22,.94); }
 /* Tuşun altında saklanan harf, tuşun üstünde. */
-.klavye-tus sup { position: absolute; top: .18rem; right: .28rem;
-  font-size: .58rem; line-height: 1; color: #8d7d64; }
+.klavye-tus sup { position: absolute; top: .16rem; right: .3rem;
+  font-size: .62rem; line-height: 1; color: #8d7d64; }
 .klavye-tus.basili sup { color: rgba(13,10,6,.6); }
 .klavye-simge { width: 1.15rem; height: 1.15rem; fill: none;
   stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round;
   stroke-linecap: round; pointer-events: none; }
 .klavye-tus.basili { background: #e5ad54; color: #0d0a06; border-color: #e5ad54; }
 .klavye-genis { flex: 1.5 1 0; }
-.klavye-islev { color: #ad9470; background: rgba(18,13,9,.9); font-size: .78rem; }
+.klavye-islev { color: #ad9470; background: rgba(18,13,9,.9); font-size: .82rem;
+  letter-spacing: .02em; }
 .klavye-islev.acik { color: #e5ad54; border-color: rgba(229,173,84,.5); }
 .klavye-bosluk { flex: 4.6 1 0; }
 .klavye-gonder { flex: 1.6 1 0; color: #0d0a06; background: #6fbf73;
-  border-color: #6fbf73; font-size: 1.05rem; }
+  border-color: #6fbf73; }
+.klavye-gonder .klavye-simge { width: 1.35rem; height: 1.35rem; stroke-width: 1.9; }
 
 /* Basılı tutunca çıkan sıra. Tuşun üstünde duruyor, çünkü parmağın altındaki
    şey görünmüyor. */
@@ -812,7 +822,8 @@ html.klavyede #controls { display: none; }
   border-radius: .4rem; box-shadow: 0 6px 18px rgba(0,0,0,.55); }
 .klavye-sira span { display: grid; place-items: center;
   min-width: 2.1rem; height: 2.3rem; border-radius: .3rem;
-  font: 500 1.05rem/1 "DM Mono", monospace; color: #f3ead7; }
+  font: 400 1.25rem/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #f3ead7; }
 .klavye-sira span.secili { background: #e5ad54; color: #0d0a06; }
 #intro:not(.hidden) ~ #rail #chat { display: none; }
 
