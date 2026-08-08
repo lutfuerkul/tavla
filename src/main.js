@@ -6111,12 +6111,16 @@ function animate(now) {
   requestAnimationFrame(animate);
   try {
     const dt = Math.min(clock.getDelta(), .25);
-    // Avuçtaki ses, avuçta bir şey olduğu sürece. Her karede sorulup her karede
+    // Avuçtaki ses, avuçta bir çift olduğu sürece. Her karede sorulup her karede
     // söyleniyor — açan ve kapatan yerleri tek tek işaretlemek yerine, çünkü
     // zarların ele girdiği iki, elden çıktığı dört yer var ve bunlardan birini
     // atlamak sesi masanın üstünde çalar hâlde bırakmak demek. Sorulan şey
     // durumun kendisi, ve iki kez açmak ya da iki kez kapatmak bir şey yapmıyor.
-    sallamaSesi(!!heldDice);
+    //
+    // Tek zar hariç: açılışta avuçta bir tane var, ve kayıttan kırpılan ses iki
+    // zarın birbirine çarpmasının sesi — tek zarda duyulacak şey o değil. Açılış
+    // olduğu gibi kalıyor.
+    sallamaSesi(!!heldDice && heldDice.entries.length > 1);
     // Before the shake, so what is drawn is the shake and not the last frame of
     // whatever the search was trying.
     stepSearch(dt);
