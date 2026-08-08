@@ -374,23 +374,9 @@ body.ideographic #hud span, body.ideographic #hud strong {
 
 #start:not(:disabled):hover { background: #f0bd68; }
 
-/* Ana ekrana ekleme, "Oyuna başla"nın altında. Bilerek sessiz: ana iş kapıdan
-   geçmek, bu ise bir kere yapılıp bir daha görülmeyecek bir şey. Dolu altın
-   yerine ince bir çerçeve, ve bir tık küçük — aynı boyda iki düğme yan yana
-   durunca hangisinin asıl olduğu belirsizleşiyor. */
-#install { display: block; margin: .7rem auto 0; padding: .5rem 1.3rem;
-  font: 500 .68rem/1 "DM Mono", monospace; letter-spacing: .12em;
-  text-transform: uppercase; color: #d3bd93; background: transparent;
-  border: 1px solid rgba(231,182,102,.42); border-radius: .4rem;
-  cursor: pointer; transition: color .2s ease, border-color .2s ease, background .2s ease; }
-#install:hover { color: #f6ecd6; border-color: rgba(229,173,84,.8);
-  background: rgba(36,26,16,.7); }
-#install[hidden] { display: none; }
-
 /* The iPhone home-screen hint, under the door. Quiet: a thin gold outline and a
    dimmed line, the share glyph picked out so the eye lands on the control the
-   words name. iPhone'da düğmenin arkasında duruyor: kapıyı açılır açılmaz bir
-   cümleyle karşılamak yerine, isteyen basıp okuyor. */
+   words name. Only ever built on an iPhone that has not been added yet. */
 #ios-tip { display: flex; align-items: center; gap: .5rem; margin: .9rem auto 0;
   max-width: 22rem; padding: .5rem .7rem; border: 1px solid rgba(231,182,102,.38);
   border-radius: .4rem; background: rgba(36,26,16,.5); color: #d3bd93;
@@ -741,13 +727,7 @@ html.evde #rotate { display: none; }
      Okunacak üç şey var ve üçü de kısa; asıl genişliği yaratan, üstlerindeki
      harf aralıklı etiketlerdi. */
   html:fullscreen #hud div, html:-webkit-full-screen #hud div, html.evde #hud div {
-    min-width: 4.8rem; max-width: 5.6rem; padding: .38rem .5rem; }
-  html:fullscreen #hud span, html:-webkit-full-screen #hud span, html.evde #hud span {
-    font-size: .48rem; letter-spacing: .1em; margin-bottom: .2rem; }
-  html:fullscreen #hud strong, html:-webkit-full-screen #hud strong, html.evde #hud strong {
-    font-size: .64rem; letter-spacing: .03em; }
-  html:fullscreen #hud small, html:-webkit-full-screen #hud small, html.evde #hud small {
-    font-size: .54rem; min-height: .8rem; margin-top: .2rem; }
+    min-width: 4.8rem; max-width: 6.2rem; padding: .45rem .6rem; }
   html:fullscreen #controls, html:-webkit-full-screen #controls, html.evde #controls {
     top: 50%; bottom: auto; left: auto; right: .5rem;
     width: auto; padding: 0; flex-wrap: nowrap;
@@ -793,15 +773,10 @@ html.evde #rotate { display: none; }
   html:fullscreen #rail #player, html:-webkit-full-screen #rail #player,
   html.evde #rail #player {
     width: 5.4rem; gap: .2rem; padding: .3rem .35rem; }
-  html:fullscreen #player button, html:-webkit-full-screen #player button,
-  html.evde #player button,
-  html:fullscreen #level, html:-webkit-full-screen #level, html.evde #level {
-    min-width: 1.9rem; min-height: 1.7rem; font-size: .68rem; }
-  html:fullscreen #controls > button, html:-webkit-full-screen #controls > button,
-  html.evde #controls > button,
-  html:fullscreen #rail > button, html:-webkit-full-screen #rail > button,
-  html.evde #rail > button {
-    padding: .35rem .5rem; font-size: .58rem; letter-spacing: .06em; }
+  /* Tuşlar küçülmüyor. İlk hâlinde küçülüyorlardı ve fazla kaçtı: yerin
+     tamamını zaten iki sıraya dönmek kazandırıyor — iki yüz kırk dörtten yüz
+     yirmi yediye — üstüne bir de tuşları kısmak, kazanılmış yeri geri vermeden
+     basılabilirlikten çalmak oluyordu. Parmak, yattığı için küçülmüyor. */
   html:fullscreen #table-code, html:-webkit-full-screen #table-code,
   html.evde #table-code {
     top: .5rem; right: .5rem; }
