@@ -1027,5 +1027,28 @@ html.evde #rotate { display: none; }
    boş ve elin altında; yatarken orası tahtanın kendisi — yer sağ sütunun
    üstünde kalıyor, ve o köşe zaten hiçbir şeyin durmadığı tek köşe. */
 @media (orientation: landscape) and (pointer: coarse) {
-  #mute { top: .35rem; bottom: auto; right: .35rem; }
+  /* Kenardan biraz içeride: altındaki sütun kenara yaslanmıyor, ve tek başına
+     dışarıda duran bir kutu o sütunun parçası gibi okunmuyor. */
+  #mute { top: .35rem; bottom: auto; right: 1.1rem; }
+  /* Ve sütun anahtarın altından biraz aşağı. İkisi aynı kenarda ve anahtar
+     üstte duruyor; aralarında nefes olmayınca sütunun ilk düğmesi anahtarın
+     devamı gibi okunuyordu. */
+  html:fullscreen #controls, html:-webkit-full-screen #controls, html.evde #controls {
+    top: calc(50% - var(--sira-boy, 0px) / 2 + .8rem); }
+}
+
+/* Dikeyde anahtar çaların yanında. Alt sıradaki yazılı düğmeler sabit durmuyor
+   — kameraya, dile, tam ekran olup olmamaya göre satırları yeniden sarıyorlar —
+   ve bir köşe düğmesini onlardan birine hizalamak, her seferinde başka bir yere
+   hizalamak oluyordu. Çalar ise her zaman en alttaki satır ve tek başına.
+
+   İkisi bir arada ortalanıyor: çalar kendi payı kadar sola kayıyor, anahtar da
+   onun sağ kenarından bir boşluk sonra başlıyor. Yer ekranın kenarından değil
+   çaların ölçüsünden çıkıyor, o yüzden dil ya da ekran değişince hiza bozulmuyor. */
+@media (orientation: portrait) {
+  html.dar #controls #player { transform: translateX(calc((2.1rem + .7rem) / -2)); }
+  html.dar #mute {
+    right: auto; left: calc(50% + (var(--calar-en, 15rem) + .7rem - 2.1rem) / 2);
+    bottom: calc(.45rem + (var(--calar-boy, 2rem) - 2.1rem) / 2); }
+}
 }
