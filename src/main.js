@@ -415,6 +415,11 @@ scene.environmentIntensity = BOARD.room.env;
 function sitDown() {
   intro.classList.add("hidden");
   hud.classList.add("visible");
+  // Tahtaya yazılanlar kapı kapanmadan yazılamıyor — kapıdayken gizleniyorlar,
+  // ve bu işlevden sonra panel bir daha yazılmayabiliyor: oyun kurulur kurulmaz
+  // değişen bir şey yoksa updateHud'un çağrılacağı bir an gelmiyor ve köşeler
+  // ilk zar atılana kadar boş kalıyordu. Kapı kapandığı an isteniyor.
+  tahtaYazilari();
   // Asked for here rather than only from the button, because the button is not
   // always the way in: changing any of the table settings saves them and loads
   // the page again, and the game sits down by itself on the way back. Asked
@@ -2999,37 +3004,69 @@ function keyFor(colour, place) {
 // out past the ends is a pile off the screen. In the hand they come off
 // towards the players instead — yours over the near rail and theirs over the
 // far one, which is also the direction the hand is already carrying them.
-const OFF_TO_THE_SIDE = !HANDHELD;
+// Yatan bir telefon ya da tablet, bu iş bakımından bir masaüstü: geniş ve
+// alçak, yani tahtanın yanında yer var. Sabit değil işlev, çünkü ekran
+// oyunun ortasında da çevrilebiliyor.
+const offToTheSide = () => !HANDHELD || innerWidth > innerHeight;
 
 // Whose rail is whose, when they come off towards the players: the near one is
 // yours whoever you are, and two people round one tablet sit either side of it.
 const offEdge = colour => (colour === HUMAN ? -AWAY : AWAY);
 
-// How many go in a row out there before the next one starts. Five is a hand
-// of them: a glance counts a row of five without counting, and three rows is
-// the whole game.
-const OFF_IN_A_ROW = 5;
+// Beşerlik bloklar hâlinde, üç blok. Beş, sayılmadan görülen bir sayıdır — bir
+// el kadar — ve üç blok bütün oyundur. Tek bir on beşlik kule ne kaçının
+// çıktığını söylüyor ne de yandan sayılabiliyor; üç kule, doluluğuna bakılan
+// üç kutudur.
+const OFF_IN_A_BLOCK = 5;
+const OFF_BLOCKS = 3;
+
+// Bir bloğun yüksekliği, taş kalınlığı artı aralarındaki ince pay.
+const OFF_STEP = CHECKER_H + .004;
+
+// Blokların dizildiği eksende bir bloktan ötekine.
+const OFF_GAP = CHECKER_D * 1.25;
+
+// n'inci taş nereye oturuyor: kaçıncı blok, o blokta kaçıncı kat.
+const offBlock = standing => ({
+  blok: Math.min(OFF_BLOCKS - 1, Math.floor(standing / OFF_IN_A_BLOCK)),
+  kat: standing % OFF_IN_A_BLOCK,
+});
+
+// Toplama tepsisinin ekseni boyunca bir bloğun ortası, ortadan sapma olarak.
+const offSpread = blok => (blok - (OFF_BLOCKS - 1) / 2) * OFF_GAP;
 
 // Where the nth checker of a colour sits once it is off.
 function offSeat(colour, standing = 0) {
-  if (OFF_TO_THE_SIDE) {
+  const { blok, kat } = offBlock(standing);
+  if (offToTheSide()) {
+    // Yana çıkanlar: bloklar tahtanın boyunca dizilir, kat yukarı gider.
     return {
       x: MIRROR * (CASE_HALF_X + 1.75),
-      y: FELT_Y + standing * (CHECKER_H + .004),
-      z: colour === "black" ? FIELD_HALF * .55 : -FIELD_HALF * .55,
+      y: FELT_Y + kat * OFF_STEP,
+      z: (colour === "black" ? 1 : -1) * FIELD_HALF * .55 + offSpread(blok) * (colour === "black" ? 1 : -1),
     };
   }
-  // Laid out flat rather than piled up, in rows of five. The board is being
-  // looked straight down at here, and from up there a pile of fifteen is one
-  // checker and a long shadow. Five is what a glance counts without counting —
-  // three full rows is the game — and each row sits further out from the rail
-  // than the last, clear of the board rather than against it.
-  const row = Math.floor(standing / OFF_IN_A_ROW), place = standing % OFF_IN_A_ROW;
+  // Dik tutulurken oyuncuya doğru çıkıyorlar — seninkiler yakın raydan,
+  // rakibinkiler uzaktan, ki el zaten o yöne taşıyor. Bloklar rayın boyunca
+  // yan yana, kat yukarı.
   return {
-    x: MIRROR * (FIELD_HALF_X * .55 + (place - (OFF_IN_A_ROW - 1) / 2) * CHECKER_D * 1.15),
-    y: FELT_Y,
-    z: offEdge(colour) * (CASE_HALF_Z + 1 + row * CHECKER_D * 1.2),
+    x: MIRROR * (FIELD_HALF_X * .55 + offSpread(blok)),
+    y: FELT_Y + kat * OFF_STEP,
+    z: offEdge(colour) * (CASE_HALF_Z + 1.4),
   };
+}
+
+// Sayının duracağı yer: blokların en dışı, taşların çıktığı yöne göre. Sağa
+// toplanıyorsa blokların sağında, sola toplanıyorsa solunda — okuyan gözün
+// zaten gittiği taraf.
+function offCountAt(colour) {
+  const dis = OFF_BLOCKS - 1;
+  const uc = offSeat(colour, dis * OFF_IN_A_BLOCK);
+  if (offToTheSide()) {
+    const yon = colour === "black" ? 1 : -1;
+    return { x: uc.x, y: FELT_Y + OFF_STEP * 2, z: uc.z + yon * OFF_GAP * 1.15 };
+  }
+  return { x: uc.x + MIRROR * OFF_GAP * 1.15, y: FELT_Y + OFF_STEP * 2, z: uc.z };
 }
 
 const piecesGroup = new THREE.Group();
@@ -3383,7 +3420,7 @@ function seatOfMove(colour, move) {
     // side on a desktop, towards whoever is playing it in the hand.
     return {
       fromKey, from,
-      to: OFF_TO_THE_SIDE
+      to: offToTheSide()
         ? { x: MIRROR * (FIELD_HALF_X + 1.4), y: CASE_TOP, z: from.z }
         : { x: from.x, y: CASE_TOP, z: offEdge(colour) * (FIELD_HALF_Z + 1) },
     };
@@ -4638,6 +4675,7 @@ function updateHud() {
   // are written before any of the branches below get a chance to return.
   if (score) score.textContent = scoreLine();
   if (viewButton) viewButton.textContent = t(overhead() ? "view.seat" : "view.top");
+  tahtaYazilari();
   // Said on the root so the stylesheet can answer it. Overhead the board is
   // taller on the screen than it is from the chair — it fills the window top to
   // bottom — and the panel across the top was landing on the far rail. It goes
@@ -5347,7 +5385,7 @@ addEventListener("pointerup", (e) => {
     // the same side of the board, and which side of the screen that is depends
     // on which colour is being played. In the hand it is the near rail, the
     // one the checkers are being carried towards anyway.
-    const past = OFF_TO_THE_SIDE
+    const past = offToTheSide()
       ? hit.x * MIRROR > FIELD_HALF_X
       : hit.z * offEdge(game.turn) > FIELD_HALF_Z;
     if (past) {
@@ -5669,10 +5707,99 @@ function fitCamera() {
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld(true);
   }
+  // Kamera oturdu: tahtaya yazılanlar da yerine.
+  tahtaYazilari();
 }
 
 fitCamera();
 
+// Tahtaya yazılanlar: köşelerdeki skor ve toplama tepsilerinin sayısı.
+//
+// Bunlar ekranın bir yerinde değil, tahtanın bir yerinde duruyorlar. Panel
+// ekrana çakılı ve nereye baksan orada; skor ise oyunun kendi nesnesine ait —
+// bu köşe senin, şu köşe rakibinin — ve kamera döndüğünde onunla dönmesi
+// gerekiyor. O yüzden yerleri sahnedeki noktalardan hesaplanıyor.
+//
+// Sahneye 3B yazı koymak yerine noktayı ekrana yansıtıp yazıyı sayfada yazmak:
+// yazı keskin kalıyor ve sayfanın kendi yazı tipiyle oluyor. Bedeli, kameranın
+// değiştiği her anda yeniden hesaplanması — ve o anlar sayılı, çünkü çizim
+// isteğe bağlı: kamera oturduğunda, görünüm değiştiğinde, pencere
+// boyutlandığında.
+// Elemanlar her seferinde soruluyor, bir const'ta tutulmuyor: bu işlev
+// updateHud'dan da çağrılıyor ve o, buraya gelinmeden önce bir kez koşuyor.
+// Tanımlanmamış bir const'a dokunmak hata fırlatır ve modülün geri kalanı hiç
+// çalışmazdı — rayı ölçen işlev de aynı sebeple böyle yazılmıştı.
+// Bir dünya noktası ekranın neresine düşüyor. Vektör her çağrıda yeniden
+// kuruluyor: bir modül sabitinde tutmak, bu işleve fitCamera'nın ilk
+// çağrısından — yani o sabit daha tanımlanmadan — ulaşıldığı için hata
+// fırlatırdı. Kamera değişiminde dört beş kez çağrılan bir işlev için bir
+// vektörün maliyeti sayılmaz.
+function ekranda(nokta) {
+  const y = new THREE.Vector3(nokta.x, nokta.y, nokta.z).project(camera);
+  return {
+    x: (y.x * .5 + .5) * innerWidth,
+    y: (-y.y * .5 + .5) * innerHeight,
+    onde: y.z < 1,
+  };
+}
+
+function yerlestir(el, nokta, goster) {
+  if (!el) return;
+  if (!goster) { el.hidden = true; return; }
+  const p = ekranda(nokta);
+  el.hidden = !p.onde;
+  el.style.left = `${Math.round(p.x)}px`;
+  el.style.top = `${Math.round(p.y)}px`;
+}
+
+// Köşeler ekranda nerede duruyorsa orada. Hangi dünya köşesinin ekranın sağ
+// altına düştüğü kameraya, aynaya ve ekranın yönüne göre değişiyor — dördünü
+// de yansıtıp yerlerinden seçmek, o üç şeyi ayrı ayrı bilmekten hem kısa hem
+// de her zaman doğru.
+//
+// Dik tutulurken kasanın dış köşeleri, yatarken içi: yatarken tahta ekranı
+// boydan boya kaplıyor ve dış köşe kenarın dibine düşüyor.
+function skorKoseleri() {
+  const yx = offToTheSide() ? FIELD_HALF_X : CASE_HALF_X;
+  const yz = offToTheSide() ? FIELD_HALF_Z : CASE_HALF_Z;
+  const koseler = [];
+  for (const x of [-yx, yx]) for (const z of [-yz, yz])
+    koseler.push({ nokta: { x, y: FELT_Y, z }, e: ekranda({ x, y: FELT_Y, z }) });
+  koseler.sort((a, b) => a.e.y - b.e.y);
+  const ust = koseler.slice(0, 2).sort((a, b) => b.e.x - a.e.x)[0];
+  const alt = koseler.slice(2).sort((a, b) => b.e.x - a.e.x)[0];
+  return { ust: ust.nokta, alt: alt.nokta };
+}
+
+function kendiAdi() { return mode === "hotseat" ? t("kose.bir") : t("kose.sen"); }
+function oburAdi() { return mode === "hotseat" ? t("kose.iki") : t("kose.rakip"); }
+
+function tahtaYazilari() {
+  const skorBen = document.querySelector("#skor-ben");
+  const skorRakip = document.querySelector("#skor-rakip");
+  const toplaBen = document.querySelector("#topla-ben");
+  const toplaRakip = document.querySelector("#topla-rakip");
+  const kapali = !intro || !intro.classList.contains("hidden");
+  if (kapali) {
+    for (const el of [skorBen, skorRakip, toplaBen, toplaRakip]) if (el) el.hidden = true;
+    return;
+  }
+  const { ust, alt } = skorKoseleri();
+  if (skorBen) skorBen.textContent = `${kendiAdi()} ${match[HUMAN]}`;
+  if (skorRakip) skorRakip.textContent = `${oburAdi()} ${match[COMPUTER]}`;
+  yerlestir(skorBen, alt, true);
+  yerlestir(skorRakip, ust, true);
+
+  // Toplananların sayısı, yalnız toplanmış bir şey varken: sıfırın yanında
+  // duracak bir sayı yok.
+  for (const [el, colour] of [[toplaBen, HUMAN], [toplaRakip, COMPUTER]]) {
+    const kac = game.pos?.off?.[colour] ?? 0;
+    if (el) el.textContent = String(kac);
+    yerlestir(el, offCountAt(colour), kac > 0);
+  }
+}
+
+tahtaYazilari();
 
 // A readout, for a phone that cannot be plugged into anything. Off unless it is
 // asked for by name in the address — ?fps — because it is an instrument and not
