@@ -105,14 +105,27 @@ html.tepe:not(.dar) #hud div { min-width: 7.6rem; padding: .55rem .75rem; }
    yok — çerçeve, zemin, soldaki altın çizgi, gölge, hiçbiri. Tahtanın üstünde
    duran bir yazı, üstüne konmuş bir kutu değil.
    Büyük harfe çevrilmiyor: "Sen 0", "Rakip 0". */
+/* Ağırlığı da panelin: orada yazı bir <strong> içinde duruyor, yani kalın.
+   Ölçü baştan beri aynıydı (.72rem) ama 500 ağırlıkla yazılınca yanındakinden
+   küçük görünüyordu — büyüklük farkı değil, kalınlık farkıydı. */
 #tahta-yazi > span { position: fixed; z-index: 1; pointer-events: none;
-  font: 500 .72rem/1 "DM Mono", monospace; letter-spacing: .06em;
+  font: 700 .72rem/1 "DM Mono", monospace; letter-spacing: .06em;
   color: #eee3ce; white-space: nowrap; }
 #tahta-yazi > span[hidden] { display: none; }
-/* Köşeye oturuyorlar, köşenin üstüne binmiyorlar: sağ köşedeki yazı sola
-   doğru uzuyor, alttaki yukarı, üstteki aşağı. */
-#skor-ben { transform: translate(-100%, -100%); margin: -.4rem 0 0 -.4rem; }
-#skor-rakip { transform: translate(-100%, 0); margin: .4rem 0 0 -.4rem; }
+/* Çapa kasanın köşesi. Dik tutulurken yazı köşenin solunda bitiyor — sonu
+   köşeye denk geliyor — ve tahtanın üstünde ya da altında duruyor. Yatarken
+   köşeden başlayıp dışarı doğru uzuyor, ve köşeyle dikeyde ortalanıyor. */
+/* Ve tahtaya değmiyorlar: köşeye denk gelmek, köşenin üstüne oturmak değil.
+   Rakibin sayısı kasanın üst kenarına bitişik duruyordu. */
+#skor-ben { transform: translate(-100%, 0); margin-top: .3rem; }
+#skor-rakip { transform: translate(-100%, -100%); margin-top: -.3rem; }
+#tahta-yazi.yana #skor-ben,
+#tahta-yazi.yana #skor-rakip { transform: translate(0, -50%);
+  margin-top: 0; margin-left: .35rem; }
+/* Yatarken alttaki köşe ekranın dibine çok yakın düşüyor: tahta yüksekliğine
+   sığdırıldığı için orada payı bitiyor ve rakam kenara sıkışıyor. Bir tık
+   yukarı. */
+#tahta-yazi.yana #skor-ben { margin-top: -.7rem; }
 #topla-ben, #topla-rakip { transform: translate(-50%, -50%); }
 #crosshair { position: fixed; z-index: 1; top: 50%; left: 50%; width: 8px; height: 8px; margin: -4px; border: 1px solid rgba(247,235,207,.8); border-radius: 50%; opacity: 0; transition: opacity .35s; }
 #crosshair.visible { opacity: .8; }
