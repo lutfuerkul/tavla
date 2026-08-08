@@ -198,8 +198,16 @@ const wake = () => { needsFrame = true; };
 const HEARTBEAT_MS = 500;
 let lastDrawn = 0;
 
-const VIEW_KEY = "tavla.kamera";
-let chosenView = localStorage.getItem(VIEW_KEY);
+// Kamera seçimi bir oyun kadar yaşıyor, daha fazla değil.
+//
+// Depoya yazılıyordu ve kalıcıydı: bir kez tepeden bakan için varsayılan bir
+// daha hiç devreye girmiyor, bütün oyunlar oradan açılıyordu. Oysa hatırlanmaya
+// değer olan şey o oyunun içindeki tercih — bir hamleyi yukarıdan görüp sonra
+// koltuğa dönmek — bir sonraki oyunun nereden açılacağı değil. Saklamayı
+// bırakmak, her yeni oyunun varsayılanla açılması demek; ve yeni oyunun
+// başladığı her yol ya sayfayı baştan kuruyor ya da aşağıdaki sıfırlamadan
+// geçiyor.
+let chosenView = null;
 // Where the camera starts, until somebody says otherwise. The seat — the FPS
 // view — is what the game opens on now, on a phone as much as a desktop: it is
 // the view the board was lit for. The one exception is two people round one
@@ -412,9 +420,29 @@ scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).textur
 // full strength it lights the whole board and flattens every material.
 scene.environmentIntensity = BOARD.room.env;
 
+// Her yeni oyun varsayılan kamerayla açılıyor.
+//
+// Seçim hatırlanıyordu ve kalıcıydı: bir kez tepeden bakan için varsayılan bir
+// daha hiç devreye girmiyor, bütün oyunlar oradan açılıyordu. Oysa hatırlanmaya
+// değer olan şey o oyunun içindeki tercih — bir hamleyi yukarıdan görmek isteyip
+// sonra koltuğa dönmek — bir sonraki oyunun nereden açılacağı değil.
+//
+// Varsayılan kipe göre: tek kişilik ve çevrimiçide koltuk, yani tahtanın
+// aydınlatıldığı bakış. İki kişi aynı cihazda karşılıklı oturuyor ve bir
+// koltuktan bakış öbürü için baş aşağı, orası tepeden açılıyor.
+function kamerayiVarsayana() {
+  chosenView = null;
+  // Kök sınıfı da burada. Onu yazan yer panel (updateHud) ve o, kameranın
+  // sıfırlandığı andan sonra çağrılmayabiliyor: kamera koltuğa dönüyor ama
+  // sayfa hâlâ tepe düzenini giyiyordu — panel yanda, oysa bakış karşıdan.
+  document.documentElement.classList.toggle("tepe", overhead());
+}
+
 function sitDown() {
   intro.classList.add("hidden");
   hud.classList.add("visible");
+  kamerayiVarsayana();
+  fitCamera();
   // Tahtaya yazılanlar kapı kapanmadan yazılamıyor — kapıdayken gizleniyorlar,
   // ve bu işlevden sonra panel bir daha yazılmayabiliyor: oyun kurulur kurulmaz
   // değişen bir şey yoksa updateHud'un çağrılacağı bir an gelmiyor ve köşeler
@@ -1088,6 +1116,11 @@ hostButton?.addEventListener("click", async () => {
   // kaplıyor hem de hangi işi iptal ettiği yazmıyordu.
   if (openRoom || suregelen === "host") return void dropRoom();
   kapiyiTopla("host");
+  // Ve beklerken bir söz. Satır basar basmaz tek bir "Vazgeç"e toplanıyor;
+  // kod gelene kadar yanında hiçbir şey olmayınca, uykudan uyanan bir sunucuyu
+  // bekleyen o birkaç saniye çalışıyor gibi değil takılmış gibi duruyordu.
+  // Katıl'da bu söz zaten vardı.
+  say("lobby.making");
   try {
     const room = await ask("odaKur", { colour: "black" });
     openRoom = room.code;
@@ -4403,6 +4436,9 @@ function leaveTable() {
 // bayat durum sızdırır, ve en sinsisi görünmeyenler: kapanmamış bir dinleyici,
 // tarihe konmuş fazla bir adım, elde kalmış bir taş.
 function kapiyaDon() {
+  // Kamera da varsayılana: kapının arkasında duran tahta, oyuna girildiğinde
+  // görülecek bakışla dursun.
+  kamerayiVarsayana();
   // Görünmeyenler önce.
   masaninDinleyicisi?.();
   masaninDinleyicisi = null;
@@ -4572,6 +4608,8 @@ function nextGame() {
   const took = matchWinner();
   const starter = took ? null : (game.over?.winner ?? null);
   if (took) match = { ivory: 0, black: 0 };
+  kamerayiVarsayana();
+  fitCamera();
   resetState(starter);
   resetDice();
   renderPieces();
@@ -4693,11 +4731,14 @@ new ResizeObserver(measureControls).observe(document.querySelector("#controls") 
 placeButtons();
 measureRail();
 measureControls();
+// Düzen kararı verildi: düğmeler artık gösterilebilir. Bundan önce görünmez
+// duruyorlar, çünkü sayfa betikten önce boyanıyor ve o boyamada ray masaüstü
+// yerinde — telefonda yanlış yer.
+document.documentElement.classList.add("yerlesti");
 addEventListener("resize", () => { placeButtons(); measureRail(); measureControls(); });
 
 viewButton?.addEventListener("click", () => {
   chosenView = overhead() ? "koltuk" : "tepe";
-  localStorage.setItem(VIEW_KEY, chosenView);
   fitCamera();
   nudgeCanvas();
   updateHud();
@@ -5838,63 +5879,21 @@ function yerlestir(el, nokta, goster) {
 // de yansıtıp yerlerinden seçmek, o üç şeyi ayrı ayrı bilmekten hem kısa hem
 // de her zaman doğru.
 //
-// Kasanın DIŞINDA, örtünün üstünde. İçeride dururken taşların ve ahşabın
-// üstüne denk geliyordu: kutusu ve gölgesi olmayan bir yazı, arkasında fildişi
-// bir taş varken okunmuyor. Örtü düz bir renk, ve orada okunuyor.
-//
-// Ama dışarısı her yönde aynı miktarda değil, ve hangi yönde olduğu ekranın
-// hangi yöne durduğuna bağlı. Tahta pencereye kısa kenarından sığdırılıyor:
-// dik tutulurken genişliğine sığıyor ve boş örtü üstte ile altta kalıyor,
-// yatarken yüksekliğine sığıyor ve boşluk yanlara geçiyor. Dört köşeyi de
-// kasanın dışına almak, ilk denemede tam bunu gözden kaçırdı — dikeyde iki
-// yazının biri ekranın kenarında kesildi, öbürü hiç görünmedi.
-//
-// O yüzden dışarı çıkış yalnızca yer olan eksende: dikeyde raydan öteye,
-// yatarken yan duvardan öteye. Öbür eksende kasanın içinde kalıyor ki yazı
-// tahtanın sağ yarısında dursun.
-// Çapa kasanın kendi köşesi; dışarı çıkış yalnızca yer olan eksende ve az.
-// Dik tutulurken yazı köşenin solunda bitiyor, yatarken köşeden başlayıp
-// dışarı doğru uzuyor — hangisinin olduğunu sayfaya `yana` sınıfıyla söylüyor.
-const SKOR_PAYI = .3;
-function skorKoseleri() {
-  const yana = offToTheSide();
-  const yx = CASE_HALF_X + (yana ? SKOR_PAYI : 0);
-  const yz = CASE_HALF_Z + (yana ? 0 : SKOR_PAYI);
-  const koseler = [];
-  for (const x of [-yx, yx]) for (const z of [-yz, yz])
-    koseler.push({ nokta: { x, y: FELT_Y, z }, e: ekranda({ x, y: FELT_Y, z }) });
-  koseler.sort((a, b) => a.e.y - b.e.y);
-  const ust = koseler.slice(0, 2).sort((a, b) => b.e.x - a.e.x)[0];
-  const alt = koseler.slice(2).sort((a, b) => b.e.x - a.e.x)[0];
-  return { ust: ust.nokta, alt: alt.nokta, yana };
-}
-
-function kendiAdi() { return mode === "hotseat" ? t("kose.bir") : t("kose.sen"); }
-function oburAdi() { return mode === "hotseat" ? t("kose.iki") : t("kose.rakip"); }
-
 function tahtaYazilari() {
-  const skorBen = document.querySelector("#skor-ben");
-  const skorRakip = document.querySelector("#skor-rakip");
   const toplaBen = document.querySelector("#topla-ben");
   const toplaRakip = document.querySelector("#topla-rakip");
   const kapali = !intro || !intro.classList.contains("hidden");
   if (kapali) {
-    for (const el of [skorBen, skorRakip, toplaBen, toplaRakip]) if (el) el.hidden = true;
+    for (const el of [toplaBen, toplaRakip]) if (el) el.hidden = true;
     return;
   }
-  const { ust, alt, yana } = skorKoseleri();
-  document.querySelector("#tahta-yazi")?.classList.toggle("yana", yana);
-  // Adıyla. Bir aralık yalnız rakam denendi ve kaldırıldı: tahtanın üstünde ve
-  // altında duran iki tek başına sayı, ne olduklarını söylemiyorlardı — skor
-  // panelden de kalktığı için oyunu ilk açan biri onların skor olduğunu tahmin
-  // etmek zorunda kalıyordu.
-  if (skorBen) skorBen.textContent = `${kendiAdi()} ${match[HUMAN]}`;
-  if (skorRakip) skorRakip.textContent = `${oburAdi()} ${match[COMPUTER]}`;
-  yerlestir(skorBen, alt, true);
-  yerlestir(skorRakip, ust, true);
-
   // Toplananların sayısı, yalnız toplanmış bir şey varken: sıfırın yanında
   // duracak bir sayı yok.
+  //
+  // Skor bir aralık burada, tahtanın köşelerinde durdu ve panele geri döndü.
+  // Panel ekrana çakılı ve nereye baksan orada; tahtanın köşesi ise kameranın
+  // döndüğü her yerde peşinden dönüyor, ve okunacak yeri her seferinde yeniden
+  // aramak, bir daha bakmamaya benziyor.
   for (const [el, colour] of [[toplaBen, HUMAN], [toplaRakip, COMPUTER]]) {
     const kac = game.pos?.off?.[colour] ?? 0;
     if (el) el.textContent = String(kac);

@@ -31,8 +31,15 @@
             <button id="find" data-i18n="lobby.find">Rakip bul</button>
             <button id="host" data-i18n="lobby.host">Oda kur</button>
             <button id="join" data-i18n="lobby.join">Katıl</button>
+            <!-- Bir oda kodu, tarayıcının bildiği hiçbir şey değil: ne parola, ne
+                 kart, ne adres. Yine de Android'de klavyenin üstüne kendi öneri
+                 şeridini koyuyordu; autocomplete="off" tek başına dinlenmiyor.
+                 "one-time-code" ise tanıdığı bir şey ve doğru olan: beş harflik,
+                 bir kere kullanılan, saklanacak bir şey olmayan bir kod. Parola
+                 yöneticilerine de ayrıca atlaması söyleniyor. -->
             <input id="code" inputmode="latin" autocapitalize="characters"
-                   autocomplete="off" spellcheck="false" maxlength="5" placeholder="ABC12" hidden />
+                   autocomplete="one-time-code" data-1p-ignore data-lpignore="true"
+                   spellcheck="false" maxlength="5" placeholder="ABC12" hidden /> 
             <span id="code-hint" data-i18n="lobby.type" hidden>Kodu giriniz</span>
           </div>
           <div class="lobby-row said-row">
@@ -46,14 +53,13 @@
       <aside id="hud" aria-live="polite">
         <div><span data-i18n="hud.turn">SIRA</span><strong>KEMİK</strong><small id="sayac-hamle"></small></div>
         <div><span data-i18n="hud.dice">ZARLAR</span><strong>4 · 2</strong><small id="sayac-zar"></small></div>
+        <div><span data-i18n="hud.score">SKOR</span><strong>0 · 0</strong></div>
         <button id="view">Tepe kamerası</button>
       </aside>
       <!-- Tahtanın kendi köşelerine ve toplama tepsilerine yazılanlar. Bunlar
            ekranın bir yerinde durmuyor, tahtanın bir yerinde duruyorlar: yerleri
            her kamera değişiminde sahnedeki noktalardan hesaplanıyor. -->
       <div id="tahta-yazi">
-        <span id="skor-ben" role="status"></span>
-        <span id="skor-rakip" role="status"></span>
         <span id="topla-ben" aria-hidden="true"></span>
         <span id="topla-rakip" aria-hidden="true"></span>
       </div>
