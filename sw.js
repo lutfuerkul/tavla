@@ -33,6 +33,7 @@ const SHELL = [
   "./ses/kirma.mp3",
   "./ses/zar-cift.mp3",
   "./ses/zar-tek.mp3",
+  "./ses/zar-sallama.mp3",
   "./vendor/three/three.module.min.js",
   "./vendor/three/examples/jsm/environments/RoomEnvironment.js",
   "./icons/icon-192.png",

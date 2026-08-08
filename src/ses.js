@@ -21,6 +21,11 @@ const DOSYALAR = {
   kirma: ["kirma.mp3"],
   zarCift: ["zar-cift.mp3"],
   zarTek: ["zar-tek.mp3"],
+  // Zarlar avuçta dönerken. Tek olay değil bir hâl: başlıyor, sürüyor, bitiyor
+  // — o yüzden ötekiler gibi bir kere çalınmıyor, açılıp kapanıyor. Kayıttan
+  // kırpılırken sonu başıyla çaprazlandı, yani kendi üstüne dikişsiz dönüyor:
+  // el ne kadar sallarsa o kadar sürüyor ve hiçbir yerinde bir ek duyulmuyor.
+  sallama: ["zar-sallama.mp3"],
 };
 
 // Ton ve şiddetteki oynama. Küçük tutuldu: yarım perdeden fazlası aynı tahtada
@@ -33,7 +38,7 @@ const SES_OYNAMA = 0.18;
 // edecek. Seviyeler müziğin 0.85'ine göre seçildi (bkz. muzik.js), yani zar ve
 // taş onun üçte biri kadar. Kırma biraz yüksek kalıyor: duyulması gereken tek
 // olay o, çünkü oyunda bir şeyin başına gelen tek şey odur.
-const SES_SEVIYESI = { tas: 0.22, kirma: 0.34, zarCift: 0.3, zarTek: 0.3 };
+const SES_SEVIYESI = { tas: 0.22, kirma: 0.34, zarCift: 0.3, zarTek: 0.3, sallama: 0.5 };
 
 const ANAHTAR = "tavla.ses";
 
@@ -66,6 +71,7 @@ let ac = null;
 let ana = null;
 const tamponlar = new Map();
 const baslangiclar = new Map();
+const sonlar = new Map();
 const sonCalan = new Map();
 let yukleniyor = null;
 
@@ -156,6 +162,7 @@ function yukle() {
       });
       tamponlar.set(ad, tampon);
       baslangiclar.set(ad, sesinBasi(tampon));
+      sonlar.set(ad, sesinSonu(tampon));
     } catch (sebep) {
       // Bir ses gelmediyse oyun o kadarıyla sessiz oynanır; durmasına değecek
       // bir şey değil, ama bir daha denenecek.
@@ -175,6 +182,78 @@ function bitti() {
   yukleniyor = null;
   const eksik = Object.values(DOSYALAR).flat().some(ad => !tamponlar.has(ad));
   if (eksik && deneme < EN_COK_DENEME) setTimeout(yukle, YENIDEN_MS);
+}
+
+// Sesin bittiği yer. Başı gibi bu da ölçülüyor, ve aynı sebeple: mp3 kodlayıcı
+// sona da kendi sessizliğini ekliyor. Tek seferlik bir seste bunun bedeli yok
+// — kimse sonundaki sessizliği duymaz — ama dönen bir seste tam ortasına bir
+// boşluk koyuyor, ve bir avucun içinde iki buçuk saniyede bir duraklama, o
+// avucun durduğu anlamına geliyor.
+function sesinSonu(tampon) {
+  const d = tampon.getChannelData(0);
+  let tepe = 0;
+  for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > tepe) tepe = v; }
+  const esik = tepe * 0.005;
+  for (let i = d.length - 1; i >= 0; i--) if (Math.abs(d[i]) > esik) {
+    return Math.min(tampon.duration, (i + tampon.sampleRate / 1000) / tampon.sampleRate);
+  }
+  return tampon.duration;
+}
+
+// Sallama: açılıp kapanan tek bir kaynak. Sert başlayıp sert kesilmiyor —
+// avuç açılırken ses de açılıyor, zarlar elden çıkarken kapanıyor. Kırk
+// milisaniye: duyulmayacak kadar kısa, tık çıkarmayacak kadar uzun.
+const SALLAMA_AC_MS = 60;
+const SALLAMA_KAPAT_MS = 130;
+let sallamaKaynagi = null;
+let sallamaKazanci = null;
+
+export function sallama(acikMi) {
+  if (acikMi) sallamayiBaslat(); else sallamayiDurdur();
+}
+
+function sallamayiBaslat() {
+  if (!acik || sallamaKaynagi) return;
+  if (!ac) uyandir();
+  if (!ac || !ana) return;
+  if (ac.state === "suspended") ac.resume().catch(() => {});
+  const ad = DOSYALAR.sallama[0];
+  const tampon = tamponlar.get(ad);
+  // Henüz çözülmediyse sessizce geçiliyor; bir sonraki atışta hazır olur.
+  if (!tampon) { yukle(); return; }
+  try {
+    const kaynak = ac.createBufferSource();
+    kaynak.buffer = tampon;
+    kaynak.loop = true;
+    // Kodlayıcının başa ve sona eklediği sessizlik döngünün dışında bırakılıyor.
+    kaynak.loopStart = baslangiclar.get(ad) ?? 0;
+    kaynak.loopEnd = sonlar.get(ad) ?? tampon.duration;
+    const kazanc = ac.createGain();
+    kazanc.gain.value = 0;
+    kazanc.gain.linearRampToValueAtTime(SES_SEVIYESI.sallama,
+      ac.currentTime + SALLAMA_AC_MS / 1000);
+    kaynak.connect(kazanc);
+    kazanc.connect(ana);
+    kaynak.start(ac.currentTime, kaynak.loopStart);
+    sallamaKaynagi = kaynak;
+    sallamaKazanci = kazanc;
+  } catch (sebep) {
+    console.info("tavla: sallama çalınamadı —", sebep?.message ?? sebep);
+  }
+}
+
+function sallamayiDurdur() {
+  if (!sallamaKaynagi) return;
+  const kaynak = sallamaKaynagi, kazanc = sallamaKazanci;
+  sallamaKaynagi = null;
+  sallamaKazanci = null;
+  try {
+    const bitis = ac.currentTime + SALLAMA_KAPAT_MS / 1000;
+    kazanc.gain.cancelScheduledValues(ac.currentTime);
+    kazanc.gain.setValueAtTime(kazanc.gain.value, ac.currentTime);
+    kazanc.gain.linearRampToValueAtTime(0, bitis);
+    kaynak.stop(bitis + 0.01);
+  } catch { /* zaten durmuş olabilir */ }
 }
 
 // Aynı sesi arka arkaya iki kez çalma: beş dosya arasından rastgele seçerken
