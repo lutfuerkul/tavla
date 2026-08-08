@@ -493,6 +493,13 @@ function kapiyiCiz() {
     dugme.textContent = t(suregelen === ad ? "lobby.cancel" : anahtar);
     dugme.disabled = false;
   }
+
+  // Kutunun yanındaki söz, hangi yolda olunduğuna göre. Belgede duran
+  // data-i18n'i yalnızca "Kodu giriniz" biliyor; oda kurulduğunda orada
+  // okunacak bir kod var ve yazılacak bir şey yok, yani başka bir cümle.
+  const ipucu = document.querySelector("#code-hint");
+  if (ipucu && !ipucu.hidden)
+    ipucu.textContent = t(suregelen === "host" ? "lobby.made" : "lobby.type");
 }
 
 // Bir eylem başladı: kapı o eylemin etrafında toplanıyor.
@@ -514,7 +521,7 @@ function kapiyiAc() {
   modlarAcik = true;
   const kutu = document.querySelector("#code");
   const ipucu = document.querySelector("#code-hint");
-  if (kutu) { kutu.hidden = true; kutu.value = ""; }
+  if (kutu) { kutu.hidden = true; kutu.value = ""; kutu.readOnly = false; }
   if (ipucu) ipucu.hidden = true;
   kapiyiCiz();
 }
@@ -921,18 +928,12 @@ const codeHint = document.querySelector("#code-hint");
 const lobbySaid = document.querySelector("#lobby-said");
 let watchingRoom = null, openRoom = null;
 
-function say(key, code) {
+// Yalnızca söylenen söz. Kod buradan çıktı: ayrı bir satırda, kendi büyük
+// puntosuyla duruyordu, oysa Katıl'da kod zaten bir kutuda ve düğmenin yanında.
+// İkisi aynı şey — okunacak beş harf — ve aynı yerde duruyorlar artık.
+function say(key) {
   if (!lobbySaid) return;
   lobbySaid.textContent = t(key);
-  // A line with a code on it is read out to somebody else, so it is set louder
-  // than the rest of the running commentary that goes through here.
-  lobbySaid.classList.toggle("loud", !!code);
-  if (code) {
-    const shown = document.createElement("span");
-    shown.className = "kod";
-    shown.textContent = code;
-    lobbySaid.append(shown);
-  }
 }
 
 // The way back to a table is its code and nothing else. A seat is not held
@@ -1080,8 +1081,17 @@ hostButton?.addEventListener("click", async () => {
   kapiyiTopla("host");
   try {
     const room = await ask("odaKur", { colour: "black" });
-    say("lobby.made", room.code);
     openRoom = room.code;
+    // Katıl'daki kutunun aynısı, aynı ölçüde, aynı satırda — ama yazılacak
+    // değil okunacak: salt okunur, yani seçilip kopyalanabiliyor da. Bir oda
+    // kodunun yapılacak tek işi başkasına ulaşmak.
+    if (codeBox) {
+      codeBox.value = room.code;
+      codeBox.readOnly = true;
+      codeBox.hidden = false;
+    }
+    if (codeHint) codeHint.hidden = false;
+    kapiyiCiz();
     // The guest's arrival is written on the room, so it is watched rather than
     // asked after.
     watchingRoom?.();
@@ -1123,6 +1133,7 @@ async function dropRoom() {
 function askForCode() {
   if (!codeBox) return;
   codeBox.hidden = false;
+  codeBox.readOnly = false;
   if (codeHint) codeHint.hidden = false;
   codeBox.value = "";
   kapiyiTopla("join");
@@ -1153,11 +1164,12 @@ joinButton?.addEventListener("click", () => {
 });
 
 codeBox?.addEventListener("keydown", event => {
-  if (event.key === "Enter") joinWith(codeBox.value);
+  if (event.key === "Enter" && !codeBox.readOnly) joinWith(codeBox.value);
 });
 
 // Beş harf dolunca kendiliğinden. Yapıştırma da buradan geçiyor.
 codeBox?.addEventListener("input", () => {
+  if (codeBox.readOnly) return;
   const yazilan = codeBox.value.trim().toUpperCase();
   if (yazilan.length >= 5) joinWith(yazilan);
 });

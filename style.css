@@ -239,8 +239,15 @@ body.ideographic #hud span, body.ideographic #hud strong {
 #done:not(:disabled):hover { background: #f0bd68; }
 
 
-/* Who is playing, chosen before the table is. */
-#modes { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin: 2.4rem 0 1.6rem; }
+/* Who is playing, chosen before the table is.
+   Alt alta, yan yana değil. Üçü bir satıra sığmıyor ve sarınca ikisi yan yana
+   kalıp üçüncüsü altına düşüyordu — bir liste gibi değil, kırılmış bir satır
+   gibi duruyordu. Üçü de kendi satırında ve aynı enlerde. Zaten bir kip
+   seçildiği anda öbür ikisi kalkıyor (bkz. kapiyiCiz), yani üç satır yalnızca
+   ilk açılışta duruyor. */
+#modes { display: flex; flex-direction: column; align-items: center;
+  gap: .5rem; margin: 2.4rem 0 1.6rem; }
+#modes .mode-pick { width: 100%; max-width: 20rem; }
 
 
 /* Said rather than shown: a broken roll, and anything else that needs words. */
@@ -314,6 +321,11 @@ body.ideographic #hud span, body.ideographic #hud strong {
   color: #f3ead7; background: rgba(8,6,4,.8); border: 1px solid rgba(229,173,84,.4);
   border-radius: .45rem; }
 #code::placeholder { color: #6b6153; letter-spacing: .22em; }
+/* Aynı kutu, ama oda kurulduğunda içindeki yazılacak değil okunacak: bir
+   arkadaşa telefonda söylenecek beş harf. Altın çerçeve onu satırdaki tek
+   okunacak şey yapıyor, ve salt okunur olduğu için seçilip kopyalanabiliyor. */
+#code[readonly] { color: #fdf8ee; border-color: rgba(229,173,84,.85);
+  background: rgba(8,6,4,.72); cursor: text; }
 /* Beside the box the moment it opens. A field standing there with nothing but
    a grey placeholder in it says what shape the answer is, not what is being
    asked for. */
@@ -321,24 +333,16 @@ body.ideographic #hud span, body.ideographic #hud strong {
   text-transform: uppercase; color: #e5ad54; white-space: nowrap;
   text-shadow: 0 1px 3px rgba(0,0,0,.85), 0 0 10px rgba(0,0,0,.7); }
 #code-hint[hidden] { display: none; }
-/* The code, the way out beside it, all on one line. */
-.said-row { margin-top: .9rem; }
-#lobby-said { margin: 0; min-height: 1.2rem; font-size: .74rem; letter-spacing: .06em;
-  color: #d2c8b4; }
-/* The line that carries the code is not a caption like the others on it: it is
-   the whole point of the room, and it is being read down a telephone to
-   somebody in another town. */
-#lobby-said.loud { font: 600 1rem/1.5 "DM Mono", monospace; letter-spacing: .08em;
-  color: #f6ecd6; text-transform: uppercase;
+/* Ne olduğu, bir satır. Kod buradan çıktı — kendi büyük puntosuyla ayrı bir
+   satırda duruyordu, oysa Katıl'da kod zaten bir kutuda ve düğmenin yanında;
+   ikisi aynı şey, artık aynı yerde. Kalan yalnızca söylenen söz, ve o da
+   yanındaki ipucuyla aynı ölçüde: bir satırın boyu ne dediğine göre
+   değişmemeli. Tahtanın üstünde duruyor, o yüzden gölgesi var. */
+.said-row { margin-top: .7rem; }
+#lobby-said { margin: 0; min-height: 1.2rem;
+  font: 500 .78rem/1.4 "DM Mono", monospace; letter-spacing: .1em;
+  text-transform: uppercase; color: #d2c8b4;
   text-shadow: 0 1px 3px rgba(0,0,0,.85), 0 0 10px rgba(0,0,0,.7); }
-#lobby-said .kod { display: inline-block; margin-left: .35rem; padding: .12rem .5rem;
-  font-size: 1.05rem; letter-spacing: .3em; color: #0d0a06; background: #e5ad54;
-  border-radius: .3rem; }
-/* The five characters themselves, white on the wood rather than black on
-   gold: the letters are the thing being read out, and white is the clearest
-   they get. Big enough to read across a room and no bigger. */
-#lobby-said.loud .kod { margin-left: .55rem; padding: .16rem .6rem; font-size: 1.15rem;
-  color: #fdf8ee; background: rgba(8,6,4,.72); border: 1px solid rgba(229,173,84,.6); }
 /* Giving up on a room nobody came to. Outlined and quiet: it is the way back
    out, not the thing to press. */
 #cancel { padding: .55rem 1.4rem;
@@ -449,6 +453,20 @@ body.ideographic #hud span, body.ideographic #hud strong {
   .setting-name { font-size: .62rem; }
   .setting-value { padding: .5rem 1.9rem .5rem .8rem; font-size: .72rem; }
   #start { margin-top: .8rem; padding: .68rem 2rem; }
+  /* Üçü bir satırda. Sarınca "Katıl" tek başına alta düşüyordu ve kapı bir
+     satır daha uzuyordu — oysa bunlar bir liste değil, üç eş seçenek, ve yan
+     yana okununca öyle görünüyorlar. Sığdıran şey yazının küçülmesi değil,
+     harf aralığının ve yanlardaki dolgunun toplanması: sekiz dilin en uzunu
+     (Almanca) ölçülerek seçildi. */
+  .lobby-row { gap: .3rem; }
+  #find, #host, #join { padding: .6rem .55rem; font-size: .66rem;
+    letter-spacing: .04em; white-space: nowrap; }
+  /* Kod ve yanındaki söz de aynı satırda kalsın. */
+  #code { width: 5.2rem; padding: .6rem .35rem; font-size: .8rem; letter-spacing: .16em; }
+  #code-hint { font-size: .62rem; letter-spacing: .04em; white-space: normal; }
+  /* Söylenen söz, yanındaki ipucuyla aynı ölçüde. Dar ekranda ipucu küçülüp
+     bu kalınca ikisi aynı satırda iki farklı boyda duruyordu. */
+  #lobby-said { font-size: .62rem; letter-spacing: .04em; }
 }
 
 /* Ve altında, çakılı sıranın geçtiği yer kadar boşluk.
