@@ -801,11 +801,6 @@ showSound();
 // is left out; it has the button.
 const IOS_TIP_KEY = "tavla.iosIpucu";
 const onIphone = /iphone|ipod/i.test(navigator.userAgent);
-// iPad da sayılıyor artık, ve saymak için kullanıcı dizesine bakmak yetmiyor:
-// iPadOS 13'ten beri kendini Macintosh diye tanıtıyor. Ondan ayıran şey
-// dokunulabilir olması — bir Mac'in maxTouchPoints'i sıfırdır.
-const onIos = onIphone || /ipad/i.test(navigator.userAgent)
-  || (/macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 const addedToHome = navigator.standalone === true
   || matchMedia("(display-mode: standalone)").matches;
 
@@ -818,63 +813,7 @@ const addedToHome = navigator.standalone === true
 document.documentElement.classList.toggle("evde", addedToHome);
 
 const introEl = document.querySelector("#intro");
-
-// Ve kapının kendisinde bir düğme. İpucu yalnızca iPhone'da ve yalnızca bir
-// cümle olarak duruyordu; oysa Android bunu gerçekten yapabiliyor — tarayıcı
-// kurulabilir olduğuna karar verdiğinde beforeinstallprompt gönderiyor ve o
-// olay saklanırsa kurulum penceresi istendiği anda açılabiliyor. iOS'ta böyle
-// bir olay yok ve hiçbir zaman olmayacak; orada yapılabilecek tek şey nereye
-// basılacağını söylemek, ki zaten söyleniyordu — artık bir düğmenin arkasında,
-// kapıyı sürekli meşgul etmeden.
-//
-// Yalnızca elde tutulanlarda. Bir masaüstü tarayıcısı da bu olayı gönderiyor
-// ama oradaki "ana ekran" bir kısayol; istenen şey telefonu tarayıcı
-// çubuklarından kurtarmak, ve o çubuklar masaüstünde zaten sorun değil.
-const installButton = document.querySelector("#install");
-let kurulumSozu = null;
-
-function showInstall() {
-  if (!installButton) return;
-  const yeri = HANDHELD && !addedToHome
-    && localStorage.getItem(IOS_TIP_KEY) !== "kapali"
-    && (!!kurulumSozu || onIos);
-  installButton.toggleAttribute("hidden", !yeri);
-}
-
-addEventListener("beforeinstallprompt", olay => {
-  // Tarayıcının kendi çubuğunu göstermesi engelleniyor ve olay saklanıyor:
-  // kurulum, kapıdaki düğmeye basıldığında açılacak.
-  olay.preventDefault();
-  kurulumSozu = olay;
-  showInstall();
-});
-
-addEventListener("appinstalled", () => {
-  kurulumSozu = null;
-  localStorage.setItem(IOS_TIP_KEY, "kapali");
-  showInstall();
-});
-
-installButton?.addEventListener("click", async () => {
-  if (kurulumSozu) {
-    const soz = kurulumSozu;
-    // Bir kere kullanılabiliyor. Reddedilirse tarayıcı ileride yenisini
-    // gönderiyor, ve o zaman düğme kendiliğinden geri geliyor.
-    kurulumSozu = null;
-    showInstall();
-    soz.prompt();
-    const { outcome } = await soz.userChoice ?? {};
-    if (outcome === "accepted") localStorage.setItem(IOS_TIP_KEY, "kapali");
-    return;
-  }
-  // iOS: gösterilecek bir pencere yok, yalnızca nereye basılacağı.
-  iosTipiniGoster();
-});
-
-showInstall();
-
-function iosTipiniGoster() {
-  if (!introEl || document.querySelector("#ios-tip")) return;
+if (onIphone && !addedToHome && localStorage.getItem(IOS_TIP_KEY) !== "kapali" && introEl) {
   const tip = document.createElement("div");
   tip.id = "ios-tip";
   const line = document.createElement("p");
@@ -888,9 +827,6 @@ function iosTipiniGoster() {
     + `d="M12 3v11M8.5 6.5 12 3l3.5 3.5M6 11v8a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 18 19v-8"/></svg>`;
   const words = document.createElement("span");
   words.dataset.i18n = "ios.tip";
-  // Yazısı burada da veriliyor: bu kutu artık sayfa kurulurken değil, düğmeye
-  // basıldığında doğuyor, yani applyStaticText çoktan geçmiş oluyor.
-  words.textContent = t("ios.tip");
   line.append(icon, words);
   const dismiss = document.createElement("button");
   dismiss.type = "button";
@@ -898,12 +834,8 @@ function iosTipiniGoster() {
   dismiss.setAttribute("aria-label", "×");
   dismiss.textContent = "×";
   dismiss.addEventListener("click", () => {
-    // Kapatmak bir tercih: hem kutu hem de onu açan düğme gidiyor, ve bu bir
-    // daha sorulmuyor. Ekleyen için de aynısı geçerli — appinstalled aynı
-    // anahtarı yazıyor.
     localStorage.setItem(IOS_TIP_KEY, "kapali");
     tip.remove();
-    showInstall();
   });
   tip.append(line, dismiss);
   introEl.append(tip);
