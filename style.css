@@ -16,6 +16,14 @@ body { background: #090807; color: #f3ead7; font-family: "DM Mono", monospace; }
 #scene { display: block; touch-action: none; user-select: none; -webkit-user-select: none;
   -webkit-touch-callout: none; }
 body { overscroll-behavior: none; }
+/* Yazılar seçilmiyor. Android'de kapıdaki bir başlığa dokunmak metni seçiyor
+   ve seçim, tarayıcının kendi "Dokunarak Ara" şeridini açıyor: oyunun altından
+   bir Google araması beliriyordu. Tuvalde bu zaten kapalıydı, sayfanın geri
+   kalanında değildi.
+   Kod kutusu hariç. Orada yazı seçilebilmeli: verilen bir kod yapıştırılıyor,
+   kurulan bir kod da seçilip kopyalanıyor. */
+#app { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+#code { user-select: text; -webkit-user-select: text; }
 #intro { position: fixed; z-index: 2; inset: 0; display: grid; place-content: start center; text-align: center; overflow: auto; padding: max(1.6rem, min(calc(50vh - 2.4rem - 15px), calc(100vh - 26.4rem))) 2rem 2rem; background: radial-gradient(circle at center, transparent 0 20%, rgba(4,3,2,.75) 90%); transition: opacity .55s ease, visibility .55s ease; }
 #intro.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
 /* Up in the black above the board, where there is nothing else to read it
@@ -112,20 +120,6 @@ html.tepe:not(.dar) #hud div { min-width: 7.6rem; padding: .55rem .75rem; }
   font: 700 .72rem/1 "DM Mono", monospace; letter-spacing: .06em;
   color: #eee3ce; white-space: nowrap; }
 #tahta-yazi > span[hidden] { display: none; }
-/* Çapa kasanın köşesi. Dik tutulurken yazı köşenin solunda bitiyor — sonu
-   köşeye denk geliyor — ve tahtanın üstünde ya da altında duruyor. Yatarken
-   köşeden başlayıp dışarı doğru uzuyor, ve köşeyle dikeyde ortalanıyor. */
-/* Ve tahtaya değmiyorlar: köşeye denk gelmek, köşenin üstüne oturmak değil.
-   Rakibin sayısı kasanın üst kenarına bitişik duruyordu. */
-#skor-ben { transform: translate(-100%, 0); margin-top: .3rem; }
-#skor-rakip { transform: translate(-100%, -100%); margin-top: -.3rem; }
-#tahta-yazi.yana #skor-ben,
-#tahta-yazi.yana #skor-rakip { transform: translate(0, -50%);
-  margin-top: 0; margin-left: .35rem; }
-/* Yatarken alttaki köşe ekranın dibine çok yakın düşüyor: tahta yüksekliğine
-   sığdırıldığı için orada payı bitiyor ve rakam kenara sıkışıyor. Bir tık
-   yukarı. */
-#tahta-yazi.yana #skor-ben { margin-top: -.7rem; }
 #topla-ben, #topla-rakip { transform: translate(-50%, -50%); }
 #crosshair { position: fixed; z-index: 1; top: 50%; left: 50%; width: 8px; height: 8px; margin: -4px; border: 1px solid rgba(247,235,207,.8); border-radius: 50%; opacity: 0; transition: opacity .35s; }
 #crosshair.visible { opacity: .8; }
@@ -371,7 +365,7 @@ body.ideographic #hud span, body.ideographic #hud strong {
    a grey placeholder in it says what shape the answer is, not what is being
    asked for. */
 #code-hint { font: 500 .78rem/1 "DM Mono", monospace; letter-spacing: .1em;
-  text-transform: uppercase; color: #e5ad54; white-space: nowrap;
+  text-transform: uppercase; color: #f3ead7; white-space: nowrap;
   text-shadow: 0 1px 3px rgba(0,0,0,.85), 0 0 10px rgba(0,0,0,.7); }
 #code-hint[hidden] { display: none; }
 /* Ne olduğu, bir satır. Kod buradan çıktı — kendi büyük puntosuyla ayrı bir
@@ -500,7 +494,15 @@ body.ideographic #hud span, body.ideographic #hud strong {
      harf aralığının ve yanlardaki dolgunun toplanması: sekiz dilin en uzunu
      (Almanca) ölçülerek seçildi. */
   .lobby-row { gap: .3rem; }
-  #find, #host, #join { padding: .6rem .55rem; font-size: .66rem;
+  /* Ekranla birlikte büyüyorlar. Sabit bir ölçüyle üçü de en dar telefona göre
+     kısılmıştı ve geniş olanlarda yer boşta kalıyordu — Türkçede üç yüz elli
+     sekiz pikselin yalnız iki yüz on biri doluydu. Yazı da yanal dolgu da
+     ekran genişliğine bağlanınca toplam genişlik ekranla orantılı büyüyor,
+     yani doluluk oranı her genişlikte aynı kalıyor: en dar durumu belirleyen
+     dil (İtalyanca) neredeyse dolduruyorsa, her yerde neredeyse dolduruyor.
+     Alt sınır bugünkü ölçü, üst sınır rahat okunan bir boy. */
+  #find, #host, #join { padding: .6rem clamp(.55rem, 2.6vw, 1.1rem);
+    font-size: clamp(.66rem, 3vw, .8rem);
     letter-spacing: .04em; white-space: nowrap; }
   /* Kod ve yanındaki söz de aynı satırda kalsın. */
   #code { width: 5.2rem; padding: .6rem .35rem; font-size: .8rem; letter-spacing: .16em; }
@@ -606,6 +608,19 @@ html.dar #langs { bottom: calc(var(--sira-alti, 0px) + 1.3rem); }
 
    The left, because the right-hand side is where the eye reads the board from
    and where the table code stands. */
+/* Düzen kararı verilene kadar görünmüyorlar.
+   Sayfa, betik koşmadan önce boyanıyor: modüller ertelenmiş çalışıyor ve ilk
+   boyamada ray kendi yerinde duruyor — masaüstü düzeni. Telefonda o düzen
+   yanlış, ve araya three.js'in inmesi de girince yanlış yer bir saniye kadar
+   ekranda kalıyordu: çalar başlığın üstünde, ses düğmesi kip düğmelerinin
+   içinde. Yalnız ilk girişte görülüyordu, çünkü sonrasında kabuk önbellekten
+   geliyor ve betik neredeyse anında koşuyor.
+   Bunu stil dosyası tek başına çözemez: karar yalnız ölçüye değil, düğmelerin
+   hangi kapsayıcıda durduğuna bağlı, ve ebeveyn değiştirmek stilin işi değil.
+   Görünmez, ama yerinde: display yerine visibility, çünkü rayın dibi ve alt
+   sıranın boyu ölçülüyor ve kaldırılmış bir kutu sıfır ölçer. */
+#rail, #controls { visibility: hidden; }
+html.yerlesti #rail, html.yerlesti #controls { visibility: visible; }
 #rail { position: fixed; z-index: 3; top: 1.4rem; left: 1.4rem;
   display: flex; flex-direction: column; align-items: stretch; gap: .45rem; }
 #rail > * { align-self: stretch; }
@@ -661,6 +676,12 @@ html.dar #langs { bottom: calc(var(--sira-alti, 0px) + 1.3rem); }
   #player button { min-width: 2.2rem; min-height: 2rem; padding: .35rem .2rem;
     font-size: .8rem; }
   #player #level { min-height: 2rem; font-size: .72rem; }
+  /* Ve rayın geri kalanı aynı boyda. Üç ayrı yükseklik vardı — çaların tuşları
+     otuz iki piksel, tam ekran ile ses yirmi altı, kamera otuz — ve alt alta
+     duran bir sütunda üç ayrı boy, hizalanmamış bir liste gibi duruyordu.
+     Eşitleme yukarı doğru: otuz iki, çalarınki. Aşağı doğru eşitlemek parmak
+     hedefini küçültmek olurdu, ve o ölçü oraya bunun için konmuştu. */
+  #menu, #fullscreen, #sound, #view { min-height: 2rem; }
 }
 
 /* Back to the door, by way of a question — a game in progress is not
