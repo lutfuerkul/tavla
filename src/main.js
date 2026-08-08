@@ -4726,7 +4726,10 @@ function updateHud() {
     // decided before it landed.
     const inTheAir = thrown || replayOwed || !!replayingFor || !!heldDice;
     doneButton.disabled = inTheAir || !turnComplete() || !!game.over;
-    doneButton.textContent = t(!inTheAir && game.dice && game.required === 0 ? "done.none" : "done");
+    // Oynanacak hamle kalmadığında düğme başka bir şey söylüyor, ama başka bir
+    // şey olmuyor: rengi de, işi de aynı. Basılacak tek şey yine o.
+    const hamleYok = !inTheAir && !!game.dice && game.required === 0;
+    doneButton.textContent = t(hamleYok ? "done.none" : "done");
   }
 }
 
