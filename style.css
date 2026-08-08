@@ -378,6 +378,10 @@ body.ideographic #hud span, body.ideographic #hud strong {
   font: 500 .78rem/1.4 "DM Mono", monospace; letter-spacing: .1em;
   text-transform: uppercase; color: #d2c8b4;
   text-shadow: 0 1px 3px rgba(0,0,0,.85), 0 0 10px rgba(0,0,0,.7); }
+/* Boşken hiç yer tutmuyor. Ayrılan boy söyleyecek sözü olan hâller için —
+   bir satırın boyu ne dediğine göre değişmesin diye; söyleyecek sözü
+   olmadığında ayrılan boy, kapıdan bir satır çalmaktan başka bir şey değil. */
+#lobby-said:empty { min-height: 0; }
 /* Giving up on a room nobody came to. Outlined and quiet: it is the way back
    out, not the thing to press. */
 #cancel { padding: .55rem 1.4rem;
@@ -682,6 +686,16 @@ html.yerlesti #rail, html.yerlesti #controls { visibility: visible; }
      Eşitleme yukarı doğru: otuz iki, çalarınki. Aşağı doğru eşitlemek parmak
      hedefini küçültmek olurdu, ve o ölçü oraya bunun için konmuştu. */
   #menu, #fullscreen, #sound, #view { min-height: 2rem; }
+
+  /* Ölçülen boy, tuşun değil kutunun boyu. Yukarıdaki satır çaların tuşlarını
+     komşularıyla eşitledi ama çaların kendi kutusu tuşun üstüne kendi dolgusunu
+     ve çerçevesini koyuyor: alt sırada otuz iki piksellik düğmelerin yanında
+     kırk iki piksellik bir kutu duruyordu, ve göz sıraya bakarken tuşu değil
+     kutuyu görüyor. Dolgu alt sırada kalkıyor ve tuşlar çerçevenin payı kadar
+     — iki piksel — kısalıyor, yani dıştan ölçülen boy tam otuz iki. Kutunun
+     kendisi duruyor: altı tuşun bir arada olduğunu söyleyen tek şey o. */
+  #controls #player { padding: 0 .35rem; }
+  #controls #player button, #controls #player #level { min-height: calc(2rem - 2px); }
 }
 
 /* Back to the door, by way of a question — a game in progress is not

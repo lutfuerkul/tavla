@@ -1116,11 +1116,9 @@ hostButton?.addEventListener("click", async () => {
   // kaplıyor hem de hangi işi iptal ettiği yazmıyordu.
   if (openRoom || suregelen === "host") return void dropRoom();
   kapiyiTopla("host");
-  // Ve beklerken bir söz. Satır basar basmaz tek bir "Vazgeç"e toplanıyor;
-  // kod gelene kadar yanında hiçbir şey olmayınca, uykudan uyanan bir sunucuyu
-  // bekleyen o birkaç saniye çalışıyor gibi değil takılmış gibi duruyordu.
-  // Katıl'da bu söz zaten vardı.
-  say("lobby.making");
+  // Beklerken bir söz vardı ve kalktı: kod gelene kadar geçen o birkaç saniye
+  // için kapıda bir satır tutuyordu, ve söylediği şey zaten düğmenin kendisinde
+  // yazıyor — "Vazgeç" duran bir kapı değil, yürüyen bir iş demek.
   try {
     const room = await ask("odaKur", { colour: "black" });
     openRoom = room.code;
