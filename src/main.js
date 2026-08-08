@@ -8,6 +8,7 @@ import { localSession, onlineSession } from "./session.js";
 import { attend, ask, connect, follow, sitAt } from "./firebase.js";
 import { cal as calSes, hamleSesi, sallama as sallamaSesi, sustur as sesiSustur,
   uyandir as sesiUyandir } from "./ses.js";
+import { klavyeyiKur, klavyeyiCevir, klavyeyiKapat, klavyeAcikMi } from "./klavye.js";
 import * as Muzik from "./muzik.js";
 
 // Where the turns come from. Everything the board cannot decide by itself goes
@@ -810,6 +811,23 @@ function showFullscreen() {
 // öğrenilince değişmemeli, ve bu düğme sesin açma kapamasının durduğu yerde
 // duruyor — o iş artık köşedeki anahtarın.
 const chatButton = document.querySelector("#chat");
+
+// Kendi klavyemiz. Sistem klavyesi açılınca sayfanın görünür alanı yeniden
+// ölçülüyor, tahta yeniden sığdırılıyor ve kamera zıplıyor — Android'de tam
+// ekrandan da çıkarabiliyor. Bu klavye sayfanın bir parçası, o yüzden hiçbiri
+// olmuyor: tuvale dokunulmuyor, kamera kımıldamıyor, klavye alt sıranın yerine
+// örtü gibi biniyor. Alt sıra gizleniyor, çünkü ikisine birden yer yok ve
+// yazarken oynanmıyor.
+klavyeyiKur({
+  dil: language(),
+  gonder: soz => console.info("tavla: sohbet —", soz),
+  kapat: () => { if (chatButton) chatButton.setAttribute("aria-expanded", "false"); },
+});
+
+chatButton?.addEventListener("click", () => {
+  klavyeyiCevir();
+  chatButton.setAttribute("aria-expanded", String(klavyeAcikMi()));
+});
 
 // Sesin tamamı, tek dokunuşta: tahtanınki de müziği de. Rayda duran her şey bir
 // ayar — hangi parça, ne kadar yüksek, ses açık mı — bu ise bir an: odaya biri
