@@ -1,6 +1,6 @@
 // The music.
 //
-// Fourteen pieces, oud and ney and darbuka, played in the order they were
+// Thirteen pieces, oud and ney and darbuka, played in the order they were
 // given. It is the foreground: the board's own noises — a checker set down, a
 // die landing — sit under it rather than over it, which is the opposite of how
 // a game usually mixes and is what was asked for. See SES_SEVIYESI in ses.js.
@@ -14,9 +14,13 @@
 // megabytes of it per track and still not start any sooner.
 
 const KOK = "muzik/";
-const SAYI = 14;
 
 // Kimin çaldığı görünsün diye: dosyalar sırayla numaralı, adlar burada.
+//
+// Numaralar dosya adları, sıra ise bu dizinin kendi sırası — ikisi artık
+// birbirini tutmuyor ve tutmasına gerek de yok: on birinci dosya listeden
+// çıkarıldı, geri kalanların adı olduğu gibi kaldı. Yeniden numaralamak on üç
+// dosyayı birden değiştirmek olurdu, hiçbir şey kazandırmadan.
 export const PARCALAR = [
   { dosya: "01.mp3", ad: "Oud and Night" },
   { dosya: "02.mp3", ad: "Vibecroft · Arabic R&B" },
@@ -28,11 +32,15 @@ export const PARCALAR = [
   { dosya: "08.mp3", ad: "Djovan · Night in Marrakech" },
   { dosya: "09.mp3", ad: "Djovan · Sahara Sunset" },
   { dosya: "10.mp3", ad: "FASSounds · Arabic Ramadan" },
-  { dosya: "11.mp3", ad: "Kaazoom · Cairo Midnight" },
   { dosya: "12.mp3", ad: "Kaazoom · Shattered Strings" },
   { dosya: "13.mp3", ad: "Sounds by Amelia · Ancient Egypt" },
   { dosya: "14.mp3", ad: "The Mountain · Oud" },
 ];
+
+// Listenin kendi boyu. Ayrı bir sayı olarak duruyordu ve bir parça çıkarılınca
+// ikisinin ayrışması işten bile değildi: sıra listenin dışına taşar, kaldığı
+// yerden devam eden okuma sınırın ötesini gösterirdi.
+const SAYI = PARCALAR.length;
 
 // Müziğin sesi, ve oyunun sesinden bağımsız oluşu. Tahtanın kendi sesleri
 // ses.js'te ve kendi seviyeleri var; buradaki düğmeler onlara dokunmuyor.

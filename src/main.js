@@ -4478,9 +4478,33 @@ function measureRail() {
 // indiğinde de.
 new ResizeObserver(measureRail).observe(document.querySelector("#rail") ?? document.body);
 
+// Alttaki sıranın kapladığı yer, kapının altına bırakılması gereken boşluk.
+//
+// O sıra ekrana çakılı ve kapının üstünden geçiyor. Kapıda görünmediği sürece
+// bunun bir önemi yoktu; artık görünüyor — çalar, ses ve tam ekran orada — ve
+// kapı kendisinden uzun olduğunda son satırı sıranın altında kalıyordu.
+// Çevrimiçi kipte tam olarak bu oldu: oda satırı açılınca kapı uzuyor ve
+// TOPLAMA YÖNÜ, TAM EKRAN ile SES AÇIK'ın arkasına giriyordu. Kapı kayan bir
+// sayfa, yani eksik olan yükseklik değil, dibindeki boşluktu.
+//
+// Ölçülüyor, çünkü sıra bir satır da olabiliyor iki satır da: dar bir ekranda
+// dört düğme tek satıra sığmayınca sarıyor. Ekranın dibinden sıranın tepesine
+// kadar olan mesafe alınıyor — sıranın kendi yüksekliği ve altındaki pay, tek
+// sayıda.
+function measureControls() {
+  const kutu = document.querySelector("#controls");
+  if (!kutu) return;
+  const yer = kutu.getBoundingClientRect();
+  const alt = yer.height > 0 ? Math.max(0, innerHeight - yer.top) : 0;
+  document.documentElement.style.setProperty("--sira-alti", `${Math.round(alt)}px`);
+}
+
+new ResizeObserver(measureControls).observe(document.querySelector("#controls") ?? document.body);
+
 placeButtons();
 measureRail();
-addEventListener("resize", () => { placeButtons(); measureRail(); });
+measureControls();
+addEventListener("resize", () => { placeButtons(); measureRail(); measureControls(); });
 
 viewButton?.addEventListener("click", () => {
   chosenView = overhead() ? "koltuk" : "tepe";
