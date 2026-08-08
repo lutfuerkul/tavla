@@ -4756,8 +4756,15 @@ new ResizeObserver(measureControls).observe(document.querySelector("#controls") 
 function measureCalar() {
   const kutu = document.querySelector("#player");
   if (!kutu) return;
-  const boy = kutu.getBoundingClientRect().height;
-  if (boy > 0) document.documentElement.style.setProperty("--calar-boy", `${Math.round(boy)}px`);
+  const yer = kutu.getBoundingClientRect();
+  if (yer.height > 0)
+    document.documentElement.style.setProperty("--calar-boy", `${Math.round(yer.height)}px`);
+  // Ve eni. Dik tutulurken susturma çaların yanına konuyor ve ikisi bir arada
+  // ortalanıyor: çalar kendi payı kadar sola kayıyor, anahtar da onun sağ
+  // kenarından bir boşluk sonra başlıyor. İkisi de bu ölçüden hesaplanıyor,
+  // çünkü çaların eni dile ve ekrana göre değişiyor.
+  if (yer.width > 0)
+    document.documentElement.style.setProperty("--calar-en", `${Math.round(yer.width)}px`);
 }
 
 new ResizeObserver(measureCalar).observe(document.querySelector("#player") ?? document.body);
