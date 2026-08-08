@@ -971,5 +971,18 @@ html.evde #rotate { display: none; }
      aradaki fark tahtaya kalıyor. */
   html:fullscreen #controls #player, html:-webkit-full-screen #controls #player,
   html.evde #controls #player {
-    position: fixed; left: .25rem; right: auto; top: auto; bottom: .25rem; }
+    position: fixed; left: .25rem; right: auto; top: auto;
+    bottom: calc(50% - var(--sira-boy, 0px) / 2); }
+
+  /* Ve panel çaların üstüne çekiliyor. İki kenar aynı çizgide bitiyor: çaların
+     dibi, karşı kenardaki sütunun dibiyle aynı yer — ekranın dibi değil, çünkü
+     ekranın dibine yaslanan bir kutu kenarı olmayan bir şey gibi duruyor ve
+     karşısındaki sütun zaten orada bitmiyor.
+
+     Panel yukarıdan değil aşağıdan tutunuyor: üstünde ne kadar yer kaldığı
+     değil, çalarla arasındaki boşluk sabit olmalı — ikisi bir arada duran tek
+     bir kenar, ve panelin boyu ne dediğine göre değişiyor. */
+  html:fullscreen.dar #hud, html:-webkit-full-screen.dar #hud, html.evde.dar #hud {
+    top: auto; transform: none;
+    bottom: calc(50% - var(--sira-boy, 0px) / 2 + var(--calar-boy, 3.7rem) + .6rem); }
 }
