@@ -944,4 +944,31 @@ html.evde #rotate { display: none; }
     top: .5rem; right: .5rem; }
   html:fullscreen #menu, html:-webkit-full-screen #menu, html.evde #menu {
     top: .5rem; right: .5rem; }
+
+  /* Sütun ortadan değil dipten. Oynanacak iki düğme en alta iniyor — elin
+     zaten durduğu yer ekranın dibi, ve o ikisi turun sonu: Tamam en altta,
+     Geri al onun üstünde, yani basılma sırası. Ortadan hizalıyken "en alt"
+     diye bir yer yoktu; sütun ekranın dibine yaslanınca listenin sonu ile
+     ekranın sonu aynı yer oluyor.
+
+     Ve dönüşüm kalkıyor. Bu yalnız bir hizalama değil: dönüşümü olan bir kutu,
+     içindeki `fixed` çocuklar için ekranın yerine geçiyor — çalar aşağıda
+     ekrana göre yerleştiriliyor ve sütun ortalanmış dursaydı sola değil
+     sütunun içine düşerdi. */
+  html:fullscreen #controls, html:-webkit-full-screen #controls, html.evde #controls {
+    top: auto; bottom: .25rem; transform: none; }
+  html:fullscreen #undo, html:-webkit-full-screen #undo, html.evde #undo { order: 8; }
+  html:fullscreen #done, html:-webkit-full-screen #done, html.evde #done { order: 9; }
+
+  /* Çalar karşı kenara, panelin altına. Odaya ait olan her şey bu kenarda:
+     panel yukarıda, çalar dibinde. Ekranın dibine yaslanıyor, çünkü panelin
+     boyu ne dediğine göre değişiyor ve aralarındaki boşluğu sabitlemek
+     ikisinden birini öbürünün üstüne bindirmek olurdu.
+
+     Kazanılan yer sağda: sütunun genişliğini en geniş çocuğu belirliyordu, o
+     da çalardı — o gidince sütun kendi yazılı düğmelerinin enine iniyor ve
+     aradaki fark tahtaya kalıyor. */
+  html:fullscreen #controls #player, html:-webkit-full-screen #controls #player,
+  html.evde #controls #player {
+    position: fixed; left: .25rem; right: auto; top: auto; bottom: .25rem; }
 }
