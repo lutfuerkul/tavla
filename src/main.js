@@ -457,6 +457,68 @@ function markChosen(attribute, value) {
     button.classList.toggle("chosen", button.dataset[attribute] === value));
 }
 
+// Kapı, karar verildikçe daralıyor.
+//
+// Üç kip, üç lobi düğmesi, dört ayar satırı, bir de giriş — hepsi aynı anda
+// duruyordu ve bir telefonda bu, ekrandan uzun bir kapı demek. Oysa bir kip
+// seçildikten sonra öbür ikisi cevaplanmış bir sorunun şıkları: yer kaplıyor,
+// bilgi vermiyor. Aynısı lobide, daha da keskin biçimde: oda kurulduktan sonra
+// ekranda okunacak tek şey kod ve yapılacak tek şey vazgeçmek.
+//
+// İki anahtar var. `modlarAcik` kip satırının açık mı toplu mu olduğu;
+// `suregelen` ise lobide o an yürüyen eylem — "find", "host", "join" ya da
+// hiçbiri. Yürüyen bir eylem varken öbür iki düğme gizleniyor ve yürüyen olan
+// "Vazgeç" oluyor. Gizleniyor, yalnızca kilitlenmiyor: kilitli bir düğme hâlâ
+// yer kaplıyor, ve zaten kilitlenmeyen biri vardı — oda açıkken "Rakip bul"
+// basılabiliyordu, iki eylem birden yürüyor ve iki iptal birden görünüyordu.
+let modlarAcik = true;
+let suregelen = null;
+
+// Elemanlar burada soruluyor, modülün kendi değişkenlerinden okunmuyor: bu
+// işlev applyStaticText'ten de çağrılıyor ve o, lobi değişkenleri daha
+// tanımlanmadan bir kez koşuyor. Bir const'a tanımlanmadan önce dokunmak hata
+// fırlatır ve modülün geri kalanı hiç çalışmazdı.
+function kapiyiCiz() {
+  for (const dugme of document.querySelectorAll("[data-mode]"))
+    dugme.hidden = !modlarAcik && dugme.dataset.mode !== mode;
+
+  const lobiler = { find: "lobby.find", host: "lobby.host", join: "lobby.join" };
+  for (const [ad, anahtar] of Object.entries(lobiler)) {
+    const dugme = document.querySelector(`#${ad}`);
+    if (!dugme) continue;
+    dugme.hidden = !!suregelen && suregelen !== ad;
+    // Vazgeçmek, başlatmakla aynı düğme. Ayrı bir "Vazgeç" bir satır daha
+    // kaplıyordu ve iki düğmeyi birbirine bağlamak okuyanın işiydi; başlattığın
+    // şeyi durduran şeyin aynı yerde olması ise okunacak bir şey bırakmıyor.
+    dugme.textContent = t(suregelen === ad ? "lobby.cancel" : anahtar);
+    dugme.disabled = false;
+  }
+}
+
+// Bir eylem başladı: kapı o eylemin etrafında toplanıyor.
+function kapiyiTopla(ad) {
+  suregelen = ad;
+  modlarAcik = false;
+  kapiyiCiz();
+}
+
+// Ve vazgeçildi. Kip satırı da geri geliyor — vazgeçmek "bu işi durdur"dan çok
+// "kapıya dön" demek, ve o an yürüyen bir şey kalmadığı için kapının en geniş
+// hâlinin bir zararı yok.
+//
+// Yalnız bir eylemin iptalinde değil, bittiği her yerde çağrılıyor: ağ gidince,
+// oda düşünce, katılma başarısız olunca. Toplanmış bir kapıyı geri açmayı
+// unutan tek bir yol, kullanıcıyı sayfayı yenilemek zorunda bırakır.
+function kapiyiAc() {
+  suregelen = null;
+  modlarAcik = true;
+  const kutu = document.querySelector("#code");
+  const ipucu = document.querySelector("#code-hint");
+  if (kutu) { kutu.hidden = true; kutu.value = ""; }
+  if (ipucu) ipucu.hidden = true;
+  kapiyiCiz();
+}
+
 function refreshStart() {
   if (!startButton) return;
   // Online has no "start" of its own — the lobby does that, and the colour
@@ -467,6 +529,14 @@ function refreshStart() {
 
 document.querySelectorAll("[data-mode]").forEach(button => {
   button.addEventListener("click", () => {
+    // Seçili olana yeniden basmak öbürlerini geri getiriyor. Kip satırı
+    // toplandıktan sonra fikir değiştirmenin yolu bu; olmasaydı seçim tek
+    // yönlü olurdu ve kapıdan çıkmanın tek yolu sayfayı yenilemek kalırdı.
+    if (button.dataset.mode === mode && !modlarAcik) {
+      modlarAcik = true;
+      kapiyiCiz();
+      return;
+    }
     // Leaving the online mode leaves its lobby behind too. A search or an open
     // room went on running in the background — the queue kept refreshing, the
     // room listener stayed live — while the box that holds "Vazgeç" was hidden,
@@ -474,6 +544,7 @@ document.querySelectorAll("[data-mode]").forEach(button => {
     // player down at a game they had walked away from and lost while not there.
     if (looking) stopLooking();
     if (openRoom) dropRoom();
+    modlarAcik = false;
     pickedMode = mode = button.dataset.mode;
     localStorage.setItem(MODE_KEY, mode);
     markChosen("mode", mode);
@@ -643,20 +714,13 @@ function applyStaticText() {
   showOnline();
   showFullscreen();
   showSound();
-  // The find button carries a state this does not know about — a search under
-  // way — and rewriting every label by its data-i18n turned the "Aramayı bırak"
-  // on it back into "Rakip bul" while the search was still running. A change of
-  // language or a settings press left the button lying: pressing it then
-  // cancelled a search the player thought they were starting, or hid a running
-  // one behind a stopped-looking label. Read back from the button's own class,
-  // which the rewrite leaves alone — and by query rather than the module's own
-  // reference, since this also runs once before those are declared.
-  const find = document.querySelector("#find");
-  if (find?.classList.contains("looking")) {
-    find.textContent = t("lobby.stop");
-    document.querySelector("#host")?.setAttribute("disabled", "");
-    document.querySelector("#join")?.setAttribute("disabled", "");
-  }
+  // Lobi düğmeleri bu işlevin bilmediği bir durum taşıyor — yürüyen bir eylem —
+  // ve her etiketi data-i18n'inden yeniden yazmak, sürmekte olan bir aramanın
+  // "Vazgeç"ini "Rakip bul"a çeviriyordu. Dil değiştirmek ya da bir ayara
+  // basmak düğmeyi yalan söyler hâle getiriyordu: basan, başlattığını sandığı
+  // aramayı durduruyordu. Durumu bilen tek yer kapıyı çizen yer, o yüzden karar
+  // ona bırakılıyor.
+  kapiyiCiz();
 }
 
 // How many people are at a table right now, said quietly under the way in. It
@@ -855,7 +919,6 @@ const joinButton = document.querySelector("#join");
 const codeBox = document.querySelector("#code");
 const codeHint = document.querySelector("#code-hint");
 const lobbySaid = document.querySelector("#lobby-said");
-const cancelButton = document.querySelector("#cancel");
 let watchingRoom = null, openRoom = null;
 
 function say(key, code) {
@@ -883,6 +946,9 @@ function showLobby() {
   lobby?.toggleAttribute("hidden", !online);
   if (codeBox) codeBox.hidden = true;
   if (codeHint) codeHint.hidden = true;
+  // Kip değişti, yürüyen bir lobi eylemi de kalmadı: düğmeler ilk hâllerine.
+  suregelen = null;
+  kapiyiCiz();
   // Your colour comes from the room, so it is not asked for here.
   document.querySelector("#colours")?.toggleAttribute("hidden", online);
   // The colour row reads differently online — see showSettings.
@@ -925,19 +991,17 @@ async function stopLooking() {
   clearInterval(stillHere);
   watchingQueue?.();
   watchingQueue = null;
-  findButton.textContent = t("lobby.find");
   findButton.classList.remove("looking");
-  hostButton.disabled = joinButton.disabled = false;
   if (lobbySaid) lobbySaid.textContent = "";
+  kapiyiAc();
   ask("siradanCik", {}).catch(() => {});
 }
 
 findButton?.addEventListener("click", async () => {
   if (looking) return stopLooking();
   looking = true;
-  findButton.textContent = t("lobby.stop");
   findButton.classList.add("looking");
-  hostButton.disabled = joinButton.disabled = true;
+  kapiyiTopla("find");
   say("lobby.searching");
   try {
     // Anything this browser left in the queue is cleared before a new search
@@ -991,9 +1055,8 @@ findButton?.addEventListener("click", async () => {
   } catch (reason) {
     console.info("tavla: eşleşme aranamadı —", reason?.message ?? reason);
     looking = false;
-    findButton.textContent = t("lobby.find");
     findButton.classList.remove("looking");
-    hostButton.disabled = joinButton.disabled = false;
+    kapiyiAc();
     say("lobby.offline");
   }
 });
@@ -1010,15 +1073,15 @@ addEventListener("pagehide", () => {
 });
 
 hostButton?.addEventListener("click", async () => {
-  hostButton.disabled = joinButton.disabled = true;
+  // Vazgeçmek aynı düğmede. Odayı kuran ve odayı kapatan tek bir yer, tıpkı
+  // aramada olduğu gibi — altta ayrıca duran bir "Vazgeç" hem bir satır daha
+  // kaplıyor hem de hangi işi iptal ettiği yazmıyordu.
+  if (openRoom || suregelen === "host") return void dropRoom();
+  kapiyiTopla("host");
   try {
     const room = await ask("odaKur", { colour: "black" });
     say("lobby.made", room.code);
     openRoom = room.code;
-    // Nothing under the code saying it is being waited on — that much is plain
-    // from standing there with a code in your hand. What was missing was the
-    // way back out, so that is what goes there instead.
-    cancelButton?.removeAttribute("hidden");
     // The guest's arrival is written on the room, so it is watched rather than
     // asked after.
     watchingRoom?.();
@@ -1030,7 +1093,9 @@ hostButton?.addEventListener("click", async () => {
     // connection or there is not, and the rest of the game does not need one.
     console.info("tavla: oda kurulamadı —", reason?.message ?? reason);
     say("lobby.offline");
-    hostButton.disabled = joinButton.disabled = false;
+    // Kurulamadı, yani yürüyen bir iş yok: kapı geri açılıyor. Açılmasaydı
+    // ekranda tek başına bir "Vazgeç" kalırdı, iptal edecek bir şey olmadan.
+    kapiyiAc();
   }
 });
 
@@ -1042,32 +1107,31 @@ async function dropRoom() {
   openRoom = null;
   watchingRoom?.();
   watchingRoom = null;
-  cancelButton?.setAttribute("hidden", "");
   if (lobbySaid) { lobbySaid.textContent = ""; lobbySaid.classList.remove("loud"); }
-  hostButton.disabled = joinButton.disabled = false;
+  kapiyiAc();
   if (closing) await ask("odayiKapat", { code: closing }).catch(() => {});
 }
 
-cancelButton?.addEventListener("click", () => { dropRoom(); });
-
-// Two presses rather than one: the first opens the box to type the code into,
-// the second takes the code. A field standing there empty beside three buttons
-// is a question nobody asked — most people are looking for the other two ways
-// in, and whoever has been given a code knows what to do with it.
+// A field standing there empty beside three buttons is a question nobody asked
+// — most people are looking for the other two ways in, and whoever has been
+// given a code knows what to do with it. So it is opened by pressing Katıl.
+//
+// Kodu gönderen artık o düğme değil. Basıldığında düğme "Vazgeç"e dönüyor —
+// başlatan ve iptal eden hep aynı yerde, üç yolda da — ve gönderme işi kutunun
+// kendisine geçiyor: beş harf dolduğu anda gidiyor. Bir oda kodu beş harftir ve
+// bittiği bellidir, yani basılacak ayrı bir düğme sormaya gerek yok.
 function askForCode() {
-  if (!codeBox || !codeBox.hidden) return false;
+  if (!codeBox) return;
   codeBox.hidden = false;
   if (codeHint) codeHint.hidden = false;
   codeBox.value = "";
+  kapiyiTopla("join");
   codeBox.focus();
-  return true;
 }
 
-joinButton?.addEventListener("click", async () => {
-  if (askForCode()) return;
-  const wanted = (codeBox?.value ?? "").trim().toUpperCase();
+async function joinWith(code) {
+  const wanted = (code ?? "").trim().toUpperCase();
   if (!/^[A-Z2-9]{5}$/.test(wanted)) return say("lobby.badCode");
-  hostButton.disabled = joinButton.disabled = true;
   say("lobby.joining");
   try {
     const joined = await ask("odayaKatil", { code: wanted });
@@ -1077,12 +1141,25 @@ joinButton?.addEventListener("click", async () => {
     sitDownTo(joined.matchId, joined.colour ?? "ivory");
   } catch (reason) {
     lobbySaid.textContent = reason?.message ?? t("lobby.offline");
-    hostButton.disabled = joinButton.disabled = false;
+    // Kutu açık kalıyor ve içi boşalıyor: yanlış yazılmış bir kod, yeniden
+    // yazılacak bir koddur. Vazgeç de yerinde duruyor, çıkmak isteyen için.
+    if (codeBox) { codeBox.value = ""; codeBox.focus(); }
   }
+}
+
+joinButton?.addEventListener("click", () => {
+  if (suregelen === "join") return void kapiyiAc();
+  askForCode();
 });
 
 codeBox?.addEventListener("keydown", event => {
-  if (event.key === "Enter") joinButton?.click();
+  if (event.key === "Enter") joinWith(codeBox.value);
+});
+
+// Beş harf dolunca kendiliğinden. Yapıştırma da buradan geçiyor.
+codeBox?.addEventListener("input", () => {
+  const yazilan = codeBox.value.trim().toUpperCase();
+  if (yazilan.length >= 5) joinWith(yazilan);
 });
 
 showLobby();
