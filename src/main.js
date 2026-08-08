@@ -6,7 +6,8 @@ import * as Rules from "./rules.js";
 import { LANGS, language, setLanguage, t, isIdeographic } from "./i18n.js";
 import { localSession, onlineSession } from "./session.js";
 import { attend, ask, connect, follow, sitAt } from "./firebase.js";
-import { cal as calSes, hamleSesi, sustur as sesiSustur, uyandir as sesiUyandir } from "./ses.js";
+import { cal as calSes, hamleSesi, sallama as sallamaSesi, sustur as sesiSustur,
+  uyandir as sesiUyandir } from "./ses.js";
 import * as Muzik from "./muzik.js";
 
 // Where the turns come from. Everything the board cannot decide by itself goes
@@ -6110,6 +6111,12 @@ function animate(now) {
   requestAnimationFrame(animate);
   try {
     const dt = Math.min(clock.getDelta(), .25);
+    // Avuçtaki ses, avuçta bir şey olduğu sürece. Her karede sorulup her karede
+    // söyleniyor — açan ve kapatan yerleri tek tek işaretlemek yerine, çünkü
+    // zarların ele girdiği iki, elden çıktığı dört yer var ve bunlardan birini
+    // atlamak sesi masanın üstünde çalar hâlde bırakmak demek. Sorulan şey
+    // durumun kendisi, ve iki kez açmak ya da iki kez kapatmak bir şey yapmıyor.
+    sallamaSesi(!!heldDice);
     // Before the shake, so what is drawn is the shake and not the last frame of
     // whatever the search was trying.
     stepSearch(dt);
