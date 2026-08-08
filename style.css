@@ -451,6 +451,25 @@ body.ideographic #hud span, body.ideographic #hud strong {
   #start { margin-top: .8rem; padding: .68rem 2rem; }
 }
 
+/* Ve altında, çakılı sıranın geçtiği yer kadar boşluk.
+   Çalar, ses ve tam ekran kapıda görünür oldu — bu doğruydu, kapıda odaya ait
+   olan şeyler oradadır — ama o sıra ekrana çakılı ve kapının üstünden geçiyor.
+   Kapı kendisinden uzun olduğunda son satırı sıranın altında kalıyordu:
+   çevrimiçi kipte oda satırı açılınca TOPLAMA YÖNÜ, TAM EKRAN ile SES AÇIK'ın
+   arkasına giriyordu. Kapı zaten kayan bir sayfa, yani eksik olan yükseklik
+   değil, dibindeki boşluktu.
+   Ölçülerek, çünkü sıra bir satır da olabiliyor iki satır da — bkz.
+   measureControls. Ve sıranın gerçekten orada olduğu yerde: rayı olan geniş
+   bir pencerede sıra kapıda hiç çizilmiyor ve --sira-alti sıfır kalıyor. */
+html.dar #intro { padding-bottom: calc(var(--sira-alti, 0px) + 1rem); }
+/* Diller de aynı kadar yukarı. Telefonda bunlar akışa geçip kapının başına
+   gidiyor ve buranın bir hükmü kalmıyor; ama telefon sayılmayacak kadar geniş,
+   yine de düğmeleri aşağı indirecek kadar kısa bir ekran var — 962'ye 601 bir
+   tablet — ve orada diller hâlâ kapının dibine yapışık. Mutlak konumda `bottom`
+   dolgu kenarından ölçülüyor, yani az önce açılan boşluğun içine düşüyorlardı:
+   ölçüldüğünde yirmi yedi piksel sıranın altında. */
+html.dar #langs { bottom: calc(var(--sira-alti, 0px) + 1.3rem); }
+
 /* Upright the settings are a column because a phone has height and no width.
    Turned over it is the other way round exactly, and stacked they pushed the
    way in below the fold on a shorter screen. Side by side they cost one row
