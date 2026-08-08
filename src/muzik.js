@@ -114,6 +114,17 @@ let izleyen = null;
 // çünkü onu bırakması gerekenler hazirla()'nın dışında.
 let ilkDokunusuBirak = null;
 
+// Susturma, durdurma değil: parça çalmaya devam ediyor ve yalnız duyulmuyor,
+// böylece açıldığında geçen zaman kadar ilerlemiş oluyor — odaya biri girip
+// çıktığında şarkının başına dönmek, dinlenen bir şeyi kesmektir. Çaların
+// kendi tuşları da yerinde kalıyor: susturmak bir tercih değil bir an.
+let susturuldu = false;
+
+export function sustur(deger) {
+  susturuldu = !!deger;
+  if (ses) ses.muted = susturuldu;
+}
+
 export const caliyorMu = () => caliyor;
 export const suanki = () => PARCALAR[sira];
 
@@ -126,6 +137,7 @@ function kur() {
   ses = new Audio();
   ses.preload = "none";
   ses.volume = seviye;
+  ses.muted = susturuldu;
   // Tek parça bitince sıradaki. Liste bitince başa — müzik sürekli çalacak.
   ses.addEventListener("ended", () => { ilerle(1); });
   // Bir dosya gelmezse durup kalmasın, sıradakine geçsin. Ondördü birden

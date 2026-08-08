@@ -298,7 +298,7 @@ body.ideographic #hud span, body.ideographic #hud strong {
    yani kapıda müzik çaları hiç yoktu, ses ve tam ekran düğmeleri de yoktu, ve
    bu tam olarak rayın kapıda tutmak üzere yazılmış olduğu üçlü. Gizlenen şey
    oyuna ait olanlar: geri al, tamam, menü, kamera. */
-#intro:not(.hidden) ~ #controls > :not(#player):not(#sound):not(#fullscreen) { display: none; }
+#intro:not(.hidden) ~ #controls > :not(#player):not(#fullscreen) { display: none; }
 #intro:not(.hidden) ~ #notice { display: none; }
 
 /* Playing somebody who is not in the room: make a room and read the code out,
@@ -685,7 +685,7 @@ html.yerlesti #rail, html.yerlesti #controls { visibility: visible; }
      duran bir sütunda üç ayrı boy, hizalanmamış bir liste gibi duruyordu.
      Eşitleme yukarı doğru: otuz iki, çalarınki. Aşağı doğru eşitlemek parmak
      hedefini küçültmek olurdu, ve o ölçü oraya bunun için konmuştu. */
-  #menu, #fullscreen, #sound, #view { min-height: 2rem; }
+  #menu, #fullscreen, #chat, #view { min-height: 2rem; }
 
   /* Ölçülen boy, tuşun değil kutunun boyu. Yukarıdaki satır çaların tuşlarını
      komşularıyla eşitledi ama çaların kendi kutusu tuşun üstüne kendi dolgusunu
@@ -716,15 +716,48 @@ html.yerlesti #rail, html.yerlesti #controls { visibility: visible; }
 /* The quieter ones under it: they change how the page is shown rather than
    taking you anywhere. Each says which way it goes. On a machine that cannot
    go fullscreen at all that button is never drawn. */
-#fullscreen, #sound { padding: .45rem 1rem;
+#fullscreen, #chat { padding: .45rem 1rem;
   font: 500 .62rem/1 "DM Mono", monospace;
   letter-spacing: .1em; text-transform: uppercase; color: #ad9470;
   background: rgba(12,9,6,.55); border: 1px solid rgba(229,173,84,.2);
   border-radius: .4rem; cursor: pointer;
   transition: color .2s ease, border-color .2s ease; }
-#fullscreen:hover, #sound:hover { border-color: rgba(229,173,84,.6); color: #f6ecd6; }
+#fullscreen:hover, #chat:not([disabled]):hover { border-color: rgba(229,173,84,.6); color: #f6ecd6; }
 #fullscreen[hidden] { display: none; }
-#sound.kapali { color: #6f6252; border-color: rgba(229,173,84,.12); }
+/* Sohbet henüz yok: düğmesi yerinde, sönük ve basılmıyor. Gizlemek yerine
+   kapalı durması, gelecek olanın yerini şimdiden tutuyor — bir sıra bir kez
+   öğrenilince değişmemeli. */
+#chat[disabled] { color: #6f6252; border-color: rgba(229,173,84,.1);
+  background: rgba(12,9,6,.35); cursor: default; }
+#intro:not(.hidden) ~ #rail #chat { display: none; }
+
+/* Sesin tamamının anahtarı, köşede. Rayda duran her şey bir ayar — hangi parça,
+   ne kadar yüksek — bu ise bir an: odaya biri girdi. Aranırken bakılan yer
+   ekranın kenarıdır, bir listenin içi değil, ve bulunduğunda tek dokunuş olmalı.
+
+   Yazısı yok, çünkü ne yaptığı çizimin kendisinde: hoparlörün üstü çizilince
+   ses kapalıdır ve bunu okumak gerekmiyor. Küçük: bir anahtarın büyüklüğü ne
+   sıklıkla kullanıldığıyla ölçülür, ve bu düğme bir oyunda bir ya da iki kez
+   basılır. */
+#mute { position: fixed; z-index: 4; right: .8rem; bottom: .8rem;
+  display: grid; place-items: center; width: 2.1rem; height: 2.1rem; padding: 0;
+  background: rgba(12,9,6,.55); border: 1px solid rgba(229,173,84,.2);
+  border-radius: .4rem; cursor: pointer;
+  transition: border-color .2s ease, background .2s ease; }
+#mute svg { display: block; width: 1.15rem; height: 1.15rem; overflow: visible; }
+#mute .hoparlor { fill: #ad9470; transition: fill .2s ease; }
+#mute .dalgalar { fill: none; stroke: #ad9470; stroke-width: 1.7;
+  stroke-linecap: round; transition: opacity .2s ease, stroke .2s ease; }
+/* Çizik, kapalıyken. Kırmızı, çünkü tahtanın hiçbir yerinde kırmızı yok:
+   burada bir şeyin kapalı olduğunu söyleyen tek renk o. */
+#mute .cizik { stroke: #d2604f; stroke-width: 2.2; stroke-linecap: round;
+  opacity: 0; transition: opacity .2s ease; }
+#mute:hover { border-color: rgba(229,173,84,.6); }
+#mute:hover .hoparlor { fill: #f6ecd6; }
+#mute:hover .dalgalar { stroke: #f6ecd6; }
+#mute.sustu .hoparlor { fill: #6f6252; }
+#mute.sustu .dalgalar { opacity: 0; }
+#mute.sustu .cizik { opacity: 1; }
 
 /* On the door, the rail keeps only what the door can use. The screen and the
    sound are about the room and are worth having before a game starts — full
@@ -939,9 +972,60 @@ html.evde #rotate { display: none; }
      tamamını zaten iki sıraya dönmek kazandırıyor — iki yüz kırk dörtten yüz
      yirmi yediye — üstüne bir de tuşları kısmak, kazanılmış yeri geri vermeden
      basılabilirlikten çalmak oluyordu. Parmak, yattığı için küçülmüyor. */
+  /* Oda kodu, susturmanın yanına. İkisi de sağ üst köşede duruyor ve ikisinin
+     de orada durması için sebebi var — kod okunacak, anahtar aranacak — o yüzden
+     üst üste değil yan yana: kod, anahtarın enini boşaltıyor. */
   html:fullscreen #table-code, html:-webkit-full-screen #table-code,
   html.evde #table-code {
-    top: .5rem; right: .5rem; }
+    top: .5rem; right: calc(.35rem + 2.1rem + .45rem); }
   html:fullscreen #menu, html:-webkit-full-screen #menu, html.evde #menu {
     top: .5rem; right: .5rem; }
+
+  /* Sıralama değişiyor, yerler değişmiyor. Oynanacak iki düğme listenin sonuna
+     iniyor — Tamam en altta, Geri al onun üstünde, yani basılma sırası — ama
+     düğmelerin durduğu dikey noktalar olduğu gibi kalıyor: çalar aradan çıktı
+     diye elin alıştığı yerler kaymamalı. Çaların bıraktığı yer boş duruyor, ve
+     boş durması için ayrılıyor: sütun ortalandığına göre pay kendi kutusunda
+     olmalı. Ölçülerek, çünkü çaların boyu tuş ölçüsüne bağlı.
+
+     Ve ortalama artık dönüşümle değil. Bu bir üslup tercihi değil: dönüşümü
+     olan bir kutu, içindeki `fixed` çocuklar için ekranın yerine geçiyor —
+     çalar sola değil sütunun içine düşerdi. Kendi boyu zaten ölçülüyor. */
+  html:fullscreen #controls, html:-webkit-full-screen #controls, html.evde #controls {
+    top: calc(50% - var(--sira-boy, 0px) / 2); bottom: auto; transform: none;
+    padding-bottom: calc(var(--calar-boy, 3.7rem) + .35rem); }
+  html:fullscreen #undo, html:-webkit-full-screen #undo, html.evde #undo { order: 8; }
+  html:fullscreen #done, html:-webkit-full-screen #done, html.evde #done { order: 9; }
+
+  /* Çalar karşı kenara, panelin altına. Odaya ait olan her şey bu kenarda:
+     panel yukarıda, çalar dibinde. Ekranın dibine yaslanıyor, çünkü panelin
+     boyu ne dediğine göre değişiyor ve aralarındaki boşluğu sabitlemek
+     ikisinden birini öbürünün üstüne bindirmek olurdu.
+
+     Kazanılan yer sağda: sütunun genişliğini en geniş çocuğu belirliyordu, o
+     da çalardı — o gidince sütun kendi yazılı düğmelerinin enine iniyor ve
+     aradaki fark tahtaya kalıyor. */
+  html:fullscreen #controls #player, html:-webkit-full-screen #controls #player,
+  html.evde #controls #player {
+    position: fixed; left: .25rem; right: auto; top: auto;
+    bottom: calc(50% - var(--sira-boy, 0px) / 2); }
+
+  /* Ve panel çaların üstüne çekiliyor. İki kenar aynı çizgide bitiyor: çaların
+     dibi, karşı kenardaki sütunun dibiyle aynı yer — ekranın dibi değil, çünkü
+     ekranın dibine yaslanan bir kutu kenarı olmayan bir şey gibi duruyor ve
+     karşısındaki sütun zaten orada bitmiyor.
+
+     Panel yukarıdan değil aşağıdan tutunuyor: üstünde ne kadar yer kaldığı
+     değil, çalarla arasındaki boşluk sabit olmalı — ikisi bir arada duran tek
+     bir kenar, ve panelin boyu ne dediğine göre değişiyor. */
+  html:fullscreen.dar #hud, html:-webkit-full-screen.dar #hud, html.evde.dar #hud {
+    top: auto; transform: none;
+    bottom: calc(50% - var(--sira-boy, 0px) / 2 + var(--calar-boy, 3.7rem) + .6rem); }
+}
+
+/* Susturma yatarken üst köşeye çıkıyor. Dik tutulan bir telefonda alt sağ köşe
+   boş ve elin altında; yatarken orası tahtanın kendisi — yer sağ sütunun
+   üstünde kalıyor, ve o köşe zaten hiçbir şeyin durmadığı tek köşe. */
+@media (orientation: landscape) and (pointer: coarse) {
+  #mute { top: .35rem; bottom: auto; right: .35rem; }
 }
